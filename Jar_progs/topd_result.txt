@@ -1,0 +1,3 @@
+* Percentage of taxa in common:  100.0%
+* Split Distance [differents/possibles]: 0.538461538461538 [ 14 / 26 ]
+* Split Distance random [differents/possibles]: 0.979230769230769 +/- 0.040 [ 25.46 +/- 1.053 / 26 +/- 0.000 ]

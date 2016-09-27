@@ -1,0 +1,28 @@
+Feature_table_db.tcl 					------- make an Sqlite3 database to store data from the Prokayotic feature tables with the following columns:
+												ncbi_id,prot_id,accession,gene_start,gene_end,strand,locus_tag
+
+Reannotation_rep_sqliteDB.tcl			------- make an Sqlite3 database to store renaming data from non-redundant protein IDs to the new redundant system with the following columns:
+												old_id,new_id,accession,old_start,old_end,old_strand,new_start,new_end,new_strand,new_locus_tag
+
+Check_derived_proteomes_missing_ID.tcl 	------- parse the derived proteomes (from the GBFF files) to check whether any particular proteomes has >50% missing protein IDs
+
+Convert_gbff_proteome_fastas.tcl 		------- create the set of derived proteomes based on the GBFF files using the modified Genbank_to_fast.py (located in /usr/local/bin)
+
+Make_blast_DB_derived_proteomes.tcl 	------- create a set of nucleotide blast databases based on the GBFF-derived proteomes as a last attempt to find proteins in
+												Extract_genome_positions.tcl
+
+Taxa_name_update_tbl.tcl 				------- create a table (Old_to_new_taxa_name_tbl.tsv) that has the old binomial names (some of which are used in my proteome dataset) linked
+												against the new nomenclature, which is used in the genome files. This procedure is probably obsolete, see: Extract_genome_positions.tcl
+
+Reformat_fna_files.tcl					-------	take all the .fna nucleotide sequence genome files and remove any linebreaks in the sequence, at the same time database all the accessions
+												(elements)
+
+Extract_genome_positions.tcl			-------	using the reannotation_db, features_db, or blasting against the derived_proteome_dbs identify the genes corresponding to each protein
+												in each orthologous group. These are entered into a new Sqlite3 database (Geo_v_all_orth_location_db) with the following columns:
+												group_number, prot_id, prot_id_no_end, alt_id, accession, gene_start, gene_end, strand, locus_tag, binomial, class, file_name
+
+Identify_missing_geobac.tcl				-------	using the Geo_v_all_orth_location_db, identify all the Geobacillus protein IDs for which coordinates could not be found. Extract
+												their group|prot_id|prot_name as well as two files, one giving the lengths of all Geobacillus proteins for which coordinates
+												could be found, and one for those without mapped coordinates. This output was followed up in: Geo_analysis/Geo_ortholog_nucl/Geobac_proteins_no_coords
+
+Removed_groups_vertical_or_hgt.tcl		-------	For those groups that were removed 
