@@ -61,6 +61,15 @@ class(bactrian_tip)<-"phylo"
 message("Bind the Bactrian deer")
 plot.phylo(deer_prune)
 deer_prune <- bind.tree(deer_prune, bactrian_tip, interactive = TRUE)
+deer_prune <- chronopl(deer_prune, 0, age.min = 1, age.max = NULL,node = "root", S = 1, tol = 1e-8,CV = FALSE, eval.max = 500, iter.max = 500)
+
+## Add the Cervus_canadensis tip ##
+wapiti_tip <- list(edge=matrix(c(2,1),1,2), tip.label="Cervus_canadensis", edge.length=1.0, Nnode=1)
+class(wapiti_tip)<-"phylo"
+message("Bind the Waptiti (sister to nippon")
+plot.phylo(deer_prune)
+deer_prune <- bind.tree(deer_prune, wapiti_tip, interactive = TRUE)
+deer_prune <- chronopl(deer_prune, 0, age.min = 1, age.max = NULL,node = "root", S = 1, tol = 1e-8,CV = FALSE, eval.max = 500, iter.max = 500)
 
 ## Rename the Swamp_deer to Rucervus ##
 swamp_deer_index <- grep("Cervus_duvaucelii", deer_prune)
@@ -92,18 +101,24 @@ all_topo$node.label <- NULL
 write.tree(all_topo, file = "Timetree_prune_meredith.txt")
 
 ###########################################################################
-## Also write out just the 10k rum tree topology ##
-rum_tree <- tenk_tree
+## Also write out just the ruminant topology ##
 
-bactrian_tip <- list(edge=matrix(c(2,1),1,2), tip.label="Cervus_elaphus_bactrianus", edge.length=1.0, Nnode=1)
-class(bactrian_tip)<-"phylo"
-message("Bind the Bactrian deer")
-plot.phylo(tenk_tree)
-rum_tree <- bind.tree(tenk_tree, bactrian_tip, interactive = TRUE)
+## Extract ruminant subtree ##
+rum_node <- getMRCA(all_topo, c("Giraffa_camelopardalis", "Alces_alces"))
+rum_tips <- tips(all_topo, rum_node)
+rum_prune <- drop.tip(all_topo, setdiff(all_topo$tip.label, rum_tips))
 
-rum_tree$edge.length <- NULL
+write.tree(rum_prune, file = "Rum_only_topo.txt")
 
-write.tree(rum_tree, file = "Rum_only_topo.txt")
+###########################################################################
+## Also write out just the deer topology ##
+
+## Extract ruminant subtree ##
+deer_node <- getMRCA(all_topo, c("Dama_dama", "Alces_alces"))
+deer_tips <- tips(all_topo, deer_node)
+deer_prune <- drop.tip(all_topo, setdiff(all_topo$tip.label, deer_tips))
+
+write.tree(deer_prune, file = "Deer_only_topo.txt")
 
 ###########################################################################
 ## Make two reindeer ##
