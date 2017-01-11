@@ -131,7 +131,7 @@ PlotRelativeEnrichmentBoxes <- function(prop_list, name) {
 
 	}
 
-	# devSVG(file = "/users/aesin/Dropbox/LSR/Presentation/COG_point_plot_wboxes.svg", width = 15, height = 10)
+	# devSVG(file = "file_name", width = 15, height = 10)
 
 	plot_relative_HGT_boxes <- plot_relative_HGT + geom_segment(aes(x = x1, y = y1, xend = x2, yend = y2), data = coordinate_df, inherit.aes = FALSE)
 	return(plot_relative_HGT_boxes)

@@ -9,14 +9,16 @@ setwd("/users/aesin/Desktop/Deer/Selection_analysis/Species_tree/")
 
 timetree <- read.tree("TimetreeOfLife.nwk")
 ## All tips ##
-all_keep_tips <- c("Ailuropoda_melanoleuca", "Bos_taurus", "Camelus_ferus", "Felis_catus", "Myotis_lucifugus", "Homo_sapiens", "Sus_scrofa", "Ovis_aries", "Capra_hircus", "Mus_musculus", "Oryctolagus_cuniculus", "Callithrix_jacchus", "Macaca_mulatta", "Dasypus_novemcinctus", "Papio_anubis", "Rattus_norvegicus", "Pteropus_vampyrus", "Odobenus_rosmarus", "Odocoileus_virginianus", "Alces_alces", "Cervus_elaphus", "Elaphurus_davidianus", "Cervus_nippon", "Rangifer_tarandus", "Dama_dama", "Moschus_berezovskii", "Equus_caballus", "Ceratotherium_simum", "Eptesicus_fuscus", "Panthera_tigris", "Capreolus_capreolus", "Pudu_puda", "Giraffa_camelopardalis", "Hydropotoes_inermis", "Cervus_albirostris", "Rucervus_duvaucelii", "Vicugna_pacos")
+all_keep_tips <- c("Ailuropoda_melanoleuca", "Bos_taurus", "Camelus_ferus", "Felis_catus", "Myotis_lucifugus", "Homo_sapiens", "Sus_scrofa", "Ovis_aries", "Capra_hircus", "Mus_musculus", "Oryctolagus_cuniculus", "Callithrix_jacchus", "Macaca_mulatta", "Papio_anubis", "Rattus_norvegicus", "Pteropus_vampyrus", "Odobenus_rosmarus", "Odocoileus_virginianus", "Alces_alces", "Cervus_elaphus", "Elaphurus_davidianus", "Cervus_nippon", "Rangifer_tarandus", "Dama_dama", "Moschus_berezovskii", "Equus_caballus", "Ceratotherium_simum", "Eptesicus_fuscus", "Panthera_tigris", "Capreolus_capreolus", "Pudu_puda", "Giraffa_camelopardalis", "Hydropotoes_inermis", "Cervus_albirostris", "Rucervus_duvaucelii", "Muntiacus_reevesi", "Vicugna_pacos")
+#"Dasypus_novemcinctus"
 
 for_dating_tree <- drop.tip(timetree, setdiff(timetree$tip.label, all_keep_tips))
 
 ##################################
 
 ## No deer ##
-keep_tips <- c("Ailuropoda_melanoleuca", "Bos_taurus", "Camelus_ferus","Vicugna_pacos", "Felis_catus", "Myotis_lucifugus", "Homo_sapiens", "Sus_scrofa", "Ovis_aries", "Capra_hircus", "Mus_musculus", "Oryctolagus_cuniculus", "Callithrix_jacchus", "Macaca_mulatta", "Dasypus_novemcinctus", "Papio_anubis", "Rattus_norvegicus", "Pteropus_vampyrus", "Odobenus_rosmarus", "Moschus_berezovskii", "Equus_caballus", "Ceratotherium_simum", "Eptesicus_fuscus", "Panthera_tigris", "Giraffa_camelopardalis", "Vicugna_pacos")
+keep_tips <- c("Ailuropoda_melanoleuca", "Bos_taurus", "Camelus_ferus","Vicugna_pacos", "Felis_catus", "Myotis_lucifugus", "Homo_sapiens", "Sus_scrofa", "Ovis_aries", "Capra_hircus", "Mus_musculus", "Oryctolagus_cuniculus", "Callithrix_jacchus", "Macaca_mulatta", "Papio_anubis", "Rattus_norvegicus", "Pteropus_vampyrus", "Odobenus_rosmarus", "Moschus_berezovskii", "Equus_caballus", "Ceratotherium_simum", "Eptesicus_fuscus", "Panthera_tigris", "Giraffa_camelopardalis", "Vicugna_pacos")
+#"Dasypus_novemcinctus"
 
 time_prune_tree <- drop.tip(timetree, setdiff(timetree$tip.label, keep_tips))
 

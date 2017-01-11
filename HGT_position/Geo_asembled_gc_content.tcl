@@ -233,17 +233,7 @@ foreach fasta_file $fasta_files {
 
 	} else {
 		set rev_comp [reverse_compl $dna_no_gaps]
-		puts "Rev comp length: [string length $rev_comp]. Genome length: $relevant_genome_length "
 		set ori_start [expr [string length $rev_comp] - [lindex [split $species_start \t] 2]]
-
-		set old_ori_start [lindex [split $species_start \t] 1]
-		set old_ori_end [lindex [split $species_start \t] 2]
-		set old_orient_dnaa_gene [string range $dna_no_gaps $old_ori_start-1 $old_ori_end-1]
-		set rev_comp_dnaa_gene [reverse_compl $old_orient_dnaa_gene]
-
-		set out [open temp_rev_dnaa.txt w]
-		puts $out $rev_comp_dnaa_gene
-		close $out
 
 		set downstream [string range $rev_comp $ori_start end]
 		set upstream [string range $rev_comp 0 $ori_start-1]
