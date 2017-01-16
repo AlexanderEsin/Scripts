@@ -3,13 +3,13 @@
 ### Procs ###
 #############
 
-source ~/Dropbox/Scripts/General_utils.tcl
-source ~/Dropbox/Scripts/Procs/mowgli_parsing.tcl
+source ~/Documents/Scripts/General_utils.tcl
+source ~/Documents/Scripts/Procs/mowgli_parsing.tcl
 
 #####################
 ###               ###
 #####################
-set transfer_costs {3 4 5 6 8 10 20}
+set transfer_costs {3 4 5 6}
 
 ######################
 ### Regex patterns ###

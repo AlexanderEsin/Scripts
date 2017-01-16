@@ -29,4 +29,4 @@ IG_prune_4	<- phylo4(IG_prune)
 node_labels	<- as.vector(as.numeric(nodeLabels(IG_prune_4)))
 
 ## Write the node labels out ##
-write.table(node_labels, file = "Inside_group_nodes.txt", quote = FALSE, row.names = FALSE, sep = "\n")
+write.table(node_labels, file = "Inside_group_nodes.txt", quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\n")

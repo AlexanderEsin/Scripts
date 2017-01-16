@@ -37,7 +37,7 @@ set output_direct $output_direct/Per_penalty_refined
 file mkdir $output_direct
 
 ## List of penalties for which to perform long-distance transfer refinement ##
-set refined_transfer_penalty_list [list 4 5 6 8 10 20]
+set refined_transfer_penalty_list [list 4 5 6]
 
 ###########################################################################
 

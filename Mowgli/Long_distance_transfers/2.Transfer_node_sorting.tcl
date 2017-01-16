@@ -6,7 +6,7 @@ package require sqlite3
 set direct /users/aesin/desktop/Mowgli
 
 ## Pick penalty set and minimum sequences in group for count to be included ##
-set test_penalty_list 	[list 4 5 6 8 10 20]
+set test_penalty_list 	[list 4 5 6]
 set test_min_taxa_list	[list 0 50]
 
 ## Other options ##

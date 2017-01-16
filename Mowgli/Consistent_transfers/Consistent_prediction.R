@@ -167,8 +167,8 @@ while (length(results_files) > 1) {
 				setwd("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_Full/All_scenarios")
 
 			} else {
-				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_Full/Scenarios_1_2", showWarnings = FALSE)
-				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_Full/Scenarios_1_2/No_more_HGT", showWarnings = FALSE)
+				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_Full/Scenarios_1_2", recursive = TRUE, showWarnings = FALSE)
+				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_Full/Scenarios_1_2/No_more_HGT", recursive = TRUE, showWarnings = FALSE)
 				setwd("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_Full/Scenarios_1_2")
 			}
 
@@ -178,8 +178,8 @@ while (length(results_files) > 1) {
 				setwd("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_NO_IG/All_scenarios")
 
 			} else {
-				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_NO_IG/Scenarios_1_2", showWarnings = FALSE)
-				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_NO_IG/Scenarios_1_2/No_more_HGT", showWarnings = FALSE)
+				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_NO_IG/Scenarios_1_2", recursive = TRUE, showWarnings = FALSE)
+				dir.create("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_NO_IG/Scenarios_1_2/No_more_HGT", recursive = TRUE,showWarnings = FALSE)
 				setwd("/users/aesin/Desktop/Mowgli/Consistent_HGT_Vertical/Consistent_NO_IG/Scenarios_1_2")
 			}
 		}

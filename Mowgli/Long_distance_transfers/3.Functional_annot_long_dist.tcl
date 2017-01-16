@@ -6,7 +6,7 @@ source ~/Dropbox/Scripts/Procs/EggNOG.tcl
 
 ###########################################################################
 ## List of penalties for which to derive the COGs ##
-set test_penalty_list [list 4 5 6 8 10 20]
+set test_penalty_list [list 4 5 6]
 
 ## Other options ##
 set inside_included TRUE
