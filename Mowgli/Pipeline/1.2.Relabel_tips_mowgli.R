@@ -1,7 +1,7 @@
 #!/usr/bin/Rscript
 ## Relabel gene tree tips to be used by mowgli. 
 
-##The raxml run produces a tree with tip labels as follows:
+## The raxml run produces a tree with tip labels as follows:
 ## Binomial_name {Class} {Protein_ID.species_ID}
 ## R automatically collapses the white spaces in the tip labels, so "Binomial_name{Class}{Protein_ID.species_ID}"
 

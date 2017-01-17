@@ -7,8 +7,10 @@ library(RSvgDevice)
 library(reshape2)
 library(ggplot2)
 
-###########################################################################
-## Annotate branches ##
+################################
+## Annotate branches function ##
+################################
+
 annotate_transfer_num <- function (edge_entry, index) {
     edge <- edge_entry[1:2]
     edge_label <- as.character(round(edge_entry[3], digits = 2))
@@ -17,8 +19,10 @@ annotate_transfer_num <- function (edge_entry, index) {
     edgelabels(edge_label, index, adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 0.7)
 }
 
-###########################################################################
+###############
 ## Variables ##
+###############
+
 penalties = c(4:6)
 min_taxa = 0; # 0 or 50
 
@@ -32,8 +36,6 @@ if (min_taxa > 4) {
 } else {
 	file_name_add <- ""
 }
-
-###########################################################################
 
 ##############################
 # Prepare the cladogram tree #

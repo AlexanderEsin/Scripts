@@ -11,15 +11,8 @@ library(RColorBrewer)
 ReadCogTable <- function(file, name) {
 	cog_tab <- table(read.table(file = file, sep = "\n"))
 	cog_tab_ordered <- as.data.frame(cog_tab[order(-cog_tab)])
-	colnames(cog_tab_ordered)[1] <- name
+	colnames(cog_tab_ordered) <- c("COG", name)
 	return(cog_tab_ordered)
-}
-
-MyMerge <- function(x, y){
-    df <- merge(x, y, by = "row.names", all = TRUE, sort = FALSE)
-    rownames(df)  <- df$Row.names
-    df$Row.names  <- NULL
-    return(df)
 }
 
 MergeByCOG <- function(x, y){
@@ -30,10 +23,6 @@ MergeByCOG <- function(x, y){
 FormatPenaltyTables <- function(df){
 	## Convert any NAs to 0 ##
 	df[is.na(df)] <- 0
-	## Output has the COG labels as rownames -> remove rownames and add a column corresponding to the COG functional categories ##
-	COG_classes <- rownames(df)
-	rownames(df) <- NULL
-	df <- cbind(COG_classes, df)
 	## Rearrange the columns such that All_HGT & All_Vertical appear at the end (independent of column / penalty number) ##
 	df <- cbind(df[,-3:-4], df[,3:4])
 	return(df)
@@ -42,10 +31,6 @@ FormatPenaltyTables <- function(df){
 FormatLongDistTables <- function(df) {
 	## Convert any NAs to 0 ##
 	df[is.na(df)] <- 0
-	## Output has the COG labels as rownames -> remove rownames and add a column corresponding to the COG functional categories ##
-	COG <- rownames(df)
-	rownames(df) <- NULL
-	df <- cbind(COG, df)
 	return(df)
 }
 
@@ -92,6 +77,7 @@ PlotBarsRaw <- function(molten_table, name) {
 
 PlotRelativeEnrichmentBoxes <- function(prop_list, name) {
 
+	## Merge data by COG then melt for plotting ##
 	merged_prop_df <- Reduce(MergeByCOG, prop_list)
 	merged_prop_molten <- melt(data.frame(as.matrix(merged_prop_df), row.names = NULL), id.vars = "COG")
 	merged_prop_molten$value = as.numeric(merged_prop_molten$value)
@@ -100,6 +86,7 @@ PlotRelativeEnrichmentBoxes <- function(prop_list, name) {
 	col_ramp <- brewer.pal(9,"YlOrRd")
 	col_palette <- colorRampPalette(col_ramp[1:9])(length_orig_pen_list)
 
+	## Prepare the point plot ##
 	plot_relative_HGT <- ggplot(merged_prop_molten, aes(x = COG, y = value, group = variable, color = variable)) + 
 			geom_point(size = 4) +
 			scale_y_continuous("Relative HGT: Fraction of all groups assigned to HGT / fraction assigned to Vertical") +
@@ -114,12 +101,14 @@ PlotRelativeEnrichmentBoxes <- function(prop_list, name) {
 	for (i in 1:length(merged_prop_df$COG)) {
 		COG_needed <- levels(merged_prop_molten$COG)[i]
 		row_number <- which(merged_prop_df$COG == COG_needed)
-		#print(COG_needed)
 
-		max_y <- max(merged_prop_df[row_number,-1])
-		#print(max_y)
-		min_y <- min(merged_prop_df[row_number,-1])
-		#print(min_y)
+		## Do not count NAs in identifying min/max values ##
+		data_line <- merged_prop_df[row_number,-1]
+		data_line_clean <- data_line[,!is.na(data_line)]
+
+		## Calculate the max and min values for the boxes ##
+		max_y <- max(data_line_clean)
+		min_y <- min(data_line_clean)
 
 		## Add vertical lines ##
 		coordinate_df[nrow(coordinate_df)+1, ] <- c((i - 0.2), (i - 0.2), min_y, max_y)
@@ -128,7 +117,6 @@ PlotRelativeEnrichmentBoxes <- function(prop_list, name) {
 		## Add horizontal lines ##
 		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), min_y, min_y))
 		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), max_y, max_y))
-
 	}
 
 	# devSVG(file = "file_name", width = 15, height = 10)
@@ -143,8 +131,11 @@ IG_included = TRUE
 All_scenarios = FALSE
 
 #penalty_list <- c(3, 4, 5, 6, 8, 10, 20)
-penalty_list <- c(3, 4, 5, 6, 8, 10)
+penalty_list <- c(3, 4, 5, 6)
+
+
 length_orig_pen_list <- length(penalty_list)
+
 const_prop_list <- vector("list", length_orig_pen_list - 1)
 long_dist_prop_list <- vector("list", length_orig_pen_list - 1)
 no_more_hor_list <- vector("list", length_orig_pen_list - 1)
@@ -250,8 +241,8 @@ while (length(penalty_list) > 1) {
 
 	###############################
 	## Merge the values into a single table ##
-	merged_hor_df <- Reduce(MyMerge, ordered_hor_table_list)
-	merged_ver_df <- Reduce(MyMerge, ordered_ver_table_list)
+	merged_hor_df <- Reduce(MergeByCOG, ordered_hor_table_list)
+	merged_ver_df <- Reduce(MergeByCOG, ordered_ver_table_list)
 
 	## Format the merged tables ##
 	formatted_hor_df <- FormatPenaltyTables(merged_hor_df)
@@ -301,7 +292,7 @@ while (length(penalty_list) > 1) {
 	## Add to global list for plotting below ##
 	const_prop_list[[length(penalty_list)-1]] <- Const_hor_ver_prop
 
-	plot_consistent_proportion <- ggplot(Const_hor_ver_prop, aes(x = COG, y = Const_hor_ver_prop, group = 1)) + geom_point()
+	# plot_consistent_proportion <- ggplot(Const_hor_ver_prop, aes(x = COG, y = Const_hor_ver_prop)) + geom_point()
 
 	###########################################################################
 	### Read in the long-distance COG annotations at each maximum penalty ###
@@ -322,18 +313,25 @@ while (length(penalty_list) > 1) {
 	assign(global_name_ld, for_global_ld)
 	
 	## Make the values a fraction of the total COGs assigned ##
-	long_dist_fract_tab <- FormatLongDistTables(sweep(long_dist_cog_tab, 2, colSums(long_dist_cog_tab), "/") * 100)
+	long_dist_fract_tab <- long_dist_cog_tab
+	long_dist_fract_tab$Long_distance_HGT <- (long_dist_cog_tab[,2] / sum(long_dist_cog_tab[,2])) * 100
 
 	## Make the values a proportional enrichment (i.e. fraction long dist HGT / fraction Vertical) - as with the Constant data above ##
 	HGT_as_frac_tbl_ncol <- ncol(HGT_as_fraction_tbl)
 	long_dist_as_fract_tbl <- MergeByCOG(HGT_as_fraction_tbl[,c(-(HGT_as_frac_tbl_ncol - 2),-HGT_as_frac_tbl_ncol)], long_dist_fract_tab)
+
 	long_dist_as_fract_tbl$Long_hor_ver_prop <- (long_dist_as_fract_tbl$Long_distance_HGT / long_dist_as_fract_tbl$Consistent_Ver)
 
 	## Extract the proportional enrichment column together with the COGs and add it to the global list ##
-	long_dist_hor_ver_prop <- long_dist_as_fract_tbl[1:19, c(1, ncol(long_dist_as_fract_tbl))]
+	#long_dist_hor_ver_prop <- long_dist_as_fract_tbl[1:19, c(1, ncol(long_dist_as_fract_tbl))]
+
+	long_dist_hor_ver_prop <- long_dist_as_fract_tbl[!is.na(long_dist_as_fract_tbl$Long_hor_ver_prop), c(1, ncol(long_dist_as_fract_tbl))]
+	long_dist_hor_ver_prop <- long_dist_hor_ver_prop[!is.infinite(long_dist_hor_ver_prop$Long_hor_ver_prop),]
+
 	long_dist_prop_name <- paste0("Long_dist_prop_", str_sub(IG_ID, 1, -2), "_", max(penalty_list))
 	colnames(long_dist_hor_ver_prop)[2] <- long_dist_prop_name
 
+	## Add to the global list ##
 	long_dist_prop_list[[length(penalty_list)-1]] <- long_dist_hor_ver_prop
 
 
@@ -349,17 +347,19 @@ while (length(penalty_list) > 1) {
 	## Read it in ##
 	no_more_hor_cog_tab <- ReadCogTable(paste0(no_more_hor_path, "/Narrow_COG.tsv"), "No_more_HGT")
 
-	global_name <- paste0("RAW_", colnames(no_more_hor_cog_tab[1]), "_", as.character(max(no_more_hor_penalties)))
+	global_name <- paste0("RAW_", colnames(no_more_hor_cog_tab[2]), "_", as.character(max(no_more_hor_penalties)))
 	no_mor_hor_global <- FormatLongDistTables(no_more_hor_cog_tab)
 	colnames(no_mor_hor_global)[2] <- global_name
-
 	assign(global_name, no_mor_hor_global)
 
 	## Make the values a fraction of the total COGs assigned ##
-	total_fract_tab <- FormatLongDistTables(sweep(total_cog_tab, 2, colSums(total_cog_tab), "/") * 100)
-	no_more_hor_fract_tab	<- FormatLongDistTables(sweep(no_more_hor_cog_tab, 2, colSums(no_more_hor_cog_tab), "/") * 100)
+	total_fract_tab <- total_cog_tab
+	total_fract_tab$Total <- (total_cog_tab[,2] / sum(total_cog_tab[,2])) * 100
 
-	merged_total_no_more	<- MergeByCOG(total_fract_tab, no_more_hor_fract_tab)
+	no_more_hor_fract_tab <- no_more_hor_cog_tab
+	no_more_hor_fract_tab$No_more_HGT <- (no_more_hor_cog_tab[,2] / sum(no_more_hor_cog_tab[,2])) * 100
+
+	merged_total_no_more <- MergeByCOG(total_fract_tab, no_more_hor_fract_tab)
 	merged_total_no_more$Normalized	<- (merged_total_no_more[,3] / merged_total_no_more[,2])
 	merged_total_no_more[is.na(merged_total_no_more)] <- 0
 
@@ -369,102 +369,55 @@ while (length(penalty_list) > 1) {
 	
 	no_more_hor_list[[length(penalty_list)-1]] <- merged_total_no_more
 
-
-
 	###########################################################################
 	penalty_list <- penalty_list[-length(penalty_list)]
 	i = i + 1
 }
 
-# total_cog_col_tab <- FormatLongDistTables(total_cog_tab)
-# tot_4 <- MergeByCOG(RAW_No_more_HGT_5, Long_distance_cog_4)
-# tot_4[is.na(tot_4)] <- 0
-# chisq.test(tot_4[,2:3])
-
-total_cog_col_tab <- FormatLongDistTables(total_cog_tab)
-tot_3 <- MergeByCOG(RAW_No_more_HGT_3, Long_distance_cog_4)
-tot_3[is.na(tot_3)] <- 0
-chisq.test(tot_3[,2:3])
-
-tot_4 <- MergeByCOG(RAW_No_more_HGT_4, Long_distance_cog_5)
-tot_4[is.na(tot_4)] <- 0
-chisq.test(tot_4[,2:3])
-
-tot_5 <- MergeByCOG(RAW_No_more_HGT_5, Long_distance_cog_6)
-tot_5[is.na(tot_5)] <- 0
-chisq.test(tot_5[,2:3])
-
-tot_6 <- MergeByCOG(RAW_No_more_HGT_6, Long_distance_cog_8)
-tot_6[is.na(tot_6)] <- 0
-chisq.test(tot_6[,2:3])
-
-xx <- Reduce(MergeByCOG, no_more_hor_list)
-xx_melt <- melt(data.frame(as.matrix(xx[1:17,]), row.names = NULL), id.vars = "COG")
-xx_melt$value <- as.numeric(xx_melt$value)
-xx_melt$COG <- factor(xx_melt$COG, levels = unique(xx_melt$COG[order(-xx_melt$value)]))
-ggplot(xx_melt, aes(x = COG, y = value, group = variable)) + geom_point(aes(color = variable)) + geom_line(aes(color = variable))
-
-# # plot_const_relative_enrichment <- PlotRelativeEnrichmentBoxes(const_prop_list, "Consistent")
-# # plot_longd_relative_enrichment <- PlotRelativeEnrichmentBoxes(long_dist_prop_list, "Long Distance")
 
 
+######################################################################################################################################
+## Test whether those transfers that are lost by increasing the transer penalty have a different COG-distribution to the global set ##
+######################################################################################################################################
 
-# ###############################
-# ## Compare the consistent and long-distance sets ##
-# const_prop_df <- Reduce(MergeByCOG, const_prop_list)
-# longd_prop_df <- Reduce(MergeByCOG, long_dist_prop_list)
 
-# x <- MergeByCOG(const_prop_df, longd_prop_df)
+## Moving from penalty 3 -> 4 ##
+tot_3_to_4 <- MergeByCOG(total_cog_tab, RAW_No_more_HGT_3)
+tot_3_to_4[is.na(tot_3_to_4)] <- 0
+chisq.test(tot_3_to_4[,2:3])
 
-# y <- (x[,5:7]) - (x[,2:4])
-# y <- cbind(x[,1], y)
-# names(y)[1] <- "COG"
-# y_melt <- melt(data.frame(as.matrix(y), row.names = NULL), id.vars = "COG")
-# y_melt$value <- as.numeric(y_melt$value)
-# ggplot(y_melt, aes(x = COG, y = value, color = variable)) + geom_point() + scale_y_continuous("Relative HGT: Fraction of all groups assigned to HGT / fraction assigned to Vertical")
+## Moving from penalty 4 -> 5 ##
+tot_4_to_5 <- MergeByCOG(total_cog_tab, RAW_No_more_HGT_4)
+tot_4_to_5[is.na(tot_4_to_5)] <- 0
+chisq.test(tot_4_to_5[,2:3])
 
-# ###############################
+## Moving from penalty 5 -> 6 ##
+tot_5_to_6 <- MergeByCOG(total_cog_tab, RAW_No_more_HGT_5)
+tot_5_to_6[is.na(tot_5_to_6)] <- 0
+chisq.test(tot_5_to_6[,2:3])
+
+## Plot the transfer events lost by increasing penalty, by COG. This plots the normalised number lost (i.e. > 1 means more transfer events were lost in a particular COG than expected based on the proportion of that COG in the total dataset ) ##
+no_more_hor_merged <- Reduce(MergeByCOG, no_more_hor_list)
+no_more_hor_merged_molten <- melt(data.frame(as.matrix(no_more_hor_merged), row.names = NULL), id.vars = "COG")
+no_more_hor_merged_molten$value <- as.numeric(no_more_hor_merged_molten$value)
+no_more_hor_merged_molten$COG <- factor(no_more_hor_merged_molten$COG, levels = unique(no_more_hor_merged_molten$COG[order(-no_more_hor_merged_molten$value)]))
+
+ggplot(no_more_hor_merged_molten, aes(x = COG, y = value, group = variable)) + geom_point(aes(color = variable)) + geom_line(aes(color = variable))
+
+
+
+## Plot the relative enrichment of Consistent & Long Distance HGT events for each COG ##
+plot_const_relative_enrichment <- PlotRelativeEnrichmentBoxes(const_prop_list, "Consistent")
+
+plot_longd_relative_enrichment <- PlotRelativeEnrichmentBoxes(long_dist_prop_list, "Long Distance")
+# For long distance :
+	# Warning message:
+	# Removed 1 rows containing missing values (geom_point).
+	# This is due to the fact that at penalty 6 there is no long-distance HGT for COG = N. Thus the enrichment can't be plotted
+
 
 
 ###########################################################################
-###########################################################################
-###########################################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ###########################################################################
-# ## Read in the table corresponding to the refined dataset containing transfers from only OUTSIDE the IG ##
 
 
 
