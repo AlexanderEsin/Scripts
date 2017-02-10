@@ -186,81 +186,141 @@ for (species in assembled_species_l) {
 }
 
 
-# #########################################
-# ## For circular density representation ##
-# #########################################
-# dev.off()
-# # All genes #
-# setwd("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/Per_species_all/")
-# pos_all_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
-
-# # Consistent HGT prediction #
-# setwd("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/Per_species_const/")
-# pos_const_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
-
-# # Long distance HGT prediction #
-# setwd("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/Per_species_long/")
-# pos_long_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
-
-# # Vertical prediction #
-# setwd("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/Per_species_vert//")
-# pos_vert_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
+#########################################
+## For circular density representation ##
+#########################################
+## Test over a range of penalties - we find no difference (basically) ##
+penalty_list <- list(4, 5, 6)
+dev.off()
 
 
-# ## Circularise the data ##
-# circ_all <- circular(pos_all_df$V1*(2*pi))
-# circ_const <- circular(pos_const_df$V1*(2*pi))
-# circ_long <- circular(pos_long_df$V1*(2*pi))
-# circ_vert <- circular(pos_vert_df$V1*(2*pi))
+par(mfcol = c(1, 3))
+par(cex = 0.8)
 
-# ## Circular density calculation based on vonmises - much faster than wrapped ##
-# bandwith <- 600
+for (penalty in penalty_list) {
 
-# circ_dens_all <- density.circular(circ_all, kernel = "vonmises", bw = bandwith)
-# circ_dens_const <- density.circular(circ_const, kernal = "vonmises", bw = bandwith)
-# circ_dens_long <- density.circular(circ_long, kernel = "vonmises", bw = bandwith)
-# circ_dens_vert <- density.circular(circ_vert, kernel = "vonmises", bw = bandwith)
+	# All genes #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_all/"))
+	pos_all_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
 
+	# Consistent HGT prediction #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_const/"))
+	pos_const_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
 
-# ## Plot with differentially coloured polygons ##
+	# Long distance HGT prediction #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_long/"))
+	pos_long_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
 
-# plot(circ_dens_all, points.plot = F, axes = F, control.circle = circle.control(type = "n"), nosort = T, lwd = 1.5, col = "white", ylim = c (-1.2, 1.2), plot.type = "circle", zero = (pi/2), rotation = "clock", main = "Gene density average across 12 Geobacillus species")
-
-# axis.circular(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi /2), template = "none", tcl = 0.12, tcl.text = 0.2)
-
-# all_line <- lines(circ_dens_all, lwd = 1.5, col = "black", zero = (pi/2), rotation = "clock")
-# long_line <- lines(circ_dens_long, lwd= 0, col = "white", zero = (pi/2), rotation = "clock")
-# #const_line <- lines(circ_dens_const, lwd= 1.5, col = "black", zero = (pi/2), rotation = "clock")
-# #vert_line <- lines(circ_dens_vert, lwd = 0, col = "white", zero = (pi/2), rotation = "clock")
-
-# lapply(polyclip(A=list("x"=long_line$x, "y"=long_line$y), B=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(0,1,0,0.5), border = rgb(0,1,0,0.5))
-
-# lapply(polyclip(B=list("x"=long_line$x, "y"=long_line$y), A=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(1,0,0,0.5), border = rgb(1,0,0,0.5))
-
-# vert_line <- lines(circ_dens_vert, lwd = 1.5, col = "blue", zero = (pi/2), rotation = "clock")
-
-# legend("topleft", c("Long distance HGT enriched relative to all genes                              ", "Long distance HGT depleted relative to all genes", "Density of vertically inheritted genes"), lty = c(1,1,1), lwd = c(10,10,2), col = c(rgb(0,1,0,0.5), rgb(1,0,0,0.5), "Blue"))
+	# Vertical prediction #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_vert/"))
+	pos_vert_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
 
 
+	## Circularise the data ##
+	circ_all <- circular(pos_all_df$V1*(2*pi))
+	circ_const <- circular(pos_const_df$V1*(2*pi))
+	circ_long <- circular(pos_long_df$V1*(2*pi))
+	circ_vert <- circular(pos_vert_df$V1*(2*pi))
+
+	## Circular density calculation based on vonmises - much faster than wrapped ##
+	bandwith <- 600
+
+	circ_dens_all <- density.circular(circ_all, kernel = "vonmises", bw = bandwith)
+	circ_dens_const <- density.circular(circ_const, kernal = "vonmises", bw = bandwith)
+	circ_dens_long <- density.circular(circ_long, kernel = "vonmises", bw = bandwith)
+	circ_dens_vert <- density.circular(circ_vert, kernel = "vonmises", bw = bandwith)
 
 
+	## Plot with differentially coloured polygons ##
+	plot(circ_dens_all, points.plot = F, axes = F, control.circle = circle.control(type = "n"), nosort = T, lwd = 2, col = "white", ylim = c (-1.1, 1.1), plot.type = "circle", zero = (pi/2), rotation = "clock", main = "Gene density average across 12 Geobacillus species", shrink = 1.2)
+
+	axis.circular(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi /2), template = "none", tcl = 0.12, tcl.text = 0.2)
+
+	all_line <- lines(circ_dens_all, lwd = 1.5, col = "black", zero = (pi/2), rotation = "clock")
+	long_line <- lines(circ_dens_long, lwd= 0, col = "white", zero = (pi/2), rotation = "clock")
+	#const_line <- lines(circ_dens_const, lwd= 1.5, col = "black", zero = (pi/2), rotation = "clock")
+	#vert_line <- lines(circ_dens_vert, lwd = 0, col = "white", zero = (pi/2), rotation = "clock")
+
+	lapply(polyclip(A=list("x"=long_line$x, "y"=long_line$y), B=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(0,1,0,0.5), border = rgb(0,1,0,0.5))
+
+	lapply(polyclip(B=list("x"=long_line$x, "y"=long_line$y), A=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(1,0,0,0.5), border = rgb(1,0,0,0.5))
+
+	vert_line <- lines(circ_dens_vert, lwd = 1.5, col = "blue", zero = (pi/2), rotation = "clock")
+
+	#legend("topleft", c("Long distance HGT enriched relative to all genes                              ", "Long distance HGT depleted relative to all genes", "Density of vertically inheritted genes"), lty = c(1,1,1), lwd = c(10,10,2), col = c(rgb(0,1,0,0.5), rgb(1,0,0,0.5), "Blue"))
+	legend("topleft", paste0("HGT Enrichment / Depletion at penalty = ", penalty, "                                "))
+
+}
 
 
+## Test over a range of bandwiths ##
+
+bandwith_range <- list(100, 200, 400, 800)
+penalty <- 5
+
+dev.off()
+par(mfcol = c(1, 4))
+par(cex = 0.8)
+
+for (bandwith in bandwith_range) {
+
+	# All genes #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_all/"))
+	pos_all_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
+
+	# Consistent HGT prediction #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_const/"))
+	pos_const_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
+
+	# Long distance HGT prediction #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_long/"))
+	pos_long_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
+
+	# Vertical prediction #
+	setwd(paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty, "/Per_species_vert/"))
+	pos_vert_df <- read_in_position_data("combined_rel_pos_assembled.tsv")
 
 
+	## Circularise the data ##
+	circ_all <- circular(pos_all_df$V1*(2*pi))
+	circ_const <- circular(pos_const_df$V1*(2*pi))
+	circ_long <- circular(pos_long_df$V1*(2*pi))
+	circ_vert <- circular(pos_vert_df$V1*(2*pi))
+
+	## Circular density calculation based on vonmises - much faster than wrapped ##
+	message(bandwith)
+
+	circ_dens_all <- density.circular(circ_all, kernel = "vonmises", bw = bandwith)
+	circ_dens_const <- density.circular(circ_const, kernal = "vonmises", bw = bandwith)
+	circ_dens_long <- density.circular(circ_long, kernel = "vonmises", bw = bandwith)
+	circ_dens_vert <- density.circular(circ_vert, kernel = "vonmises", bw = bandwith)
 
 
+	## Plot with differentially coloured polygons ##
+	plot(circ_dens_all, points.plot = F, axes = F, control.circle = circle.control(type = "n"), nosort = T, lwd = 2, col = "white", ylim = c (-1.1, 1.1), plot.type = "circle", zero = (pi/2), rotation = "clock", shrink = 1.2, main = "")
 
+	axis.circular(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi /2), template = "none", tcl = 0.12, tcl.text = 0.2)
 
+	all_line <- lines(circ_dens_all, lwd = 1.5, col = "black", zero = (pi/2), rotation = "clock")
+	long_line <- lines(circ_dens_long, lwd= 0, col = "white", zero = (pi/2), rotation = "clock")
+	#const_line <- lines(circ_dens_const, lwd= 1.5, col = "black", zero = (pi/2), rotation = "clock")
+	#vert_line <- lines(circ_dens_vert, lwd = 0, col = "white", zero = (pi/2), rotation = "clock")
 
+	lapply(polyclip(A=list("x"=long_line$x, "y"=long_line$y), B=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(0,1,0,0.5), border = rgb(0,1,0,0.5))
 
+	lapply(polyclip(B=list("x"=long_line$x, "y"=long_line$y), A=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(1,0,0,0.5), border = rgb(1,0,0,0.5))
 
+	vert_line <- lines(circ_dens_vert, lwd = 1.5, col = "blue", zero = (pi/2), rotation = "clock")
 
+	#legend("topleft", c("Long distance HGT enriched relative to all genes                              ", "Long distance HGT depleted relative to all genes", "Density of vertically inheritted genes"), lty = c(1,1,1), lwd = c(10,10,2), col = c(rgb(0,1,0,0.5), rgb(1,0,0,0.5), "Blue"))
+	legend("topleft", paste0("Bandwith = ", bandwith, "                    "))
 
+}
 
-
-
-
+## Make a new par set - just so we can add a title to the top
+par(mfcol = c(1, 1))
+par(new = TRUE)
+title(main = "Average across 12 Geobacillus species at penalty = 5, different smooth bandwith")
 
 
 

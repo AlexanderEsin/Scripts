@@ -14,7 +14,7 @@ set db_dir $parent/Assembly/Atram_DB
 set parameters {
     {locus_name.arg        ""   "Name of locus to use (String)"}
     {iteration.arg         1    "Iteration (Integer)"}
-    {max_processes.arg     1    "Maximum number of processes (Integer)"}
+    {max_processes.arg     10    "Maximum number of processes (Integer)"}
     {max_target_seqs.arg   2000 "Maximum number of target sequences for blastn (Integer)"}
     {min_coverage.arg      1.5  "Minimum coverage for inclusion in Velvet assembly (Float)"}
     {max_contig_incl.arg   10   "Maximum number of contigs from iteration 1 of Atram (Integer)"}
@@ -54,7 +54,7 @@ set chromosome_map          $arg(chromosome)
 ###########################################################################
 #####                           PROCS                                ######
 ###########################################################################
-source ~/desktop/Scripts/General_utils.tcl
+source ~/Documents/Scripts/General_utils.tcl
 
 # Runs blat in current directory - must provide query, database arguments. Output parameter is optional -- all other blat options as default
 # Output variable blat_output_file is the path to the output file
@@ -122,6 +122,7 @@ file mkdir $velvet_log_dir
 cd $db_dir
 set db_file [lindex [glob *db*] 0]
 set db_name [string range $db_file 0 [string first "." $db_file]-1]
+set db_name "repeat_trim_ilv.fq"
 
 ###########################################################################
 ##              Main body of the atram assembly pipeline                 ##
@@ -131,7 +132,9 @@ cd $input_dir
 set input_files [reverse_dict [glob -nocomplain *.fasta]]
 
 if {[llength $input_files] > 0} {
+
     foreach file $input_files {
+
         set output_name [string range $file 0 end-6]
         puts "\n\nNow making assembly based on $file ..."
         file mkdir $output_dir/$output_name
@@ -141,7 +144,7 @@ if {[llength $input_files] > 0} {
         ## Kmer size == 31
         ## Insert length == 270
         ## Exp-coverage is in kmers = i.e. 
-        catch {exec /users/aesin/downloads/aTRAM-master/aTRAM_AE.pl -reads $db_dir/$db_name -target $file -output $output_dir/$output_name/Out_atram_$output_name -log_file $output_dir/$output_name/Log_$output_name\_assembly.txt -velvet_log $velvet_log_dir/Velvet_log_$file\.txt -kmer 31 -max_target_seqs $max_target_seqs -ins_length 270 -exp_coverage 8 -cov_cutoff 2 -max_memory 24 -max_processes $max_processes -iterations 1 >> $output_dir/Log_assemble_short.txt}
+        catch {exec /users/aesin/Documents/Scripts/Deer/aTRAM-master/aTRAM_AE.pl -reads $db_dir/$db_name -target $file -output $output_dir/$output_name/Out_atram_$output_name -log_file $output_dir/$output_name/Log_$output_name\_assembly.txt -velvet_log $velvet_log_dir/Velvet_log_$file\.txt -kmer 31 -max_target_seqs $max_target_seqs -ins_length 270 -exp_coverage 8 -cov_cutoff 2 -max_memory 24 -max_processes $max_processes -iterations 1 >> $output_dir/Log_assemble_short.txt}
 
         set all_fasta_file [glob -nocomplain $output_dir/$output_name/*$output_name\.all.*]
 
@@ -190,11 +193,14 @@ if {[llength $input_files] > 0} {
 
         } else {
             puts "After one Atram iteration $file has been included in fewer than 10 contigs ($contig_no) - running Atram for a full 5 iterations ... "
-            catch {exec /users/aesin/downloads/aTRAM-master/aTRAM_AE.pl -reads $db_dir/$db_name -target $file -output $output_dir/$output_name/Out_atram_$output_name -log_file $output_dir/$output_name/Log_$output_name\_assembly.txt -velvet_log $velvet_log_dir/Velvet_log_$file\.txt -kmer 31 -max_target_seqs $max_target_seqs -ins_length 270 -exp_coverage 8 -cov_cutoff 2 -max_memory 24 -max_processes $max_processes -iterations 5 -start_iteration 1 >> $output_dir/Log_assemble_short.txt}
+            catch {exec /users/aesin/Documents/Scripts/Deer/aTRAM-master/aTRAM_AE.pl -reads $db_dir/$db_name -target $file -output $output_dir/$output_name/Out_atram_$output_name -log_file $output_dir/$output_name/Log_$output_name\_assembly.txt -velvet_log $velvet_log_dir/Velvet_log_$file\.txt -kmer 31 -max_target_seqs $max_target_seqs -ins_length 270 -exp_coverage 8 -cov_cutoff 2 -max_memory 24 -max_processes $max_processes -iterations 5 -start_iteration 1 >> $output_dir/Log_assemble_short.txt}
 
             file rename $file $done_dir
         }
     }
+} else {
+    puts stdout "Can't find any input files. Exiting..."
+    exit 1
 }
 
 ###########################################################################

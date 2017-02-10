@@ -1,0 +1,24 @@
+Fri Feb 10 13:04:32 2017
+ /usr/local/bin/velveth . 31 -fasta -shortPaired /Users/aesin/Downloads/aTRAM-master/test/debug/test_atram.1.blast.fasta
+Version 1.2.10
+Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+Compilation settings:
+CATEGORIES = 10
+MAXKMERLENGTH = 50
+OPENMP
+LONGSEQUENCES
+
+Fri Feb 10 13:05:27 2017
+ /usr/local/bin/velveth . 31 -fasta -shortPaired /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_atram.1.blast.fasta
+Version 1.2.10
+Copyright 2007, 2008 Daniel Zerbino (zerbino@ebi.ac.uk)
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+Compilation settings:
+CATEGORIES = 10
+MAXKMERLENGTH = 50
+OPENMP
+LONGSEQUENCES
+

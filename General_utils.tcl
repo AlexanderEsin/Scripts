@@ -51,17 +51,19 @@ proc string_reverse {some_string} {
 
 ############################################################
 ## Fasta specific ##
+
+# RETIRED: 
 # This proc takes the read input from a typical fasta files and splits it into a list of genes #
-proc split_genes {fasta} {
-  global genes
-  regsub -all {>} [string trim $fasta] {£>} fasta
-  set fasta [split $fasta £]
-  regsub -all "{}" $fasta {} genes
-  return $genes
-}
+# proc split_genes {fasta} {
+#   global genes
+#   regsub -all {>} [string trim $fasta] {£>} fasta
+#   set fasta [split $fasta £]
+#   regsub -all "{}" $fasta {} genes
+#   return $genes
+# }
 
 # This does the same as above but x15 faster #
-proc split_genes_fast {fasta} {
+proc split_genes {fasta} {
   global genes
 
   set temp [split [string range [string trim $fasta] 1 end] >]

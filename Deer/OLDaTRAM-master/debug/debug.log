@@ -1,0 +1,205 @@
+170210 11:43:34: DEBUG: Setting log file to /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log
+170210 11:43:34: 1. Checking that configuration is correct...
+170210 11:43:34: OK
+170210 11:43:34: 2. Checking that format_sra works correctly...
+170210 11:43:34: Running command "/Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/../format_sra.pl -in /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/test_sra.fasta -out /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db -num 7 -debug -log /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log"
+170210 11:43:34: Running format_sra.pl -in /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/test_sra.fasta -out /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db -num 7 -debug -log /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log, v1.01+
+
+170210 11:43:34: One input file: /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/test_sra.fasta
+
+170210 11:43:34: making 7 shards.
+170210 11:43:34: Dividing fasta/fastq file into buckets for sorting.
+170210 11:43:35: starting sort.
+170210 11:43:35: Forking pid 94076: sort
+170210 11:43:35: Forking pid 94077: sort
+170210 11:43:35: Forking pid 94078: sort
+170210 11:43:35: DEBUG: waiting for 94076, 94077, 94078
+170210 11:43:35: DEBUG: waiting for 94076, 94077
+170210 11:43:35: DEBUG: waiting for 94076
+170210 11:43:35: Forking pid 94082: sort
+170210 11:43:35: Forking pid 94083: sort
+170210 11:43:35: Forking pid 94084: sort
+170210 11:43:35: DEBUG: waiting for 94082, 94083, 94084
+170210 11:43:35: DEBUG: waiting for 94082, 94083
+170210 11:43:35: DEBUG: waiting for 94082
+170210 11:43:35: Forking pid 94088: sort
+170210 11:43:35: DEBUG: waiting for 94088
+170210 11:43:35: Forking pid 94090: sort
+170210 11:43:35: Forking pid 94091: sort
+170210 11:43:35: Forking pid 94092: sort
+170210 11:43:35: DEBUG: waiting for 94090, 94091, 94092
+170210 11:43:35: DEBUG: waiting for 94090, 94091
+170210 11:43:35: DEBUG: waiting for 94090
+170210 11:43:35: Forking pid 94096: sort
+170210 11:43:35: Forking pid 94097: sort
+170210 11:43:35: Forking pid 94098: sort
+170210 11:43:35: DEBUG: waiting for 94096, 94097, 94098
+170210 11:43:35: DEBUG: waiting for 94096, 94097
+170210 11:43:35: DEBUG: waiting for 94096
+170210 11:43:35: Forking pid 94102: sort
+170210 11:43:35: DEBUG: waiting for 94102
+170210 11:43:35: sorted.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.0.1.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.0.2.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.1.1.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.1.2.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.2.1.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.2.2.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.3.1.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.3.2.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.4.1.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.4.2.fasta.
+170210 11:43:35: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.5.1.fasta.
+170210 11:43:36: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.5.2.fasta.
+170210 11:43:36: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.6.1.fasta.
+170210 11:43:36: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.6.2.fasta.
+170210 11:43:36: Making blastdbs.
+170210 11:43:36: Forking pid 94104: /usr/local/bin/makeblastdb
+170210 11:43:36: Forking pid 94105: /usr/local/bin/makeblastdb
+170210 11:43:36: Forking pid 94106: /usr/local/bin/makeblastdb
+170210 11:43:36: DEBUG: waiting for 94104, 94105, 94106
+
+
+Building a new DB, current time: 02/10/2017 11:43:36
+New DB name:   /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.0.db
+New DB title:  /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.0.1.fasta
+Sequence type: Nucleotide
+
+
+Building a new DB, current time: 02/10/2017 11:43:36
+
+
+Building a new DB, current time: 02/10/2017 11:43:36
+New DB name:   /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.1.db
+New DB name:   /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.2.db
+New DB title:  /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.1.1.fasta
+New DB title:  /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.2.1.fasta
+Sequence type: Nucleotide
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 1000000000B
+Keep MBits: T
+Maximum file size: 1000000000B
+Keep MBits: T
+Maximum file size: 1000000000B
+Adding sequences from FASTA; added 4988 sequences in 0.36368 seconds.
+Adding sequences from FASTA; added 5074 sequences in 0.3686 seconds.
+170210 11:43:36: DEBUG: waiting for 94104, 94105
+170210 11:43:36: DEBUG: waiting for 94104
+Adding sequences from FASTA; added 5137 sequences in 0.376775 seconds.
+170210 11:43:36: Forking pid 94107: /usr/local/bin/makeblastdb
+170210 11:43:36: Forking pid 94108: /usr/local/bin/makeblastdb
+170210 11:43:36: Forking pid 94109: /usr/local/bin/makeblastdb
+170210 11:43:36: DEBUG: waiting for 94107, 94108, 94109
+
+
+Building a new DB, current time: 02/10/2017 11:43:36
+New DB name:   /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.3.db
+New DB title:  /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.3.1.fasta
+Sequence type: Nucleotide
+
+
+Building a new DB, current time: 02/10/2017 11:43:36
+New DB name:   /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.5.db
+New DB title:  /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.5.1.fasta
+Sequence type: Nucleotide
+
+
+Building a new DB, current time: 02/10/2017 11:43:36
+New DB name:   /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.4.db
+New DB title:  /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.4.1.fasta
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 1000000000B
+Keep MBits: T
+Maximum file size: 1000000000B
+Keep MBits: T
+Maximum file size: 1000000000B
+Adding sequences from FASTA; added 4920 sequences in 0.360876 seconds.
+Adding sequences from FASTA; added 4999 sequences in 0.374131 seconds.
+Adding sequences from FASTA; added 5118 sequences in 0.375076 seconds.
+170210 11:43:36: DEBUG: waiting for 94107, 94108
+170210 11:43:36: DEBUG: waiting for 94107
+170210 11:43:36: Forking pid 94110: /usr/local/bin/makeblastdb
+170210 11:43:36: DEBUG: waiting for 94110
+
+
+Building a new DB, current time: 02/10/2017 11:43:36
+New DB name:   /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.6.db
+New DB title:  /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db.6.1.fasta
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 1000000000B
+Adding sequences from FASTA; added 4942 sequences in 0.328877 seconds.
+170210 11:43:37: Finished: aTRAM database /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db has 7 shards.
+170210 11:43:37: Returning 0 from "/Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/../format_sra.pl"
+170210 11:43:37: OK
+170210 11:43:37: 3. Checking a defective file...
+170210 11:43:37: Running command "/Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/../format_sra.pl -in /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/test_bad.fasta -out /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db_bad -debug -log /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log"
+170210 11:43:37: Running format_sra.pl -in /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/test_bad.fasta -out /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db_bad -debug -log /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log, v1.01+
+
+170210 11:43:37: One input file: /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/test_bad.fasta
+
+170210 11:43:37: Input is 0.00 MB; we will make 1 shards.
+170210 11:43:37: Dividing fasta/fastq file into buckets for sorting.
+170210 11:43:37: starting sort.
+170210 11:43:37: Forking pid 94117: sort
+170210 11:43:37: DEBUG: waiting for 94117
+170210 11:43:37: Forking pid 94119: sort
+170210 11:43:37: DEBUG: waiting for 94119
+170210 11:43:37: sorted.
+170210 11:43:37: Making /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db_bad.0.1.fasta.
+170210 11:43:37: Error detected in /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/test_bad.fasta: Sequence >DBRHHJN1_0173:3:1:10183:148184#ACAGTG/1 occurred at least twice.
+170210 11:43:37: Returning 2 from "/Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/../format_sra.pl"
+170210 11:43:37: OK
+170210 11:43:37: 4. Checking that aTRAM works correctly...
+170210 11:43:37: Running command "/Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/../aTRAM.pl -db /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db -target /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/testref.fasta -out /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_atram -debug -log /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log"
+170210 11:43:37: DEBUG: Setting log file to /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log
+170210 11:43:37: Running aTRAM.pl -db /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_db -target /Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/testref.fasta -out /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_atram -debug -log /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log, v1.01+
+
+	100000000
+Using 7 of 7 total shards.
+170210 11:43:37: Using 7 of 7 total shards.
+170210 11:43:37: Running command "/usr/local/bin/makeblastdb -in /var/folders/h_/wv87trsd10gb3_m514hsy4n40000gq/T/fk5x5UCswt -dbtype nucl -out /var/folders/h_/wv87trsd10gb3_m514hsy4n40000gq/T/OiTcHTGD_s.db -input_type fasta"
+
+
+Building a new DB, current time: 02/10/2017 11:43:37
+New DB name:   /var/folders/h_/wv87trsd10gb3_m514hsy4n40000gq/T/OiTcHTGD_s.db
+New DB title:  /var/folders/h_/wv87trsd10gb3_m514hsy4n40000gq/T/fk5x5UCswt
+Sequence type: Nucleotide
+Keep MBits: T
+Maximum file size: 1000000000B
+Adding sequences from FASTA; added 3 sequences in 0.000793934 seconds.
+170210 11:43:37: Returning 0 from "/usr/local/bin/makeblastdb"
+iteration 1 starting...
+170210 11:43:37: iteration 1 starting...
+	blasting short reads...
+170210 11:43:37: Forking pid 94123: /usr/local/bin/blastn
+170210 11:43:37: Forking pid 94124: /usr/local/bin/blastn
+170210 11:43:37: Forking pid 94125: /usr/local/bin/blastn
+170210 11:43:37: Forking pid 94126: /usr/local/bin/blastn
+170210 11:43:37: Forking pid 94127: /usr/local/bin/blastn
+170210 11:43:37: Forking pid 94128: /usr/local/bin/blastn
+170210 11:43:37: Forking pid 94129: /usr/local/bin/blastn
+170210 11:43:37: DEBUG: waiting for 94123, 94124, 94125, 94126, 94127, 94128, 94129
+170210 11:43:37: DEBUG: waiting for 94123, 94124, 94125, 94126, 94127, 94128
+170210 11:43:37: DEBUG: waiting for 94123, 94124, 94125, 94126, 94127
+170210 11:43:37: DEBUG: waiting for 94123, 94124, 94125, 94126
+170210 11:43:37: DEBUG: waiting for 94123, 94124, 94125
+170210 11:43:37: DEBUG: waiting for 94123, 94124
+170210 11:43:37: DEBUG: waiting for 94123
+	getting paired ends...
+170210 11:43:37: DEBUG: waiting for 94130, 94131, 94132, 94133, 94134, 94135, 94137
+170210 11:43:37: DEBUG: waiting for 94130, 94131, 94132, 94133, 94134, 94135
+170210 11:43:37: DEBUG: waiting for 94130, 94131, 94132, 94133, 94134
+170210 11:43:37: DEBUG: waiting for 94130, 94131, 94132, 94133
+170210 11:43:37: DEBUG: waiting for 94130, 94131, 94132
+170210 11:43:37: DEBUG: waiting for 94130, 94131
+170210 11:43:37: DEBUG: waiting for 94130
+170210 11:43:37: DEBUG: Setting log file to /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/debug.log
+	assembling pairs with Velvet...
+170210 11:43:37: Running command "/usr/local/bin/velveth /var/folders/h_/wv87trsd10gb3_m514hsy4n40000gq/T/liU9PwhOYc 31 -fasta -shortPaired /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_atram.1.blast.fasta"
+velveth: /Users/aesin/Documents/Scripts/Deer/aTRAM-master/debug/test_atram.1.blast.fasta does not seem to be in FastA format
+
+Command "/usr/local/bin/velveth" exited with 1
+170210 11:43:37: Returning 1 from "/Users/aesin/Documents/Scripts/Deer/aTRAM-master/test/../aTRAM.pl"

@@ -1,0 +1,85 @@
+library(ape)
+library(phangorn)
+library(phylobase)
+library(geiger)
+
+###########################################################################
+
+setwd("/users/aesin/Desktop/Deer/Selection_analysis/Species_tree/")
+
+
+## Get the tenk tree ##
+tenk_tree <- read.nexus(file = "Artiodactyl_with_deer_10ktrees.nex")
+
+## Extract deer subtree ##
+deer_node <- getMRCA(tenk_tree, c("Dama_dama", "Alces_alces"))
+deer_tips <- tips(tenk_tree, deer_node)
+deer_prune <- drop.tip(tenk_tree, setdiff(tenk_tree$tip.label, deer_tips))
+
+deer_prune <- drop.tip(deer_prune, "Muntiacus_reevesi")
+
+
+## Add the Bactrian tip ##
+bactrian_tip <- list(edge=matrix(c(2,1),1,2), tip.label="Cervus_elaphus_bactrianus", edge.length=1.0, Nnode=1)
+class(bactrian_tip)<-"phylo"
+message("Bind the Bactrian deer")
+plot.phylo(deer_prune)
+deer_prune <- bind.tree(deer_prune, bactrian_tip, interactive = TRUE)
+deer_prune <- chronopl(deer_prune, 0, age.min = 1, age.max = NULL,node = "root", S = 1, tol = 1e-8,CV = FALSE, eval.max = 500, iter.max = 500)
+
+## Add the Cervus_canadensis tip ##
+wapiti_tip <- list(edge=matrix(c(2,1),1,2), tip.label="Cervus_canadensis", edge.length=1.0, Nnode=1)
+class(wapiti_tip)<-"phylo"
+message("Bind the Waptiti (sister to nippon")
+plot.phylo(deer_prune)
+deer_prune <- bind.tree(deer_prune, wapiti_tip, interactive = TRUE)
+deer_prune <- chronopl(deer_prune, 0, age.min = 1, age.max = NULL,node = "root", S = 1, tol = 1e-8,CV = FALSE, eval.max = 500, iter.max = 500)
+
+## Rename the Swamp_deer to Rucervus ##
+swamp_deer_index <- grep("Cervus_duvaucelii", deer_prune)
+deer_prune$tip.label[swamp_deer_index] <- "Rucervus_duvaucelii"
+
+
+deer_topo <- chronopl(deer_prune, 0, age.min = 1, age.max = NULL,node = "root", S = 1, tol = 1e-8,CV = FALSE, eval.max = 500, iter.max = 500)
+# Write out just the deer tree #
+just_deer_write <- deer_topo; just_deer_write$edge.length <- NULL; just_deer_write$node.label <- NULL
+
+
+####
+# Now make the reduced HBG portion #
+deer_hbg_tree <- just_deer_write
+keep_hbg_tips <- c("Odocoileus_virginianus", "Cervus_elaphus", "Rangifer_tarandus", "Capreolus_capreolus", "Cervus_albirostris", "Rucervus_duvaucelii", "Cervus_canadensis", "Cervus_elaphus_bactrianus")
+
+deer_hbg_tree <- drop.tip(deer_hbg_tree, setdiff(deer_hbg_tree$tip.label, keep_hbg_tips))
+
+
+## Rename the HBG tips to say HBG ##
+for (index in 1:length(deer_hbg_tree$tip.label)) {
+	tip_name <- deer_hbg_tree$tip.label[index]
+	deer_hbg_tree$tip.label[index] <- paste0(tip_name, "_HBG")
+}
+
+## Rename the HBB tips to say HBB ##
+deer_hbb_tree <- just_deer_write
+for (index in 1:length(deer_hbb_tree$tip.label)) {
+	tip_name <- deer_hbb_tree$tip.label[index]
+	deer_hbb_tree$tip.label[index] <- paste0(tip_name, "_HBB")
+}
+
+
+## Bind HBG to HBB ##
+message("Bind HBG to HBB")
+plot.phylo(deer_hbb_tree)
+#bind_where <- getMRCA(deer_hbb_tree, c("Dama_dama", "Alces_alces"))
+bound_deer <- bind.tree(deer_hbb_tree, deer_hbg_tree, where = "root", position = 0.5)
+bound_deer <- multi2di(bound_deer, random = FALSE)
+bound_deer$edge.length[which(bound_deer$edge.length == 0)] <- mean(bound_deer$edge.length)
+
+
+## Set edge legths to NULL to make topo only ##
+all_topo <- bound_deer
+all_topo$node.label <- NULL
+
+
+## Write tree ##
+write.tree(all_topo, file = "HBB_HBG_consensus_tree.txt")

@@ -5,7 +5,7 @@ source ~/Dropbox/Scripts/Procs/gc_content.tcl
 package require sqlite3
 
 ###############
-set window 1000
+set window 500
 ###############
 
 proc gc_content_by_window {dna_sequence {window 500}} {
@@ -300,25 +300,4 @@ puts "\nDONE"
 
 
 db1 close
-
-puts stdout $old_orient_dnaa_gene
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

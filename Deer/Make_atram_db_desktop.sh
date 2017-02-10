@@ -3,10 +3,10 @@
 ## I'm not entirely sure how many CPUs the DB builder can use (it ran at night, so I didn't get to see), but this seems like a safe bet re: cores and RAM 
 ulimit -n 2048
 ##########################
-direct=/users/aesin/desktop/Deer/Assembly
+direct=/users/aesin/desktop/Deer/Assembly/022017_repeatmasked
 
 cd $direct
-mkdir DB
+mkdir DB_trimrepeat
 
 for file in ./*fastq ; do
   if [ -e "$file" ] ; then   # Check whether file exists.
