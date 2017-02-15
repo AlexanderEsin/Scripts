@@ -52,7 +52,7 @@ anoxy_tips <- grep("Anoxybacillus_", species_tree_clado$tip.label, value = TRUE)
 anoxy_geo_clado_tips <- c(geo_tips, anoxy_tips)
 
 ## Use the Anoxy/Geobacillus tip set to extract the Anoxy/Geobacillus sublclade. Transform to phylo4 object ##
-anoxy_geo_clado <- drop.tip(species_tree_clado, setdiff(species_tree_clado$tip.label, anoxy_geo_species_tips))
+anoxy_geo_clado <- drop.tip(species_tree_clado, setdiff(species_tree_clado$tip.label, anoxy_geo_clado_tips))
 anoxy_geo_clado4 <- phylo4(anoxy_geo_clado)
 
 ## Get the node labels as a data frame ##
@@ -87,7 +87,7 @@ anoxy_geo_time <- drop.tip(bacillaceae_tree, setdiff(bacillaceae_tree$tip.label,
 ## Annotate the time-resolved tree with the correct node labels imported from the species tree-derived tree ##
 anoxy_geo_time_relab <- anoxy_geo_time
 for (tip in anoxy_geo_time_tips) {
-    species_tree_tip_name <- grep(tip, anoxy_geo_species_tips, value = T)
+    species_tree_tip_name <- grep(tip, anoxy_geo_clado_tips, value = T)
     original_tip_position <- match(tip, anoxy_geo_time_relab$tip.label)
     # Replace with new name #
     anoxy_geo_time_relab$tip.label[original_tip_position] <- species_tree_tip_name
@@ -213,7 +213,7 @@ geo_only_correlation <- geo_only_brnch_len[,3:4]
 geo_only_pearson <- round(cor(geo_only_correlation, method = "pearson"), digits = 4)[2]
 geo_only_spearman <- round(cor(geo_only_correlation, method = "spearman"), digits = 4)[2]
 
-writeLines(paste0("Pearson correlation of transfers over all Geobacillus branches: ", overall_pearson, "\n", "Spearman correlation of transfers over all Geobacillus branches: ", overall_spearman))
+writeLines(paste0("Pearson correlation of transfers over all Geobacillus branches: ", geo_only_pearson, "\n", "Spearman correlation of transfers over all Geobacillus branches: ", geo_only_spearman))
 
 
 ###################################################################
@@ -312,7 +312,7 @@ for (i in 1:nrow(anoxy_geo_time_edge_df)) {
 ## Aliyu et al 2016 divides the Geobacillus phylogeny into a number of species subgroups (fig 3). I applied that classification to the genomes used in this analysis. Branches separating species/tips belonging to the same subgroup are considered to not have undergone substantial differentiation and purifying selection. ##
 
 ## Read in the table constructed based on the publication ##
-subspecies_groupings <- read.csv(file = "/users/aesin/Desktop/Geo_analysis/Geo_omes/Subspecies_geo_groups.csv", header = TRUE, sep = ",")
+subspecies_groupings <- read.csv(file = "/Users/aesin/Desktop/Geo_analysis/Geo_omes/Subspecies_geo_groups.csv", header = TRUE, sep = ",")
 
 ## Get those tips that have a fellow tip in the same subgroup. Isolate all the subgroups that have more than one member ##
 subspecies_only <- subset(subspecies_groupings, duplicated(subspecies_groupings$Group) | duplicated(subspecies_groupings$Group, fromLast = TRUE))
@@ -324,9 +324,10 @@ names(sinpen_time_sub_df)[ncol(sinpen_time_sub_df)] <- "branch_length"
 sinpen_time_sub_df[,"Subspecies_branch"] <- NA
 
 ## For each group with more than one member, identify the species. Find all the descendant nodes from the common ancestor of the subspecies (they are monophyletic). Using those nodes, identify all the edges (branches) that we will classify as being a subspecies branch (1). All other branches are interspecies (0) ##
+as_4_time <- phylo4(anoxy_geo_time)
 for (group in unique_subgroups) {
     tips_in_subgroup <- as.vector(subspecies_only$Species[which(subspecies_only$Group == group)])
-    descend_nodes <- as.vector(descendants(t1, MRCA(t1, tips_in_subgroup), "all"))
+    descend_nodes <- as.vector(descendants(as_4_time, MRCA(as_4_time, tips_in_subgroup), "all"))
 
     for (node in descend_nodes) {
         print(node)
@@ -347,8 +348,11 @@ geo_only_full_logical <- geo_only_full_df
 geo_only_full_logical$Subspecies_branch <- as.logical(geo_only_full_logical$Subspecies_branch)
 
 ## Plot ##
-ggplot(geo_only_full_logical, aes(x = branch_length, y = T5, label = point_index, color = Subspecies_branch)) + geom_point(size = 3) + geom_text(aes(label = point_index), hjust = 0, vjust = -1)
+#devSVG(file = "/users/aesin/Dropbox/point_plot_time_corr.svg", width = 15, height = 10)
+ggplot(geo_only_full_logical, aes(x = branch_length, y = T5, label = point_index, color = Subspecies_branch)) + geom_point(size = 3) + geom_text(aes(label = point_index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Number of HGTs")
 
+ggplot(geo_only_full_logical, aes(x = branch_length, y = T5, label = point_index, color = Subspecies_branch)) + geom_point(size = 3) + xlab("Branch length") + ylab("Number of HGTs") + scale_color_discrete(name = "Is branch subspecies?")
+#dev.off()
 
 ## Plot with regression lines, but exclude the outlier (point-index = 7) ##
 geo_only_full_logical_no_out_df <- geo_only_full_logical[-which(geo_only_full_logical$point_index == 7),]
@@ -368,6 +372,7 @@ for (i in 1:nrow(anoxy_geo_time_edge_df)) {
 ## Correlate all Geobacillus branches ##
 cor_all <- geo_only_full_logical[,3:4]
 cor(cor_not_subsp, method = "pearson")
+
 
 # Pearson : 0.3313325
 # Spearman : 0.5943488

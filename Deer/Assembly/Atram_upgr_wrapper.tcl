@@ -12,16 +12,18 @@ set db_dir $parent/Assembly/Atram_DB
 
 # Process the command line
 set parameters {
-    {locus_name.arg        ""   "Name of locus to use (String)"}
-    {iteration.arg         1    "Iteration (Integer)"}
-    {max_processes.arg     10    "Maximum number of processes (Integer)"}
-    {max_target_seqs.arg   2000 "Maximum number of target sequences for blastn (Integer)"}
-    {min_coverage.arg      1.5  "Minimum coverage for inclusion in Velvet assembly (Float)"}
-    {max_contig_incl.arg   10   "Maximum number of contigs from iteration 1 of Atram (Integer)"}
-    {contig_assembly.arg   1    "Perform the contig assembly using Minimus (Binary operator)"}
-    {min_ident.arg         99   "Minimum identity for Minimus overlap (Integer)"}
-    {contig_file_split.arg 25   "The number of contigs entries per file after Minimus for UCSC web-blat (Integer)"}
-    {chromosome.arg        25   "Chromosome(s) onto which the contigs should map"}
+    {locus_name.arg         ""          "Name of locus to use (String)"}
+    {iteration.arg          1           "Iteration (Integer)"}
+    {max_processes.arg      10          "Maximum number of processes (Integer)"}
+    {max_target_seqs.arg    2000        "Maximum number of target sequences for blastn (Integer)"}
+    {min_coverage.arg       1.5         "Minimum coverage for inclusion in Velvet assembly (Float)"}
+    {max_contig_incl.arg    100         "Maximum number of contigs from iteration 1 of Atram (Integer)"}
+    {contig_assembly.arg    1           "Perform the contig assembly using Minimus (Binary operator)"}
+    {min_ident.arg          99          "Minimum identity for Minimus overlap (Integer)"}
+    {contig_file_split.arg  25          "The number of contigs entries per file after Minimus for UCSC web-blat (Integer)"}
+    {chromosome.arg         15          "Chromosome(s) onto which the contigs should map"}
+    {chromosome_loc_beg.arg 49022500    "Start position on chr where the contigs should map (Integer). Set 0 for no position filter"}
+    {chromosome_loc_end.arg 49025000    "End position on chr where the contigs should map (Integer)"}
 }
 
 array set arg [cmdline::getoptions argv $parameters]
@@ -50,6 +52,16 @@ set contig_assembly_switch  $arg(contig_assembly)
 set min_ident               $arg(min_ident)
 set contig_file_split_size  $arg(contig_file_split)
 set chromosome_map          $arg(chromosome)
+set chromosome_start        $arg(chromosome_loc_beg)
+set chromosome_end          $arg(chromosome_loc_end)
+
+# If chromosome_start == 0, do not filter position #
+if {$chromosome_start == 0} {
+    set location_filter FALSE
+} else {
+    set location_filter TRUE
+    puts "--> Filtering for location enabled Chr$chromosome_map:$chromosome_start\-$chromosome_end"
+}
 
 ###########################################################################
 #####                           PROCS                                ######
@@ -199,8 +211,7 @@ if {[llength $input_files] > 0} {
         }
     }
 } else {
-    puts stdout "Can't find any input files. Exiting..."
-    exit 1
+    puts stdout "Can't find any input files. Continuing to contig assembly if enabled...\n"
 }
 
 ###########################################################################
@@ -292,18 +303,37 @@ if {$contig_assembly_switch == 1} {
     puts "\nBlat psl output converted to the UCSC web score format.\n\tOutput file == $psl_to_web_output_path"
     openfile $psl_to_web_output_path
 
+    ## Process the blat output data to select for the correct chromosome, and if necessary select for certain coordinates ##
     set blat_output_data [split [string trim $data] \n]
     foreach blat_hit $blat_output_data {
+        # For each mapping event, identify the chromosome to which the sequence mapped
         set chr_mapped_to [lindex [split $blat_hit \t] 0]
+
+        # If the chromosome is the one expected either write it out OR further check for location #
         if {$chr_mapped_to == $chr_transl_gi} {
-            set contig_name [lindex [split [lindex [split $blat_hit \t] 3] \:] 0]
-            lappend mapped_correctly_l $contig_name
+            if {$location_filter == FALSE} {
+                set contig_name [lindex [split [lindex [split $blat_hit \t] 3] \:] 0]
+                lappend mapped_correctly_l $contig_name
+            } else {
+                set loc_map_start [lindex [split $blat_hit \t] 1]
+                set loc_map_end [lindex [split $blat_hit \t] 2]
+
+                if {$loc_map_start >= $chromosome_start && $loc_map_end <= $chromosome_end} {
+                    set contig_name [lindex [split [lindex [split $blat_hit \t] 3] \:] 0]
+                    lappend mapped_correctly_l $contig_name
+                }
+            }
+           
         }
     }
 
     set mapped_correctly_l [lsort -unique $mapped_correctly_l]
     set number_contigs_mapped_correctly [llength $mapped_correctly_l]
-    puts "\nOut of the original $number_of_contigs contigs given by Minimus:\n\t--> $number_contigs_mapped_correctly contigs correctly mapped to Chromosome $chromosome_map"
+    if {$location_filter == FALSE} {
+        puts "\nOut of the original $number_of_contigs contigs given by Minimus:\n\t--> $number_contigs_mapped_correctly contigs correctly mapped to Chr$chromosome_map"
+    } else {
+        puts "\nOut of the original $number_of_contigs contigs given by Minimus:\n\t--> $number_contigs_mapped_correctly contigs correctly mapped to Chr$chromosome_map:$chromosome_start\-$chromosome_end"
+    }
 
     set checked_contigs {}
     foreach mapped_contig $mapped_correctly_l {
@@ -334,6 +364,7 @@ if {$contig_assembly_switch == 1} {
     ### Split the contigs into fasta files with 25 sequences per file for input into UCSC Blat ###
     puts "\nWriting contigs to fasta files containing 25 sequences each for UCSC blat web-version..."
     cd $minimus_dir
+    file mkdir Contigs_split_$min_ident
     set contig_counter [llength $checked_contigs]
     set output_file_number 1
     while {$contig_counter > 0} {
@@ -348,7 +379,7 @@ if {$contig_assembly_switch == 1} {
             incr contigs_written
             #puts "Contigs written out: $contigs_written"
         }
-        set out [open Contigs_split_$min_ident\_$output_file_number\.faa w]
+        set out [open Contigs_split_$min_ident/Contigs_split_$min_ident\_$output_file_number\.faa w]
         puts $out [join $output ""]
         close $out
         incr output_file_number

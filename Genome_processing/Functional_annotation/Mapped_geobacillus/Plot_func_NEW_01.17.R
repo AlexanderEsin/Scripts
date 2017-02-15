@@ -5,6 +5,7 @@ library(RSvgDevice)
 library(stringr)
 library(RColorBrewer)
 
+
 ###########################################################################
 ## Functions ##
 
@@ -154,7 +155,7 @@ if (IG_included == TRUE) {
 	IG_ID <- "NO_IG/"
 }
 
-direct <- "/users/aesin/Desktop/"
+direct <- "/Users/aesin/Desktop/"
 consistent_dir	<- paste0(direct, "Geo_analysis/HGT_Functional_annotation/Consistent_HGT/", IG_ID, Scenario_ID)
 mowg_const_dir	<- paste0(direct, "Mowgli/Consistent_HGT_Vertical/", paste0("Consistent_", IG_ID), Scenario_ID)
 per_penalty_dir <- paste0(direct, "Geo_analysis/HGT_Functional_annotation/Per_penalty/", IG_ID, Scenario_ID)
@@ -178,7 +179,7 @@ while (length(penalty_list) > 1) {
 
 	###############################
 	## Read in total (complete set of gene families/groups/clusters) COG annotation for ALL groups ##
-	setwd("/users/aesin/desktop/Geo_analysis/Geo_ortholog_nucl/Functional_annotation")
+	setwd("/Users/aesin/desktop/Geo_analysis/Geo_ortholog_nucl/Functional_annotation")
 	total_cog_tab <- ReadCogTable("Narrow_COG_list.txt", "Total")
 
 	# Add to our table lists #
@@ -410,6 +411,12 @@ ggplot(no_more_hor_merged_molten, aes(x = COG, y = value, group = variable)) + g
 plot_const_relative_enrichment <- PlotRelativeEnrichmentBoxes(const_prop_list, "Consistent")
 
 plot_longd_relative_enrichment <- PlotRelativeEnrichmentBoxes(long_dist_prop_list, "Long Distance")
+
+#devSVG(file = "/Users/aesin/Dropbox/Plot_func_enrich.svg", width = 15, height = 10)
+plot_longd_relative_enrichment
+#dev.off()
+
+
 # For long distance :
 	# Warning message:
 	# Removed 1 rows containing missing values (geom_point).
@@ -418,6 +425,5 @@ plot_longd_relative_enrichment <- PlotRelativeEnrichmentBoxes(long_dist_prop_lis
 
 
 ###########################################################################
-
 
 
