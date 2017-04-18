@@ -1,0 +1,692 @@
+---
+title: Branch-length vs transfer correlation
+date: 5 April 2017
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    code_folding: hide
+---
+
+
+```{r global_options, include = FALSE}
+knitr::opts_chunk$set(	fig.width	= 10, 
+						fig.height	= 7, 
+						fig.path	= "/Users/aesin/Desktop/Geo_analysis/New_geobacillus_consensus/Correlation/Figures/", 
+						fig.align	= 'center', 
+						dpi			= 300, 
+						cache.path	= "/Users/aesin/Desktop/Geo_analysis/New_geobacillus_consensus/Correlation/Cache/", 
+						warning		= TRUE, 
+						message		= TRUE,
+						tidy		= TRUE)
+
+```
+#### 0. Packages, functions & global variables {.tabset .tabset-fade}
+##### Packages
+```{r packages, warning = FALSE, message = FALSE}
+library(data.table)
+library(ape)
+library(phylobase)
+library(phytools)
+library(phangorn)
+library(stringr)
+library(geiger)
+library(RSvgDevice)
+library(reshape2)
+library(ggplot2)
+```
+
+##### Functions
+```{r functions, warning = FALSE, message = FALSE}
+# Annotate branches function. This is used to label a particular branch with something... #
+annotate_transfer_num <- function (edge_entry, index, colName) {
+    edge <- edge_entry[1:2]
+    edge_label <- as.character(round(edge_entry[,colName], digits = 2))
+    # print(edge_label)
+
+    edgelabels(edge_label, index, adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 1)
+}
+
+# Plot particular branches on the phylogeny #
+PlotSegmentByNodes <- function(nodes0, nodes1, colour) {
+    lastPP <- get("last_plot.phylo", envir = .PlotPhyloEnv)
+    if (length(nodes0) != length(nodes1)) {
+        tmp <- cbind(nodes0, nodes1)
+        nodes0 <- tmp[, 1]
+        nodes1 <- tmp[, 2]
+    }
+    x0 <- lastPP$xx[nodes0]
+    y0 <- lastPP$yy[nodes0]
+    x1 <- lastPP$xx[nodes1]
+    y1 <- lastPP$yy[nodes1]
+    segments(x0, y0, x0, y1, lty = 1, lwd = 3, col = colour)
+    segments(x0, y1, x1, y1, lty = 1, lwd = 3, col = colour)
+}
+
+# Calculate all the relevant correlations for a given transfer column #
+CalcCorrLengthTransfers <- function(full_df, transfer_column, outlier_index) {
+	full_no_outlier_df <- full_df[! (full_df$Index == outlier_index),]
+
+# Correlations - make df and fill it with different combinations #
+cor_df <- data.frame(				Condition=character(),
+									Pearson=double(),
+									Spearman=double(),
+									Rsquared=double(), 
+									stringsAsFactors = FALSE)
+
+# All together - outlier kept #
+cor_df <- rbind(cor_df, data.frame(	Condition = "All with outlier",
+									Pearson = cor(full_df$Branch_len, full_df[,transfer_column], method = "pearson"),
+									Spearman = cor(full_df$Branch_len, full_df[,transfer_column], method = "spearman"),
+									Rsquared = summary(lm(full_df$Branch_len ~ full_df[,transfer_column]))$r.squared))
+
+# All together - outlier removed #
+cor_df <- rbind(cor_df, data.frame(	Condition = "All no outlier",
+									Pearson = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "pearson"),
+									Spearman = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "spearman"),
+									Rsquared = summary(lm(full_no_outlier_df$Branch_len ~ full_no_outlier_df[,transfer_column]))$r.squared))
+
+# Split by Subgroup #
+# Intergroup #
+cor_df <- rbind(cor_df, data.frame(	Condition = "Intergroup no outlier",
+									Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "pearson"),
+									Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "spearman"),
+									Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)]))$r.squared))
+
+# Intragroup #
+cor_df <- rbind(cor_df, data.frame(	Condition = "Intragroup no outlier",
+									Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "pearson"),
+									Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "spearman"),
+									Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)]))$r.squared))
+
+cor_df[,2:4] <- cbind(round(cor_df$Pearson, digits = 4), round(cor_df$Spearman, digits = 4), round(cor_df$Rsquared, digits = 4))
+return(cor_df)
+}
+```
+
+##### Global variables
+```{r global_variables, warning = FALSE, message = FALSE}
+## Variables used globally ##
+penalties = c(4:6)
+min_taxa = 0
+
+single_pen_plot = TRUE
+single_pen_val = 5
+
+if (min_taxa > 4) {
+	file_name_add <- paste0("_min_",min_taxa)
+} else {
+	file_name_add <- ""
+}
+```
+
+
+#### 1. Compare the _(Anoxy)Geobacillus_ phylogenies {.tabset .tabset-fade #sect1}
+_Here we load and compare the phylogenies derived from the all-species cladogram in the Mowgli analysis and the concatenated vertical protein alignment (time-proxy). We want to take the transfers assigned to branches on the species cladogram and plot them on the time-resolved tree. For this have to map the corresponding branches from the species cladorgram to the time-resolved tree and identify any incongruences._
+
+##### 1. Species tree (clado)
+Isolate the Anoxybacillus/Geobacillus phylogeny used in the reconciliation analysis by deriving it from the all-species tree used by Mowgli.
+```{r get_clado_tree, message = FALSE, cache = TRUE}
+
+species_tree_clado <- read.tree("/Users/aesin/Desktop/Mowgli/Species_tree/Reconciled_species_tree/outputSpeciesTree.mpr")
+
+# Get the set of Geobacillus and Anoxybacillus tips and combine into a single set #
+anoxy_geo_clado_tips <- grep("Geobacillus_|Anoxybacillus_", species_tree_clado$tip.label, value = TRUE)
+
+# Anoxy/Geobacillus tips used to extract the Anoxy/Geobacillus subclade. Transform to phylo4 object #
+anoxy_geo_clado <- drop.tip(species_tree_clado, setdiff(species_tree_clado$tip.label, anoxy_geo_clado_tips))
+anoxy_geo_clado4 <- phylo4(anoxy_geo_clado)
+
+# Get the node labels as a data frame ##
+node_lbs_df <- data.frame(labels(anoxy_geo_clado4, "all"))
+internal_nodes_species <- nodeId(anoxy_geo_clado4, "internal")
+names(node_lbs_df)[1] <- "Labels"
+
+plot.phylo(anoxy_geo_clado)
+```
+
+
+##### 2. Time-resolved tree {#time_tree}
+This is derived from a concatenated alignment of protein products of vertically inheritted genes. Here it is rooted by midpoint and the tips are relabelled to the tips used in Mowgli (i.e. the species tree above)  
+1. Read in the time-resolved tree
+```{r get_time_tree, message = FALSE, warning = FALSE, cache = TRUE}
+# Read in the time-resolved tree & root by midpoint #
+time_consensus_tree <- read.tree(file = "/Users/aesin/Desktop/Geo_analysis/New_geobacillus_consensus/Tree/Final_consensus_out.txt")
+anoxy_geo_time <- midpoint(time_consensus_tree)
+
+plot.phylo(anoxy_geo_time)
+```
+2. Relabel the tips of the time resolved tree to match the species tree (Mowgli tips)
+```{r relabel_trim_tree, message = FALSE, warning = FALSE, cache = TRUE}
+# Annotate the time-resolved tree with node labels imported from the species tree #
+anoxy_geo_time_relab <- anoxy_geo_time
+for (tip in anoxy_geo_time$tip.label) {
+    match_clado_name <- grep(tip, anoxy_geo_clado_tips, value = T)
+    time_tip_position <- match(tip, anoxy_geo_time_relab$tip.label)
+    # Replace with new name #
+    anoxy_geo_time_relab$tip.label[time_tip_position] <- match_clado_name
+}
+
+# Remove node labels (BS-value) so that mowgli labels can be added; convert to phylo4 object #
+anoxy_geo_time_relab$node.label <- NULL
+anoxy_geo_time_relab_4 <- phylo4(anoxy_geo_time_relab)
+
+plot.phylo(anoxy_geo_time_relab)
+```
+
+
+
+##### 3. Incogruence between the two trees: 
+* _Anoxybacillus_ is monophyletic in the time-resolved tree (can be ignored)
+* _Geobacillus G1w1_  and _Geobacillus stearothermophilus_ branch in different orders
+```{r side_by_side_trees, message = FALSE, warning = FALSE, cache = TRUE, results = "hide", fig.width = 15, fig.height = 10}
+
+association <- matrix(ncol = 2, nrow = 22)
+association[,1] <- association[,2] <- anoxy_geo_time_relab$tip.label
+cophylo_obj <- cophylo(anoxy_geo_clado, anoxy_geo_time_relab, assoc = association)
+plot.cophylo(cophylo_obj)
+```
+
+##### 4. Branch mapping
+1. Here we map the internal branches from the species phylogeny to the internal branches of the time-resolved phylogeny. If a particular internal branch cannot be mapped, we will be unable to associate any transfers with that branch.
+```{r match_nodes, message = FALSE, warning = FALSE, cache = TRUE}
+
+internal_nodes_time <- nodeId(anoxy_geo_time_relab_4, "internal")
+unmapped_edges <- vector(mode = "list")
+unmapped_count = 1
+
+## For each internal node, match it to the nodes from the species tree ##
+for (internal_time in internal_nodes_time) {
+    matched = FALSE
+    for (internal_species in internal_nodes_species) {
+        if (setequal(tips(anoxy_geo_time_relab, internal_time), tips(anoxy_geo_clado, internal_species)) == TRUE) {
+
+            ## Get the label of the node from the species-cladogram tree ##
+            node_label <- anoxy_geo_clado4@label[internal_species]
+
+            ## Index of the internal node label in the time-resolved tree ##
+            node_index <- which(names(nodeLabels(anoxy_geo_time_relab_4)) == internal_time)
+            
+            ## Assign the name of the node to the time-resolved tree ##
+            nodeLabels(anoxy_geo_time_relab_4)[node_index] <- node_label
+
+            cat(paste0("Time-resolved tree node: ", internal_time, " maps to species tree node: ", internal_species, "\n"))
+            matched = TRUE
+            break
+        }
+    }
+    if (matched == FALSE) {
+        cat(paste0("Time tree node: ", internal_time, " did not map to any species tree node\n"))
+        edge_index <- which(anoxy_geo_time_relab_4@edge[,2] == as.character(internal_time))
+        unmapped_edges[[unmapped_count]] <- as.vector(anoxy_geo_time_relab_4@edge[edge_index,])
+        unmapped_count = unmapped_count + 1
+    }
+}
+```
+2. Because there is incongruence between species and time-resolved trees, there are two edges with which we will be unable to associate transfers
+```{r unuseable_branches, message = FALSE, warning = FALSE, cache = TRUE}
+anoxy_geo_time_relab <- as(anoxy_geo_time_relab_4, "phylo")
+plot(anoxy_geo_time_relab)
+# Colour in the "missing" incongruent edges #
+for (i in 1:length(unmapped_edges)) {
+    edge <- unmapped_edges[[i]]
+    PlotSegmentByNodes(edge[1], edge[2], "red")
+}
+```
+
+3. Now that all the internal nodes of the time-resolved tree have been relabelled to match the species tree (where there is no incongruence), a list of all the nodes is pulled out. The row number of this dataframe corresponds to the descendent node of an edge, i.e X or Y in the below case  
+.........----- X  
+.....----| Z  
+.........----- Y
+```{r make_node_table, message = FALSE, warning = FALSE, cache = TRUE}
+# Prepare the count table for the time-resolved tree as for the species-derived prune above ##
+node_labels_dfs <- list(clado = data.frame(labels(anoxy_geo_clado4, "all")), time = data.frame(labels(anoxy_geo_time_relab_4, "all")))
+node_labels_dfs <- lapply(node_labels_dfs, setnames, "Node_labels")
+lapply(node_labels_dfs, head)
+```
+
+#### 2. Associate transfers with branches {.tabset .tabset-fade}
+
+##### 1. Prep output dataframes
+The list contains two dataframes - one each to store the number of transfers per branch of the clado and time-resolved trees. The order of edges in these dataframes is __the same__ as the order of node labels.
+```{r prepare_output_tables, message = FALSE, warning = FALSE}
+# Create dataframe in which the num. transfers at each penalty for each edge will be stored #
+edge_dfs <- list(clado = data.frame(anoxy_geo_clado$edge), time = data.frame(anoxy_geo_time$edge))
+edge_dfs <- lapply(edge_dfs, setnames, c("E1", "E2"))
+edge_dfs <- lapply(edge_dfs, function(x) cbind(x, Subgroup = NA))
+
+# For each dataframe, create columns for each penalty - fill with 0s as placeholders #
+penalty_names <- lapply(as.list(penalties), function(x) paste0("T",x))
+edge_dfs <- lapply(edge_dfs, function(x) {for (penalty in penalty_names) {0 -> x[eval(penalty)]}; x})
+lapply(edge_dfs, head)
+```
+
+##### 2. Read in transfers.
+We read in the per-penalty transfer tables - these contain all transfers into _(Anoxy)Geobacillus_ with associated edges, i.e. two nodes that are presented in the Mowgli species tree format (e.g. 3644). Using the node label table, we can then associate the transfers with edges in our two output dataframes.
+```{r read_in_transfer_tables, message = FALSE, warning = FALSE, cache = TRUE}
+# Directory containing the per-penalty transfer files #
+input_edge_dir <- "/Users/aesin/Desktop/Mowgli/Long_distance_HGT/Full/Scenarios_1_2/Receptor_edges/"
+for (penalty in penalties) {
+
+    # Read in the refined receptor edge list for a particular penalty #
+    receptor_df <- read.table(file = paste0(input_edge_dir, "T", penalty, "_refined_receptor_edges", file_name_add, ".txt"), header = FALSE, sep = "\t")
+
+    # Column name for this penalty #
+    cname <- paste0("T", penalty)
+
+    # For each transfer, we can identify the edge #
+    at_root = 0
+    for(i in 1:nrow(receptor_df)) {
+        row <- receptor_df[i,]
+        # If one of the nodes of the edge is '3728' - this is the Anoxy/Geobacillus root node #
+        if (row[1] == 3728 || row[2] == 3728) {
+            at_root = at_root + 1
+        } else {
+        	# Pull out row number (indication of phylogeny edge) corresponding to the Mowgli tree label.
+            edge_2_species <- grep(row[2], node_labels_dfs$clado$Node_labels)
+            edge_2_time <- grep(row[2], node_labels_dfs$time$Node_labels)
+
+            ## Fill in the count for the species-derived tree ##
+            edge_dfs$clado[,cname][which(edge_dfs$clado$E2 == edge_2_species)] = edge_dfs$clado[,cname][which(edge_dfs$clado$E2 == edge_2_species)] + 1
+
+            ## Fill in the count for the time-derived tree ##
+            edge_dfs$time[,cname][which(edge_dfs$time$E2 == edge_2_time)] = edge_dfs$time[,cname][which(edge_dfs$time$E2 == edge_2_time)] + 1
+        }
+    }
+}
+lapply(edge_dfs, head)
+```
+
+##### 3. Summary statistics
+Some statistics for the data so far
+```{r summary_stats, message = FALSE, warning = FALSE, cache = TRUE}
+cat("There will be something here later")
+```
+
+
+#### 3. Subdividing the _Geobacillus_ clade {.tabset .tabset-fade}
+_Aliyu et al 2016_ divides the _Geobacillus_ phylogeny into a number of species subgroups (fig 3). I applied that classification to the genomes used in this analysis. Branches separating species/tips belonging to the same subgroup are considered to not have undergone substantial differentiation and purifying selection.
+
+##### 1. Read in subdivisions
+```{r read_in_subgroup, message = FALSE, warning = FALSE, cache = TRUE}
+# Read in the table constructed based on the publication #
+subspecies_groupings <- read.csv(file = "/Users/aesin/Desktop/Geo_analysis/Geo_omes/Subspecies_geo_groups.csv", header = TRUE, sep = ",")
+
+# Get those tips that have a fellow tip in the same subgroup. Isolate all the subgroups that have more than one member #
+subspecies_only <- subset(subspecies_groupings, duplicated(subspecies_groupings$Group) | duplicated(subspecies_groupings$Group, fromLast = TRUE))
+unique_subgroups <- unique(subspecies_only$Group)
+subspecies_only
+```
+
+##### 2. Per edge subgroups
+```{r per_edge_subgroups, message = FALSE, warning = FALSE, cache = TRUE}
+# For each group with more than one member, identify the tips. Find all the descendant nodes from the common ancestor of the subgroup (they are monophyletic). Using those nodes, identify all the edges (branches) that we will classify as being a subgroup branch (1). All other branches are seperate groups (0)
+anoxy_geo_time4 <- phylo4(anoxy_geo_time)
+for (group in unique_subgroups) {
+    tips_in_subgroup <- as.vector(subspecies_only$Species[which(subspecies_only$Group == group)])
+    descend_nodes <- as.vector(descendants(anoxy_geo_time4, MRCA(anoxy_geo_time4, tips_in_subgroup), "all"))
+
+    for (node in descend_nodes) {
+        edge_dfs$time$Subgroup[which(edge_dfs$time$E2 == node)] <- 1
+    }
+}
+edge_dfs$time$Subgroup[is.na(edge_dfs$time$Subgroup)] <- 0
+head(edge_dfs$time)
+```
+
+##### 3. Group/subgroup tree
+```{r plot_subgroup_tree, message = FALSE, warning = FALSE, cache = TRUE}
+# The subgroup branches are highlighted in red #
+plotBranchbyTrait(anoxy_geo_time, edge_dfs$time$Subgroup, method = "edges", title = "Subgroup branches")
+# for (i in 1:nrow(edge_dfs$time)) {
+#     edgelabels(i, i, adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 0.7)
+# }
+```
+
+
+
+#### 4. Average transfers per branch {.tabset .tabset-fade #sect4}
+In the next set of calculations we use the average number of transfers per branch. This way we can include the transfer data for all penalties simultaneously.
+
+##### 1. Average over penalties
+For each transfer penalty, make the transfers per branch a percentage of the total transfers for that penalty. Then we can take a mean over all the penalties.
+```{r averaging_transfers, message = FALSE, warning = FALSE, cache = TRUE}
+# Save a copy of the dfs with the raw numbers #
+edge_raw_dfs <- edge_dfs
+
+# Make the transfers in at each branch a fraction of the total transfers #
+edge_dfs <- lapply(edge_dfs, function(x) cbind(x[,1:3],sweep(x[,-1:-3],2,colSums(x[,-1:-3]), "/")*100))
+
+# Make a mean column - averaging across all penalties #
+edge_dfs <- lapply(edge_dfs, function(x) cbind(x, mean = rowMeans(x[,-1:-3])))
+```
+
+Example of the dataframe made:
+```{r plot_transfer_dfs, message = FALSE, warning = FALSE, cache = TRUE}
+lapply(edge_dfs, head)
+```
+
+##### 2. Transfer on trees
+Plot the fraction of all transfers per branch on the clado species tree
+```{r average_transfers_on_clado, message = FALSE, warning = FALSE, cache = TRUE}
+
+# Plot the tree with edges coloured by the fraction #
+plotBranchbyTrait(anoxy_geo_clado, edge_dfs$clado$mean, method="edges", legend = 5, title = "Fraction of transfers")
+
+# Anotate the branches with the numeric values #
+for (i in 1:nrow(edge_dfs$clado)) {
+    entry <- edge_dfs$clado[i,]
+
+    annotate_transfer_num(entry, i, "mean")
+}
+```
+
+Now plot the same fractions on the time-resolved tree - __note the 0s on the incongruent edges (in black)__
+```{r average_transfers_on_time, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 13, fig.height = 9}
+
+# Plot the tree with edges coloured by the fraction #
+plotBranchbyTrait(anoxy_geo_time, edge_dfs$time$mean, method="edges", legend = .1, title = "Fraction of transfers")
+
+# Anotate the branches with the numeric values #
+for (i in 1:nrow(edge_dfs$time)) {
+    entry <- edge_dfs$time[i,]
+
+    annotate_transfer_num(entry, i, "mean")
+}
+
+for (i in 1:length(unmapped_edges)) {
+    edge <- unmapped_edges[[i]]
+    PlotSegmentByNodes(edge[1], edge[2], "black")
+}
+```
+
+##### 3. Branch length correlation (1)
+1. Add the branch lengths from the time-resolved tree to the time-resolved dataframe. We take these directly from the Time-resolved tree: [2. Time-resolved tree](#sect1). At same time, add a point index, a mapping for each branch so any point in the correlation point can be easily associated with a branch on the tree.
+``` {r add_branch_length}
+edge_dfs$time <- cbind(edge_dfs$time, Branch_len = anoxy_geo_time$edge.length, Index = rownames(edge_dfs$time))
+head(edge_dfs$time)
+```
+
+2. Now we trim all the branches that we do not want to correlate - this includes all _Anoxybacillus_-related edges and also the incogruent branch within the _Geobacillus_ clade. The red branches will be excluded from the correlation between number of transfers and branch length.
+```{r trim_edges, message = FALSE, warning = FALSE, cache = TRUE}
+# First find all nodes related to Anoxybacillus
+anoxybacillus_tips <- grep("Anoxybacillus", anoxy_geo_time$tip.label, value = TRUE)
+anoxybacillus_nodes <- as.vector(descendants(anoxy_geo_time4, MRCA(anoxy_geo_time4, anoxybacillus_tips), "ALL"))
+
+# Subset our list of edge_dfs to include a geo_only data frame
+removed_edges <- edge_dfs$time[edge_dfs$time$E2 %in% as.character(anoxybacillus_nodes), 1:2]
+edge_dfs$time_geo <- edge_dfs$time[! edge_dfs$time$E2 %in% as.character(anoxybacillus_nodes),]
+removed_edges_l <- split(removed_edges, seq(nrow(removed_edges)))
+
+# For each of the unmapped edges, identified previously, remove that edge as well (one is already gone as it was Anoxybacillus!) - subset to new dataframe.
+edge_dfs$time_geo_congruent <- edge_dfs$time_geo
+for (nodes in unmapped_edges) {
+	removed_edges <- rbind(removed_edges, edge_dfs$time_geo_congruent[which(edge_dfs$time_geo_congruent$E1 %in% nodes[1] & edge_dfs$time_geo_congruent$E2 %in% nodes[2]),1:2])
+	edge_dfs$time_geo_congruent <- edge_dfs$time_geo_congruent[!(edge_dfs$time_geo_congruent$E1 %in% nodes[1] & edge_dfs$time_geo_congruent$E2 %in% nodes[2]),]
+}
+
+plot(anoxy_geo_time)
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "red")))
+```
+
+##### 4. Branch length correlation (2)
+Perform a correlation on the _Geobacillus_ branches. Outlier identified as point 39 - corresponds to the branch that seperates two major _Geobacillus_ subdivisions. The two subdivisions share a very different GC content in the extrant taxa.
+```{r plot_correlation, message = FALSE, warning = FALSE, cache = TRUE}
+
+# Write out a seperate dataframe with the subgroup column relabelled logically #
+congruent_geo_cor_df <- edge_dfs$time_geo_congruent
+congruent_geo_cor_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
+ggplot(congruent_geo_cor_df, aes(x = Branch_len, y = mean, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Mean fraction of HGTs across penalties")
+```
+
+This tree outlines the various conditions that are used in making the correlations between branch length and HGTs
+```{r tree_for_correlations, message = FALSE, warning = FALSE, cache = TRUE}
+# Get the edges of the outlier branch #
+outlier_edge <- as.numeric(congruent_geo_cor_df[(congruent_geo_cor_df$Index == 39), 1:2])
+
+# Replot the time-resolved tree with the excluded branches highlighted in black, and the branches labelled according to their index value #
+plotBranchbyTrait(anoxy_geo_time, edge_dfs$time$Subgroup, method = "edges", title = "Subgroup branches")
+
+# Label the 'removed edges' black
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "black")))
+# Label the outlier edge green #
+invisible(PlotSegmentByNodes(outlier_edge[1], outlier_edge[2], "green"))
+
+# Label branches according to index #
+for (i in as.vector(congruent_geo_cor_df$Index)) {
+    edgelabels(i, as.numeric(i), adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 0.7)
+}
+
+# Add legend #
+legend(	"bottomright",
+		legend = c("Intergroup", "Intragroup", "Outlier", "Excluded"),
+		text.col = c("blue", "red", "green", "black"))			
+
+```
+
+Correlations are peformed for a number of conditions - this is still using the fraction of transfers averaged over transfer penalties 4, 5, and 6.
+```{r calculate_correlation, message = FALSE, warning = FALSE, cache = TRUE, tidy = FALSE}
+
+# Create a copy of the df with outlier removed #
+congruent_geo_cor_out_df <- congruent_geo_cor_df[! (congruent_geo_cor_df$Index == 39),]
+
+# Correlations - make df and fill it with different combinations #
+cor_df <- data.frame(				Condition=character(),
+									Pearson=double(),
+									Spearman=double(),
+									Rsquared=double(), 
+									stringsAsFactors = FALSE)
+
+# All together - outlier kept #
+
+cor_df <- rbind(cor_df, data.frame(	Condition = "All with outlier",
+									Pearson = cor(congruent_geo_cor_df$Branch_len, congruent_geo_cor_df$mean, method = "pearson"),
+									Spearman = cor(congruent_geo_cor_df$Branch_len, congruent_geo_cor_df$mean, method = "spearman"),
+									Rsquared = summary(lm(congruent_geo_cor_df$Branch_len ~ congruent_geo_cor_df$mean))$r.squared))
+
+# All together - outlier removed #
+
+cor_df <- rbind(cor_df, data.frame(	Condition = "All no outlier",
+									Pearson = cor(congruent_geo_cor_out_df$Branch_len, congruent_geo_cor_out_df$mean, method = "pearson"),
+									Spearman = cor(congruent_geo_cor_out_df$Branch_len, congruent_geo_cor_out_df$mean, method = "spearman"),
+									Rsquared = summary(lm(congruent_geo_cor_out_df$Branch_len ~ congruent_geo_cor_out_df$mean))$r.squared))
+
+# Split by Subgroup #
+# Intergroup #
+cor_df <- rbind(cor_df, data.frame(	Condition = "Intergroup no outlier",
+									Pearson = cor(congruent_geo_cor_out_df$Branch_len[! (congruent_geo_cor_out_df$Subgroup == TRUE)], congruent_geo_cor_out_df$mean[! (congruent_geo_cor_out_df$Subgroup == TRUE)], method = "pearson"),
+									Spearman = cor(congruent_geo_cor_out_df$Branch_len[! (congruent_geo_cor_out_df$Subgroup == TRUE)], congruent_geo_cor_out_df$mean[! (congruent_geo_cor_out_df$Subgroup == TRUE)], method = "spearman"),
+									Rsquared = summary(lm(congruent_geo_cor_out_df$Branch_len[! (congruent_geo_cor_out_df$Subgroup == TRUE)] ~ congruent_geo_cor_out_df$mean[! (congruent_geo_cor_out_df$Subgroup == TRUE)]))$r.squared))
+
+# Intragroup #
+cor_df <- rbind(cor_df, data.frame(	Condition = "Intragroup no outlier",
+									Pearson = cor(congruent_geo_cor_out_df$Branch_len[! (congruent_geo_cor_out_df$Subgroup == FALSE)], congruent_geo_cor_out_df$mean[! (congruent_geo_cor_out_df$Subgroup == FALSE)], method = "pearson"),
+									Spearman = cor(congruent_geo_cor_out_df$Branch_len[! (congruent_geo_cor_out_df$Subgroup == FALSE)], congruent_geo_cor_out_df$mean[! (congruent_geo_cor_out_df$Subgroup == FALSE)], method = "spearman"),
+									Rsquared = summary(lm(congruent_geo_cor_out_df$Branch_len[! (congruent_geo_cor_out_df$Subgroup == FALSE)] ~ congruent_geo_cor_out_df$mean[! (congruent_geo_cor_out_df$Subgroup == FALSE)]))$r.squared))
+
+cor_df[,2:4] <- cbind(round(cor_df$Pearson, digits = 4), round(cor_df$Spearman, digits = 4), round(cor_df$Rsquared, digits = 4))
+print(cor_df)
+```
+
+#### 5. Per penalty transfers per branch {.tabset .tabset-fade}
+In this section we go back and calculate per penalty transfers into _Geobacillus_ (using the raw numeric values). We produce the correlations as in [4. Average transfers per branch](#sect4), except independently for each penalty. Sections 2, 3, and 4 are identical except for the change in transfer penalty.
+
+##### 1. Branch length & trim
+1. We add the branch lengths and index to the dataframe containing the raw numbers of transfers per penalty
+``` {r add_branch_length_index, message = FALSE, warning = FALSE, cache = TRUE}
+edge_raw_dfs$time <- cbind(edge_raw_dfs$time, Branch_len = anoxy_geo_time$edge.length, Index = rownames(edge_raw_dfs$time))
+head(edge_raw_dfs$time)
+```
+
+2. Now we trim all the branches that we do not want to correlate - this includes all _Anoxybacillus_-related edges and also the incogruent branch within the _Geobacillus_ clade. The red branches will be excluded from the correlation between number of transfers and branch length.
+```{r trim_edges_raw, message = FALSE, warning = FALSE, cache = TRUE}
+# First find all nodes related to Anoxybacillus
+anoxybacillus_tips <- grep("Anoxybacillus", anoxy_geo_time$tip.label, value = TRUE)
+anoxybacillus_nodes <- as.vector(descendants(anoxy_geo_time4, MRCA(anoxy_geo_time4, anoxybacillus_tips), "ALL"))
+
+# Subset our list of edge_dfs to include a geo_only data frame
+removed_edges <- edge_raw_dfs$time[edge_raw_dfs$time$E2 %in% as.character(anoxybacillus_nodes), 1:2]
+edge_raw_dfs$time_geo <- edge_raw_dfs$time[! edge_raw_dfs$time$E2 %in% as.character(anoxybacillus_nodes),]
+removed_edges_l <- split(removed_edges, seq(nrow(removed_edges)))
+
+# For each of the unmapped edges, identified previously, remove that edge as well (one is already gone as it was Anoxybacillus!) - subset to new dataframe.
+edge_raw_dfs$time_geo_congruent <- edge_raw_dfs$time_geo
+for (nodes in unmapped_edges) {
+	removed_edges <- rbind(removed_edges, edge_raw_dfs$time_geo_congruent[which(edge_raw_dfs$time_geo_congruent$E1 %in% nodes[1] & edge_raw_dfs$time_geo_congruent$E2 %in% nodes[2]),1:2])
+	edge_raw_dfs$time_geo_congruent <- edge_raw_dfs$time_geo_congruent[!(edge_raw_dfs$time_geo_congruent$E1 %in% nodes[1] & edge_raw_dfs$time_geo_congruent$E2 %in% nodes[2]),]
+}
+
+# Extract the time_geo_congruent as a separate dataframe, and also make a copy without the outlier point #
+congruent_geo_cor_raw_df <- edge_raw_dfs$time_geo_congruent
+```
+
+3. As in [3. Branch length correlation (1)](#sect4), the branches highlighted in red correspond to those edges not used in the correlations
+```{r plot_edge_trim_tree, message = FALSE, warning = FALSE, cache = TRUE}
+plot(anoxy_geo_time)
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "red")))
+```
+
+##### 2. Transfer = 4
+Tree coloured on a scale according to the number of transfers at each branch. Numbers above each represent number of transfer events. In black, branches which are excluded from the correlations.
+```{r plot_T4, message = FALSE, warning = FALSE, cache = TRUE}
+# Plot the tree with edges coloured by the fraction #
+plotBranchbyTrait(anoxy_geo_time, edge_raw_dfs$time$T4, method="edges", legend = .25, title = "Number of transfers")
+
+# Anotate the branches with the numeric values #
+for (i in 1:nrow(edge_raw_dfs$time)) {
+    entry <- edge_raw_dfs$time[i,]
+
+    annotate_transfer_num(entry, i, "T4")
+}
+
+# Colour the trimmed edges black #
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "black")))
+```
+
+Plot the branch lengths vs raw number of transfers at branch
+```{r plot_correlation_4, message = FALSE, warning = FALSE, cache = TRUE}
+# Make the subgrouping call logical rather than binary #
+congruent_geo_cor_raw_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
+# Plot the scatter plot
+ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T4, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 4")
+```
+
+Correlation calculations as in [4. Branch length correlation (2)](#sect4)
+```{r calculate_correlation_4, message = FALSE, warning = FALSE, cache = TRUE}
+T4_cor_df <- CalcCorrLengthTransfers(congruent_geo_cor_raw_df, "T4", 39)
+print(T4_cor_df)
+```
+
+##### 3. Transfer = 5
+Tree coloured on a scale according to the number of transfers at each branch. Numbers above each represent number of transfer events. In black, branches which are excluded from the correlations.
+```{r plot_T5, message = FALSE, warning = FALSE, cache = TRUE}
+# Plot the tree with edges coloured by the fraction #
+plotBranchbyTrait(anoxy_geo_time, edge_raw_dfs$time$T5, method="edges", legend = .25, title = "Number of transfers")
+
+# Anotate the branches with the numeric values #
+for (i in 1:nrow(edge_raw_dfs$time)) {
+    entry <- edge_raw_dfs$time[i,]
+
+    annotate_transfer_num(entry, i, "T5")
+}
+
+# Colour the trimmed edges black #
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "black")))
+```
+
+Plot the branch lengths vs raw number of transfers at branch
+```{r plot_correlation_5, message = FALSE, warning = FALSE, cache = TRUE}
+# Make the subgrouping call logical rather than binary #
+congruent_geo_cor_raw_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
+# Plot the scatter plot
+ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T5, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 5")
+```
+
+Correlation calculations as in [4. Branch length correlation (2)](#sect4)
+```{r calculate_correlation_5, message = FALSE, warning = FALSE, cache = TRUE}
+T5_cor_df <- CalcCorrLengthTransfers(congruent_geo_cor_raw_df, "T5", 39)
+print(T5_cor_df)
+```
+
+##### 4. Transfer = 6
+Tree coloured on a scale according to the number of transfers at each branch. Numbers above each represent number of transfer events. In black, branches which are excluded from the correlations.
+```{r plot_T6, message = FALSE, warning = FALSE, cache = TRUE}
+# Plot the tree with edges coloured by the fraction #
+plotBranchbyTrait(anoxy_geo_time, edge_raw_dfs$time$T6, method="edges", legend = .25, title = "Number of transfers")
+
+# Anotate the branches with the numeric values #
+for (i in 1:nrow(edge_raw_dfs$time)) {
+    entry <- edge_raw_dfs$time[i,]
+
+    annotate_transfer_num(entry, i, "T6")
+}
+
+# Colour the trimmed edges black #
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "black")))
+```
+
+Plot the branch lengths vs raw number of transfers at branch
+```{r plot_correlation_6, message = FALSE, warning = FALSE, cache = TRUE}
+# Make the subgrouping call logical rather than binary #
+congruent_geo_cor_raw_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
+# Plot the scatter plot
+ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T6, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 6")
+```
+
+Correlation calculations as in [4. Branch length correlation (2)](#sect4)
+```{r calculate_correlation_6, message = FALSE, warning = FALSE, cache = TRUE}
+T6_cor_df <- CalcCorrLengthTransfers(congruent_geo_cor_raw_df, "T6", 39)
+print(T6_cor_df)
+```
+
+##### 5. Summary correlations
+```{r complete_per_penalty_cors, message = FALSE, warning = FALSE, cache = TRUE}
+added_penalty_col <- lapply(penalty_names, function (x) {	df <- eval(as.name(paste0(x, "_cor_df")));
+											penalty <- str_sub(x, 2, 2);
+											new_col <- data.frame(Penalty = rep(penalty, nrow(df)));
+											df <- cbind(df, new_col)})
+
+total_cor_df <- as.data.frame(rbindlist(added_penalty_col))
+print(total_cor_df)
+```
+
+```{r plot_summary_correlations, message = FALSE, warning = FALSE, cache = TRUE}
+total_cor_df.molten <- melt(total_cor_df, measure.vars = c("Pearson", "Spearman", "Rsquared"), variable.name = "Correlation", value.name = "Score")
+
+## Replot the tree to show the various branch identities ##
+plotBranchbyTrait(anoxy_geo_time, edge_dfs$time$Subgroup, method = "edges", title = "Subgroup branches")
+# Label the 'removed edges' black
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "black")))
+# Label the outlier edge green #
+invisible(PlotSegmentByNodes(outlier_edge[1], outlier_edge[2], "green"))
+
+# Label branches according to index #
+for (i in as.vector(congruent_geo_cor_df$Index)) {
+    edgelabels(i, as.numeric(i), adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 0.7)
+}
+# Add legend #
+legend( "bottomright",
+        legend = c("Intergroup", "Intragroup", "Outlier", "Excluded"),
+        text.col = c("blue", "red", "green", "black"))  
+
+# Plot the correlations #
+ggplot(total_cor_df.molten, aes(x = Condition, y = Score, variable = Penalty, colour = Penalty)) + geom_point(size = 3) + facet_wrap("Correlation", nrow = 1) + theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 12), axis.text.y = element_text(size = 12), strip.text.x = element_text(size = 12), axis.title = element_text(size = 12)) + scale_y_continuous(limits = c(0, 1))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
