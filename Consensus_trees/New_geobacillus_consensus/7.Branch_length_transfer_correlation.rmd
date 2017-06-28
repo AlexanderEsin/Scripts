@@ -1,6 +1,6 @@
 ---
 title: Branch-length vs transfer correlation
-date: 5 April 2017
+date: 24 May 2017
 output:
   html_document:
     toc: true
@@ -35,6 +35,7 @@ library(geiger)
 library(RSvgDevice)
 library(reshape2)
 library(ggplot2)
+library(RSvgDevice)
 ```
 
 ##### Functions
@@ -68,40 +69,40 @@ PlotSegmentByNodes <- function(nodes0, nodes1, colour) {
 CalcCorrLengthTransfers <- function(full_df, transfer_column, outlier_index) {
 	full_no_outlier_df <- full_df[! (full_df$Index == outlier_index),]
 
-# Correlations - make df and fill it with different combinations #
-cor_df <- data.frame(				Condition=character(),
-									Pearson=double(),
-									Spearman=double(),
-									Rsquared=double(), 
-									stringsAsFactors = FALSE)
+    # Correlations - make df and fill it with different combinations #
+    cor_df <- data.frame(               Condition=character(),
+                                        Pearson=double(),
+                                        Spearman=double(),
+                                        Rsquared=double(), 
+                                        stringsAsFactors = FALSE)
 
-# All together - outlier kept #
-cor_df <- rbind(cor_df, data.frame(	Condition = "All with outlier",
-									Pearson = cor(full_df$Branch_len, full_df[,transfer_column], method = "pearson"),
-									Spearman = cor(full_df$Branch_len, full_df[,transfer_column], method = "spearman"),
-									Rsquared = summary(lm(full_df$Branch_len ~ full_df[,transfer_column]))$r.squared))
+    # All together - outlier kept #
+    cor_df <- rbind(cor_df, data.frame( Condition = "All with outlier",
+                                        Pearson = cor(full_df$Branch_len, full_df[,transfer_column], method = "pearson"),
+                                        Spearman = cor(full_df$Branch_len, full_df[,transfer_column], method = "spearman"),
+                                        Rsquared = summary(lm(full_df$Branch_len ~ full_df[,transfer_column]))$r.squared))
 
-# All together - outlier removed #
-cor_df <- rbind(cor_df, data.frame(	Condition = "All no outlier",
-									Pearson = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "pearson"),
-									Spearman = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "spearman"),
-									Rsquared = summary(lm(full_no_outlier_df$Branch_len ~ full_no_outlier_df[,transfer_column]))$r.squared))
+    # All together - outlier removed #
+    cor_df <- rbind(cor_df, data.frame( Condition = "All no outlier",
+                                        Pearson = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "pearson"),
+                                        Spearman = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "spearman"),
+                                        Rsquared = summary(lm(full_no_outlier_df$Branch_len ~ full_no_outlier_df[,transfer_column]))$r.squared))
 
-# Split by Subgroup #
-# Intergroup #
-cor_df <- rbind(cor_df, data.frame(	Condition = "Intergroup no outlier",
-									Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "pearson"),
-									Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "spearman"),
-									Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)]))$r.squared))
+    # Split by Subgroup #
+    # Intergroup #
+    cor_df <- rbind(cor_df, data.frame( Condition = "Intergroup no outlier",
+                                        Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "pearson"),
+                                        Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "spearman"),
+                                        Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)]))$r.squared))
 
-# Intragroup #
-cor_df <- rbind(cor_df, data.frame(	Condition = "Intragroup no outlier",
-									Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "pearson"),
-									Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "spearman"),
-									Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)]))$r.squared))
+    # Intragroup #
+    cor_df <- rbind(cor_df, data.frame( Condition = "Intragroup no outlier",
+                                        Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "pearson"),
+                                        Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "spearman"),
+                                        Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)]))$r.squared))
 
-cor_df[,2:4] <- cbind(round(cor_df$Pearson, digits = 4), round(cor_df$Spearman, digits = 4), round(cor_df$Rsquared, digits = 4))
-return(cor_df)
+    cor_df[,2:4] <- cbind(round(cor_df$Pearson, digits = 4), round(cor_df$Spearman, digits = 4), round(cor_df$Rsquared, digits = 4))
+    return(cor_df)
 }
 ```
 
@@ -264,28 +265,32 @@ lapply(edge_dfs, head)
 
 ##### 2. Read in transfers.
 We read in the per-penalty transfer tables - these contain all transfers into _(Anoxy)Geobacillus_ with associated edges, i.e. two nodes that are presented in the Mowgli species tree format (e.g. 3644). Using the node label table, we can then associate the transfers with edges in our two output dataframes.
+
 ```{r read_in_transfer_tables, message = FALSE, warning = FALSE, cache = TRUE}
-# Directory containing the per-penalty transfer files #
-input_edge_dir <- "/Users/aesin/Desktop/Mowgli/Long_distance_HGT/Full/Scenarios_1_2/Receptor_edges/"
+# Directory containing the per-penalty transfer event files #
+input_edge_dir <- "/Users/aesin/Desktop/Mowgli/Refined_events/Scenarios_1_2/Events/"
 for (penalty in penalties) {
 
     # Read in the refined receptor edge list for a particular penalty #
-    receptor_df <- read.table(file = paste0(input_edge_dir, "T", penalty, "_refined_receptor_edges", file_name_add, ".txt"), header = FALSE, sep = "\t")
+    # receptor_df <- read.table(file = paste0(input_edge_dir, "T", penalty, "_full_lHGT_events", file_name_add, ".tsv"), header = FALSE, sep = "\t")
+    transfer_data_df <- read.table(file = paste0(input_edge_dir, "T", penalty, "_full_lHGT_events.tsv"), header = TRUE, sep = "\t")
 
     # Column name for this penalty #
     cname <- paste0("T", penalty)
 
     # For each transfer, we can identify the edge #
     at_root = 0
-    for(i in 1:nrow(receptor_df)) {
-        row <- receptor_df[i,]
+    for(i in 1:nrow(transfer_data_df)) {
+        row <- transfer_data_df[i,]
+        receptor_nodes <- str_split(row$Receptor_nodes, pattern = " ", simplify = T)
+
         # If one of the nodes of the edge is '3728' - this is the Anoxy/Geobacillus root node #
-        if (row[1] == 3728 || row[2] == 3728) {
+        if (receptor_nodes[1] == 3728 || receptor_nodes[2] == 3728) {
             at_root = at_root + 1
         } else {
         	# Pull out row number (indication of phylogeny edge) corresponding to the Mowgli tree label.
-            edge_2_species <- grep(row[2], node_labels_dfs$clado$Node_labels)
-            edge_2_time <- grep(row[2], node_labels_dfs$time$Node_labels)
+            edge_2_species <- grep(receptor_nodes[2], node_labels_dfs$clado$Node_labels)
+            edge_2_time <- grep(receptor_nodes[2], node_labels_dfs$time$Node_labels)
 
             ## Fill in the count for the species-derived tree ##
             edge_dfs$clado[,cname][which(edge_dfs$clado$E2 == edge_2_species)] = edge_dfs$clado[,cname][which(edge_dfs$clado$E2 == edge_2_species)] + 1
@@ -437,7 +442,7 @@ Perform a correlation on the _Geobacillus_ branches. Outlier identified as point
 # Write out a seperate dataframe with the subgroup column relabelled logically #
 congruent_geo_cor_df <- edge_dfs$time_geo_congruent
 congruent_geo_cor_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
-ggplot(congruent_geo_cor_df, aes(x = Branch_len, y = mean, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Mean fraction of HGTs across penalties")
+ggplot(congruent_geo_cor_df, aes(x = Branch_len, y = mean, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Mean fraction of HGTs across penalties") + scale_color_manual(values = c("blue", "red"))
 ```
 
 This tree outlines the various conditions that are used in making the correlations between branch length and HGTs
@@ -569,7 +574,7 @@ Plot the branch lengths vs raw number of transfers at branch
 # Make the subgrouping call logical rather than binary #
 congruent_geo_cor_raw_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
 # Plot the scatter plot
-ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T4, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 4")
+ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T4, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 4") + scale_color_manual(values = c("blue", "red"))
 ```
 
 Correlation calculations as in [4. Branch length correlation (2)](#sect4)
@@ -582,7 +587,7 @@ print(T4_cor_df)
 Tree coloured on a scale according to the number of transfers at each branch. Numbers above each represent number of transfer events. In black, branches which are excluded from the correlations.
 ```{r plot_T5, message = FALSE, warning = FALSE, cache = TRUE}
 # Plot the tree with edges coloured by the fraction #
-plotBranchbyTrait(anoxy_geo_time, edge_raw_dfs$time$T5, method="edges", legend = .25, title = "Number of transfers")
+plotBranchbyTrait(anoxy_geo_time, edge_raw_dfs$time$T5, method = "edges", legend = .25, title = "Number of transfers")
 
 # Anotate the branches with the numeric values #
 for (i in 1:nrow(edge_raw_dfs$time)) {
@@ -593,6 +598,23 @@ for (i in 1:nrow(edge_raw_dfs$time)) {
 
 # Colour the trimmed edges black #
 invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "black")))
+
+devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Tree_test.svg", height = 10, width = 10)
+
+plotBranchbyTrait(anoxy_geo_time, edge_raw_dfs$time$T5, method = "edges", legend = .25, title = "Number of transfers")
+
+# Anotate the branches with the numeric values #
+for (i in 1:nrow(edge_raw_dfs$time)) {
+    entry <- edge_raw_dfs$time[i,]
+
+    annotate_transfer_num(entry, i, "T5")
+}
+
+# Colour the trimmed edges black #
+invisible(apply(removed_edges, 1, function (x) PlotSegmentByNodes(x[[1]], x[[2]], "black")))
+
+dev.off()
+
 ```
 
 Plot the branch lengths vs raw number of transfers at branch
@@ -600,7 +622,14 @@ Plot the branch lengths vs raw number of transfers at branch
 # Make the subgrouping call logical rather than binary #
 congruent_geo_cor_raw_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
 # Plot the scatter plot
-ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T5, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 5")
+
+ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T5, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 5") + scale_color_manual(values = c("blue", "red"))
+
+devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Correlation_T5.svg", height = 10, width = 10)
+
+ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T5, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 5") + scale_color_manual(values = c("blue", "red"))
+
+dev.off()
 ```
 
 Correlation calculations as in [4. Branch length correlation (2)](#sect4)
@@ -631,7 +660,7 @@ Plot the branch lengths vs raw number of transfers at branch
 # Make the subgrouping call logical rather than binary #
 congruent_geo_cor_raw_df$Subgroup <- as.logical(congruent_geo_cor_df$Subgroup)
 # Plot the scatter plot
-ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T6, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 6")
+ggplot(congruent_geo_cor_raw_df, aes(x = Branch_len, y = T6, label = Index, color = Subgroup)) + geom_point(size = 3) + geom_text(aes(label = Index), hjust = 0, vjust = -1) + xlab("Branch length") + ylab("Raw number of HGTs at penalty = 6") + scale_color_manual(values = c("blue", "red"))
 ```
 
 Correlation calculations as in [4. Branch length correlation (2)](#sect4)

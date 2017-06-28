@@ -11,6 +11,20 @@ proc openfile {fl} {
 	return $data
 }
 
+proc multiputs {args} {
+    if { [llength $args] == 0 } {
+        error "Usage: multiputs ?channel ...? string"
+    } elseif { [llength $args] == 1 } {
+        set channels stdout
+    } else {
+        set channels [lrange $args 0 end-1]
+    }
+    set str [lindex $args end]
+    foreach ch $channels {
+        puts $ch $str
+    }
+}
+
 ############################################################
 ## String formatting ##
 # The var is the inserted number variable. {num 3} gives the option for separating larger intervals with a default of 3. {char ,} gives the option of a different separating character, with the default being a comma. #

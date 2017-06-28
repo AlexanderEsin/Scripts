@@ -14,22 +14,33 @@ set transfer_costs {3 4 5 6}
 ######################
 ### Regex patterns ###
 ######################
+
+
+
+#################################
+### Set script-wide variables ###
+#################################
+
+## Paths
+set direct /Users/aesin/Desktop/Mowgli/Mowgli_outputs
+
+## Make the two output_directories for the results/stats files
+set output_path	$direct/../Raw_predictions
+file mkdir $output_path/Logs
+
+## Regex patterns
 set pata {\(+?[0-9]+?\,+?}
 set patb {\)+?}
 
+	
 
 foreach transfer_cost $transfer_costs {
 
-	#################################
-	### Set script-wide variables ###
-	#################################
+	set mowgli_output_dir	$direct/Mow_test_out_t$transfer_cost
+	set penalty_log_dir		$output_path/Logs/$transfer_cost
+	file mkdir				$penalty_log_dir
 
-	set direct /Users/aesin/Desktop/Mowgli/Mowgli_outputs
-	set mowgli_output_dir $direct/Mow_test_out_t$transfer_cost
 	set global_hgt_table {}
-
-	## Make the two output_directories for the results/stats files ##
-	file mkdir $direct/Results_Full
 
 	####################
 	### Set counters ###
@@ -44,29 +55,12 @@ foreach transfer_cost $transfer_costs {
 	# Scenario 4 is a combination of 2 & 3 - all sisters are lost UP TO the root #
 	set scenario_4_hgt 0
 
-	#######################################
-
-	# ## Read in the file containing a list of IG-only trees ##
-	# if {$ignore_inside_only_switch == 1} {
-	# 	cd $direct/..
-	# 	set IG_trees_list [split [string trim [openfile Trees_in_group_only.tsv]] \n]
-	# }
-
-	##############################################################################
-	##############################################################################
 	##############################################################################
 
 	cd $mowgli_output_dir
 	set output_directories [glob -type d *]
 
 	foreach out_dir $output_directories {
-
-		# if {$ignore_inside_only_switch == 1} {
-		# 	if {[lsearch $IG_trees_list $out_dir] != -1} {
-		# 		puts "This tree: $out_dir contains only IG taxa - skipping"
-		# 		continue
-		# 	}
-		# }
 
 		####################################
 		### Empty variables to be filled ###
@@ -81,10 +75,11 @@ foreach transfer_cost $transfer_costs {
 		set scenario ""
 		set fate ""
 
-		
+		## Log file for this gene family at this penalty
+		set dir_log [open $penalty_log_dir/$out_dir\.log w]
 
 		cd $mowgli_output_dir/$out_dir
-		puts "\n###########################################\nTree tested: $out_dir"
+		multiputs $dir_log stdout "\n###########################################\nTree tested: $out_dir"
 
 		## RUN the NODE identifier script here to get a list of all the nodes that correspond to anoxy/geobacillus in the species tree ##
 		## Output file MUST be called Anoxy_geo_nodes.tsv ##
@@ -93,14 +88,14 @@ foreach transfer_cost $transfer_costs {
 		## Process the input mapping file to get a list of all the events #
 		parse_mapping_file Fullmapping.mpr
 		if {$empty_map_switch == 1} {
-			puts "Run incomplete -- skipping $out_dir directory"
+			multiputs $dir_log stdout "Run incomplete -- skipping $out_dir directory"
 			exit
 		}
-		puts "Total number of events: [llength $events_list]"
+		multiputs $dir_log stdout "Total number of events: [llength $events_list]"
 
 		## Isolate just the transfer_events ##
 		get_transfer_events $events_list
-		puts "Number of transfer events: [llength $transfer_events]\n"
+		multiputs $dir_log stdout "Number of transfer events: [llength $transfer_events]\n"
 
 		
 
@@ -149,7 +144,7 @@ foreach transfer_cost $transfer_costs {
 						if {$event_type eq "Loss"} {
 							continue
 						} elseif {$event_type eq "NoEvent"} {
-							puts "Not sure that this should happen - code: A1"
+							multiputs $dir_log stdout "Not sure that this should happen - code: A1"
 							exit 2
 						} elseif {$event_type eq "Dup"} {
 							if {[lsearch $anoxygeo_present_nodes $parent] != -1} {
@@ -177,20 +172,20 @@ foreach transfer_cost $transfer_costs {
 
 		## Collapse redundant duplication edges - i.e. an edge that had multiple duplication events ##
 		set non_redundant_dups_from_outside [reduce_non_redundant_edges $dups_form_outside]
-		puts "Number of duplications of an edge not descendent from a present node: [llength $dups_form_outside]"
-		puts "Reduced to non-redundant: [llength $non_redundant_dups_from_outside]"
+		multiputs $dir_log stdout "Number of duplications of an edge not descendent from a present node: [llength $dups_form_outside]"
+		multiputs $dir_log stdout "Reduced to non-redundant: [llength $non_redundant_dups_from_outside]"
 
 		## Collapse redundant speciation edges - i.e. an edge that had multiple duplication, then as a results, had multiple speciation events ##
 		set non_redundant_spec_from_outside [reduce_non_redundant_edges $speciation_from_outside]
-		puts "Number of speciations of an edge not descendent from a present node: [llength $speciation_from_outside]"
-		puts "Reduced to non-redundant: [llength $non_redundant_spec_from_outside]"
+		multiputs $dir_log stdout "Number of speciations of an edge not descendent from a present node: [llength $speciation_from_outside]"
+		multiputs $dir_log stdout "Reduced to non-redundant: [llength $non_redundant_spec_from_outside]"
 
 		## Combine speciation events from an external source with duplication events from an external source ##
 		set events_from_outside [concat $non_redundant_spec_from_outside $non_redundant_dups_from_outside]
-		puts "Number of duplication/speciation events from external sources: [llength $events_from_outside]"
+		multiputs $dir_log stdout "Number of duplication/speciation events from external sources: [llength $events_from_outside]"
 
 		## Collapse all the connected speciation and duplication events ##
-		puts "\nAttempting to collapse any redundant speciation and duplication events: [llength $events_from_outside]"
+		multiputs $dir_log stdout "\nAttempting to collapse any redundant speciation and duplication events: [llength $events_from_outside]"
 		if {[llength $events_from_outside] > 1} {
 			foreach external_speciation $events_from_outside {
 				set final_subevent [get_final_subevent $external_speciation]
@@ -199,7 +194,7 @@ foreach transfer_cost $transfer_costs {
 
 				if {$event_type eq "Dup"} {
 					if {[lsearch -glob $events_from_outside "*$edge\ Spec*"] != -1 || [lsearch -glob $events_from_outside "*$edge\ Ext*"] != -1} {
-						puts "--> Edge $external_speciation_edge duplicated then speciated / remained extant"
+						multiputs $dir_log stdout "--> Edge $external_speciation_edge duplicated then speciated / remained extant"
 						set events_from_outside [lremove $events_from_outside $external_speciation]
 					}
 				}
@@ -209,7 +204,7 @@ foreach transfer_cost $transfer_costs {
 
 		## let's take a shortcut here ##
 		## If we find a speciation event that the product of which is the same edge as from an external transfer - we can summarise those to just the transfer ##
-		puts "\nAttempting to assign transfers to the speciation/duplication events ..."
+		multiputs $dir_log stdout "\nAttempting to assign transfers to the speciation/duplication events ..."
 		foreach external_event $events_from_outside {
 			set final_subevent [get_final_subevent $external_event]
 			non_trans_subevent_parse $final_subevent
@@ -250,7 +245,7 @@ foreach transfer_cost $transfer_costs {
 					set branch_fates [reduce_non_redundant_refine $branch_fates]
 					## Sanity check ##
 					if {[llength $branch_fates] != 2} {
-						puts "Error: not two fate events. Tree: $out_dir\t$receiver_edge A1"; exit
+						multiputs $dir_log stdout "Error: not two fate events. Tree: $out_dir\t$receiver_edge A1"; exit
 					}
 
 					## Remove any branches that have a loss ##
@@ -263,20 +258,20 @@ foreach transfer_cost $transfer_costs {
 
 					## Check whether both speciated, or one was lost ##
 					if {[llength $branch_fates] == 2} {
-						puts "This is the final edge: $test_the_edge"
+						multiputs $dir_log stdout "This is the final edge: $test_the_edge"
 						set receiver_edge $test_the_edge
 						break
 					} elseif {[llength $branch_fates] == 0} {
-						puts "Error: two fates resulted in two losses. Tree: $out_dir A2"; exit
+						multiputs $dir_log stdout "Error: two fates resulted in two losses. Tree: $out_dir A2"; exit
 					} else {
 						non_trans_subevent_parse [lindex $branch_fates 0]
 						## If of two fates, one is loss and the other is extant, there can be no further down-sampling of the tree. We take the transfer to come into the extant taxon ##
 						if {$event_type eq "Extant"} {
 							set receiver_edge [string range $edge 1 end-1]
-							puts "This is the final edge: $receiver_edge"
+							multiputs $dir_log stdout "This is the final edge: $receiver_edge"
 							break
 						} else {
-							puts "One branch was lost, continuing down..."
+							multiputs $dir_log stdout "One branch was lost, continuing down..."
 							set test_the_edge [string range $edge 1 end-1]
 						}		
 					}
@@ -284,7 +279,7 @@ foreach transfer_cost $transfer_costs {
 
 				##########################
 
-				puts "This edge $external_speciation_edge was transferred horizontally from an external source"
+				multiputs $dir_log stdout "This edge $external_speciation_edge was transferred horizontally from an external source"
 				lappend HGT_table_out "HGT: $donor_edge\t$receiver_edge\nGene_tree_node: $gene_tree_xferred_child"
 				incr scenario_1_hgt
 				set scenario 1
@@ -294,21 +289,21 @@ foreach transfer_cost $transfer_costs {
 				set xfer_to_rm [lsearch -inline -glob $transfer_from_outside *\;$external_speciation_edge*]
 				set transfer_from_outside [lremove $transfer_from_outside $xfer_to_rm]
 			} elseif {[lsearch -glob $transfer_from_anoxygeo *\;$edge\)*] > -1} {
-				puts "This edge $external_speciation_edge was transferred horizontally from within Anoxy/Geobacillus"
+				multiputs $dir_log stdout "This edge $external_speciation_edge was transferred horizontally from within Anoxy/Geobacillus"
 
 				set events_from_outside [lremove $events_from_outside $external_event]
 			}
 		}
 
-		puts "Leftover transfer events: [llength $transfer_from_outside]"
-		puts "Leftover speciation/duplication events: [llength $events_from_outside]"
+		multiputs $dir_log stdout "Leftover transfer events: [llength $transfer_from_outside]"
+		multiputs $dir_log stdout "Leftover speciation/duplication events: [llength $events_from_outside]"
 
 		## Any leftover transfer events must be associated with a transfer into a single taxon ##
 
 		foreach external_transfer $transfer_from_outside {
 			set final_subevent [get_final_subevent $external_transfer]
 			transfer_subevent_parse $final_subevent
-			puts "External transfer from \($donor_edge\) to Anoxy/Geobacillus \($receiver_edge\)"
+			multiputs $dir_log stdout "External transfer from \($donor_edge\) to Anoxy/Geobacillus \($receiver_edge\)"
 			lappend HGT_table_out "HGT: $donor_edge\t$receiver_edge\nGene_tree_node: $gene_tree_xferred_child"
 			incr scenario_1_hgt
 			set scenario 1
@@ -329,7 +324,7 @@ foreach transfer_cost $transfer_costs {
 				non_trans_subevent_parse $final_subevent
 				## Tested child is refers to the node that results in our anoxy_geo clade ##
 				set anoxy_geo_ancestral_branch $edge
-				puts "\nThe ancestral edge shared by the anoxy_geo clade is: $anoxy_geo_ancestral_branch"
+				multiputs $dir_log stdout "\nThe ancestral edge shared by the anoxy_geo clade is: $anoxy_geo_ancestral_branch"
 				set tested_child $child
 
 				## Find all the events where the parent of our speciation is a parent ##
@@ -345,11 +340,11 @@ foreach transfer_cost $transfer_costs {
 				set children [reduce_non_redundant_children $children]
 
 				if {[llength $children] == 1} {
-					puts "Mowgli predicts that this gene originated within the Geobacillus clade"
+					multiputs $dir_log stdout "Mowgli predicts that this gene originated within the Geobacillus clade"
 					lappend HGT_table_out "Is root"
 					incr scenario_3_hgt
 					set scenario 3
-					puts [lindex $children 0]
+					multiputs $dir_log stdout [lindex $children 0]
 					continue
 				}
 
@@ -366,7 +361,7 @@ foreach transfer_cost $transfer_costs {
 							non_trans_subevent_parse $final_subevent
 							set fate $event_type
 							set sister_edge $edge
-							puts "The fate of the sister group to the ancestral edge $sister_edge == $fate"
+							multiputs $dir_log stdout "The fate of the sister group to the ancestral edge $sister_edge == $fate"
 						}
 					}
 				}
@@ -393,7 +388,7 @@ foreach transfer_cost $transfer_costs {
 						non_trans_subevent_parse $final_subevent
 						set tested_child $child
 						set ancestral_edge $edge
-						puts "Up-level $uplevel: There was only one ancestral event - corresponding to the edge: $ancestral_edge"
+						multiputs $dir_log stdout "Up-level $uplevel: There was only one ancestral event - corresponding to the edge: $ancestral_edge"
 
 						set children [lsearch -all -inline -glob $events_list *\($parent,*]
 
@@ -410,7 +405,7 @@ foreach transfer_cost $transfer_costs {
 									if {[regexp $parent $donor_edge] == 1} {
 										# puts "Transfer from sister group to another branch... ignoring..."
 									} else {
-										puts "A transfer IN - must be accompanied by a loss in the same branch"
+										multiputs $dir_log stdout "A transfer IN - must be accompanied by a loss in the same branch"
 									}
 								} else {
 									non_trans_subevent_parse $final_subevent
@@ -419,14 +414,14 @@ foreach transfer_cost $transfer_costs {
 								}
 							}
 						}
-						puts "-->The fate of the sister group to the ancestral edge $sister_edge == $fate"
+						multiputs $dir_log stdout "-->The fate of the sister group to the ancestral edge $sister_edge == $fate"
 
 					## If there is more than one event, there could have been a transfer of this edge IN (or a transfer OUT?). If there was a transfer of an edge - and the second event is labelled as a speciation, is the speciation not moot? ##
 					} elseif {[llength $up_events] > 1} {
 						set event_counter 1
 						## Find the new ancestral edge ##
 						set ancestral_edge [regexp -inline $pata$tested_child$patb [lindex $up_events 0]]
-						puts "Up-level $uplevel: There were [llength $up_events] events - corresponding to the edge: $ancestral_edge"
+						multiputs $dir_log stdout "Up-level $uplevel: There were [llength $up_events] events - corresponding to the edge: $ancestral_edge"
 
 						## Process the events in turn ##
 						foreach event $up_events {
@@ -436,7 +431,7 @@ foreach transfer_cost $transfer_costs {
 								transfer_subevent_parse $final_subevent
 								set donor_edge_ends [split $donor_edge \,]
 								if {[regexp $tested_child $receiver_edge] == 1 && [lsearch $anoxygeo_present_nodes [lindex $donor_edge_ends 0]] == -1 && [lsearch $anoxygeo_present_nodes [lindex $donor_edge_ends 1]] == -1} {
-									puts "\t-->Event $event_counter: This edge \($receiver_edge\) was transferred horizontally from an external source"
+									multiputs $dir_log stdout "\t-->Event $event_counter: This edge \($receiver_edge\) was transferred horizontally from an external source"
 									
 									lappend HGT_table_out "HGT_multiloss: $donor_edge\t$receiver_edge\nGene_tree_node: $gene_tree_xferred_child"
 
@@ -451,7 +446,7 @@ foreach transfer_cost $transfer_costs {
 						}
 					## If there are no further events, we must have hit the root with all sister branches lost - this is a scenario 4 putative HGT ##	
 					} else {
-						puts "Mowgli predicts root above AG clade with all other sister branches lost"
+						multiputs $dir_log stdout "Mowgli predicts root above AG clade with all other sister branches lost"
 						lappend HGT_table_out "Is root with multi-loss"
 						set root_multi_loss 1
 						break
@@ -459,16 +454,16 @@ foreach transfer_cost $transfer_costs {
 				}
 
 				if {[regexp "Spec" $fate] == 1 || $fate eq "Dup" || $fate eq "Extant"} {
-					puts "The sister branch - $sister_edge - further speciated, so the Anoxy/Geobacillus clade subtended by $anoxy_geo_ancestral_branch was NOT transferred"
+					multiputs $dir_log stdout "The sister branch - $sister_edge - further speciated, so the Anoxy/Geobacillus clade subtended by $anoxy_geo_ancestral_branch was NOT transferred"
 				} elseif {[regexp "Tran" $fate] == 1} {
-					puts "The ancestral edge $ancestral_edge transferred horizontally, and all other clades descendants apart from the Anoxy/Geobacillus clade (subtended by $anoxy_geo_ancestral_branch) were lost. This is a putative transfer."
+					multiputs $dir_log stdout "The ancestral edge $ancestral_edge transferred horizontally, and all other clades descendants apart from the Anoxy/Geobacillus clade (subtended by $anoxy_geo_ancestral_branch) were lost. This is a putative transfer."
 					incr scenario_2_hgt
 					set scenario 2
 				} elseif {$root_multi_loss == 1} {
 					incr scenario_4_hgt
 					set scenario 4
 				} else {
-					puts "Hmmmm"
+					multiputs $dir_log stdout "Hmmmm"
 					exit 2
 				}
 
@@ -488,7 +483,10 @@ foreach transfer_cost $transfer_costs {
 		puts $out [join $HGT_table_out \n]
 		close $out
 
-		puts stdout [join $HGT_table_out \n]
+		multiputs $dir_log stdout [join $HGT_table_out \n]
+
+		## Write out the log file 
+		close $dir_log
 
 		incr all_tested
 	}
@@ -496,8 +494,8 @@ foreach transfer_cost $transfer_costs {
 	set global_hgt_table [lsort -dictionary $global_hgt_table]
 
 
-	set out_table_filename $direct/Results_Full/T$transfer_cost\_D2_L1_results.txt
-	set out_stats_filename $direct/Results_Full/T$transfer_cost\_D2_L1_stats.txt
+	set out_table_filename $output_path/T$transfer_cost\_D2_L1_results.txt
+	set out_stats_filename $output_path/T$transfer_cost\_D2_L1_stats.txt
 
 
 	set global_hgt_table [join $global_hgt_table \n]
