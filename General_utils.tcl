@@ -127,6 +127,18 @@ proc reverse_dict {lst} {
     return $revdict
 }
 
+# Find any element of list 2 in list 1 #
+proc lsearch_any {list1 list2} {
+  set present FALSE
+  foreach element $list2 {
+    if {[lsearch $list1 $element] != -1} {
+      set present TRUE
+      break
+    }
+  }
+  return $present
+}
+
 # Find and return duplicates in any given list #
 proc dups xs {
     set dups {}
@@ -151,6 +163,20 @@ proc lremove {list element} {
     set idx_list [lsearch -all $list $element]
     foreach idx [lreverse $idx_list] {
         set list [lreplace $list $idx $idx]
+    }
+    return $list
+}
+
+# Remove every duplicate copy of all elements from list #
+proc lremove_dups_list {list} {
+    foreach element $list {
+      set idx_list [lsearch -all $list $element]
+      if {[llength $idx_list] > 1} {
+        set idx_list [lrange $idx_list 1 end]
+        foreach idx [lreverse $idx_list] {
+            set list [lreplace $list $idx $idx]
+        }
+      }      
     }
     return $list
 }
