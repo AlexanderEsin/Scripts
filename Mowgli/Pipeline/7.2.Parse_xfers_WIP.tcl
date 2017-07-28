@@ -15,90 +15,65 @@ set direct /Users/aesin/Desktop/Mowgli/Mowgli_outputs
 set output_path	$direct/../Raw_predictions
 file mkdir $output_path/Logs
 
-## Regex patterns
-set pata {\(+?[0-9]+?\,+?}
-set patb {\)+?}
-
-
 set mowgli_output_dir	$direct/Mow_test_out_t$transfer_cost
 set penalty_log_dir		$output_path/Logs/$transfer_cost
 file mkdir				$penalty_log_dir
 
 set global_hgt_table {}
 
-####################
-### Set counters ###
-####################
-
-set all_tested 0
-set vertical 0
-set horizontal 0
-set scenario_1_hgt 0
-set scenario_2_hgt 0
-set scenario_3_hgt 0
-# Scenario 4 is a combination of 2 & 3 - all sisters are lost UP TO the root #
-set scenario_4_hgt 0
-set ag2ag_transfer_counter 0
-
 ##############################################################################
 
 cd $mowgli_output_dir
 set output_directories [glob -type d *]
-set out_dir 1289
-set output_directories [lrange $output_directories 0 99]
+set OutAG_present	0
+set global_OutAG	0
+set scenario_2		0
+set scenario_3		0
 
+foreach out_dir $output_directories {
 
-//// THIS ALL SEEMS TO WORK. NEED TO TEST FURTHER AND COMMENT. 21/7/2017 ////
-
-
-
-
-
-# foreach out_dir $output_directories {
-
-	####################################
-	### Empty variables to be filled ###
-	####################################
-	set HGT_table_out "$out_dir"
-
-	set scenario ""
-
-	## Log file for this gene family at this penalty
+	# Log file for this gene family at this penalty
 	set dir_log [open $penalty_log_dir/$out_dir\.log w]
 
-	cd $mowgli_output_dir/$out_dir
+	# List of species tree nodes that are part of Anoxybacillus / Geobacillus branches
+	set anoxy_geo_nodes [split [string trim [openfile $mowgli_output_dir/$out_dir/Anoxy_geo_nodes.tsv]] \n]
+	
 	multiputs $dir_log stdout "\n###########################################\nTree tested: $out_dir"
 
-	## RUN the NODE identifier script here to get a list of all the nodes that correspond to anoxy/geobacillus in the species tree ##
-	## Output file MUST be called Anoxy_geo_nodes.tsv ##
-	set anoxy_geo_nodes [split [string trim [openfile Anoxy_geo_nodes.tsv]] \n]
-
 	# Process the input mapping file to get a list of all the events
-	set events_list [ParseMappingFile Fullmapping.mpr]
+	set events_list [ParseMappingFile $mowgli_output_dir/$out_dir/Fullmapping.mpr]
 	if {$events_list == 0} {
 		multiputs $dir_log stdout "Fullmapping.mpr file is empty. Mowgli run is incomplete / corrupted -- skipping $out_dir directory"
 		exit
 	}
+
+	# This will hold the output
+	set HGT_table_out [list $out_dir]
 	
 	# Holders
 	set anoxy_geo_events	{}
-	set AG_present_nodes	{}
 
-	set transfer_out_of_AG	{}
-	set transfer_AG2AG		{}
-	set transfer_into_AG	{}
-	set non_trans_AG_events	{}
-	set events_from_out		{}
+	set transfer_AGOut	{}
+	set transfer_AG2AG	{}
+	set transfer_OutAG	{}
 
-	# 
+	set OutAG_done			{}
+	set AG2AG_process		{}
+	set AG2AG_done			{}
+
+	set NonTrans_AG			{}
+	set NonTrans_AG_process	{}
+	set NonTrans_AG_done	{}
+
+	set scenario ""
+	set edge_heritage	[dict create "event" "heritage"]
+
 	foreach node $anoxy_geo_nodes {
 
 		set events [lsearch -all -inline -glob $events_list *,$node\)*]
 		if {[llength $events] == 0} {
 			continue
 		}
-		lappend AG_present_nodes $node
-
 		foreach event $events {
 			# In transfer events between AG nodes, the event will be picked up twice - once as the donor node, once as a receiver node. Exclude double entries.
 			if {[lsearch $anoxy_geo_events $event] > -1 } {
@@ -117,49 +92,88 @@ set output_directories [lrange $output_directories 0 99]
 				set donor_nodes		[split $donor_edge \,]
 
 				if {[lsearch $anoxy_geo_nodes $receiver_child] == -1} {
-					lappend transfer_out_of_AG $event
+					# Transfer from AG into non-AG branches
+					lappend transfer_AGOut $event
 				} elseif {[lsearch_any $anoxy_geo_nodes $donor_nodes] == TRUE} {
+					# Transfer from AG into AG
 					lappend transfer_AG2AG $event
 				} else {
-					lappend transfer_into_AG $event
+					# Transfer from non-AG branches into AG
+					lappend transfer_OutAG $event
 				}
 			} else {
-				lappend non_trans_AG_events $event
+				lappend NonTrans_AG $event
 			}
 		}
 	}
 
-	set total_into_AG [expr [llength $transfer_AG2AG] + [llength $transfer_into_AG]]
+	set total_into_AG [expr [llength $transfer_AG2AG] + [llength $transfer_OutAG]]
 
-	puts [llength $transfer_out_of_AG]
-	puts [llength $transfer_AG2AG]
-	puts [llength $transfer_into_AG]
-	puts [llength $non_trans_AG_events]
+	set explained_by_transfer 	0
+	set transfer_counter		1
 
-	set explained_by_transfer 0
-	foreach non_trans_AG_event $non_trans_AG_events {
-		set parsed_event	[ParseEvent $non_trans_AG_event]
+	foreach non_trans_AG_event $NonTrans_AG {
+		set parsed_event		[ParseEvent $non_trans_AG_event]
 		set event_parent_node	[dict get $parsed_event genet_parent]
+		set edge				[dict get $parsed_event edge]
 
 		# This edge is the root - it lies within AG. Will be reprocessed below
 		if {[llength $event_parent_node] == 0} {
-			lappend events_from_out $non_trans_AG_event
+			lappend NonTrans_AG_process $non_trans_AG_event
 			continue
 		}
 
 		set parent_child_events	[GetParentEvent $non_trans_AG_event $events_list]
 		set parent_event		[dict get $parent_child_events parent_event]
-
 		set parsed_parent		[ParseEvent $parent_event]
+		
+		# In v. rare situations the 'root' is actually a transfer event 'out'. As a result, the correct interpretation is that the child event (i.e. input) is the root. E.g. 2085 T=5	
+		set root_flag			[IsEventRoot $parent_event]
+		if {[dict get $parsed_parent type] eq "Trans" && $root_flag == TRUE && [IsTransIntoEdge $parent_event $edge] == FALSE} {
+			puts $dir_log "\t--> Event: $non_trans_AG_event has a parent that is both a Root and a Transfer Out:\n\t$parent_event"
+			lappend NonTrans_AG_done "--> Event: $non_trans_AG_event has a parent that is both a Root and a Transfer Out:\n\t-->$parent_event"
+			dict set edge_heritage $parent_event "Root"
+			continue
+		}
+
+		# If the parent of this event (speciation, duplication, extant) is a transfer, it must be a transfer into AG
 		if {[dict get $parsed_parent type] eq "Trans"} {
-			set non_trans_AG_events [lremove $non_trans_AG_events non_trans_AG_event]
+			
+			if {[lsearch $transfer_OutAG $parent_event] != -1} {
+				set transfer_event	[lindex [lsearch -all -inline $transfer_OutAG $parent_event] 0]
+				set transfer_type	"OutAG"
+			} elseif {[lsearch $transfer_AG2AG $parent_event] != -1} {
+				set transfer_event	[lindex [lsearch -all -inline $transfer_AG2AG $parent_event] 0]
+				set transfer_type	"AG2AG"
+			} else {
+				error "If this AG event has a Transfer parent event - it must be AG2AG or OutAG. Code 2222"
+				exit
+			}
+			set parsed_transfer	[ParseEvent $transfer_event]
+			set donor_edge		[dict get $parsed_transfer donor_edge]
+			
+			# Here we want to test whether the transfer is predicted into the most parsimonious branch. If not, find the most parsimonious transfer
+			set true_receiver_event		[ReduceTransferBranch $non_trans_AG_event $events_list $dir_log $out_dir]
+
+			set parsed_receiver			[ParseEvent $true_receiver_event]
+			set receiver_genet_parent	[dict get $parsed_receiver genet_parent]
+			set receiver_genet_child	[dict get $parsed_receiver genet_child]
+			set receiver_edge			[dict get $parsed_receiver edge]
+
+			if {$transfer_type eq "OutAG"} {
+				lappend OutAG_done	"$transfer_counter\tHGT(OutAG)\t$donor_edge\t$receiver_edge\t$receiver_genet_parent\t$receiver_genet_child\t\|\|\t$parent_event"
+				incr transfer_counter
+			} else {
+				lappend AG2AG_process	"HGT(AG2AG)\t$donor_edge\t$receiver_edge\t$receiver_genet_parent\t$receiver_genet_child\t\|\|\t$parent_event"
+			}
+			
 			incr explained_by_transfer
 			continue
 		}
 
 		set parent_child_node	[dict get $parsed_parent child]
 		if {[lsearch $anoxy_geo_nodes $parent_child_node] == -1} {
-			lappend events_from_out $non_trans_AG_event
+			lappend NonTrans_AG_process $non_trans_AG_event
 		}
 	}
 
@@ -167,10 +181,6 @@ set output_directories [lrange $output_directories 0 99]
 		error "12345. Dir = $out_dir"
 		exit
 	}
-
-	puts $explained_by_transfer
-	puts $events_from_out
-
 
 	# 		## In certain cases, the predicted transfer will be into a deeper AG node, with multiple losses futher on. A similar scenario (2) is considered in the context of transfers above the common AG root below. Within AG such scenarious present a non-parsimonious receptor node, and exist so that Mowgli can predict a transfer out to another node from the "lost" taxa. These transfers from AG "lost" taxa are unlikely to be informative, yet they will artificially introduce more "ancient" HGT receipts than would otherwise be. So, for any transfers into a non-terminal (not a single taxon) AG node need to be checked, and refined down if necessary. This can be accomplished by checking whether any of the two daughter edges post-transfer are lost entirely; if they are, the new most-parsimonious receptor node becomes the non-lost edge, and the process is repeated. ##
 
@@ -184,10 +194,14 @@ set output_directories [lrange $output_directories 0 99]
 
 	# Now for each speciation that resulted in a topmost anoxy_geo node, we want to check whether the sister lineages have been lost ##
 
-	if {[llength $events_from_out] == 1} {
 
-		set tested_event	[lindex $events_from_out 0]
+	
+	# There can be multiple events at the root - this is because of duplications above root or transfers above root in the presence of a vertical homolog. The history of each event at the AG root is tested independetly
+
+	foreach tested_event $NonTrans_AG_process {		
+		set initial_event $tested_event
 		set sister_fate		"Unknown"
+		set scenario		""
 
 		while {$sister_fate eq "Loss" || $sister_fate eq "Unknown"} {
 
@@ -200,7 +214,6 @@ set output_directories [lrange $output_directories 0 99]
 
 			# If there is no parent node to this event, we are at the root
 			if {[llength $event_parent_node] == 0} {
-				puts "Early Break == IsRoot: 3"
 				set scenario 3
 				break
 			}
@@ -211,7 +224,6 @@ set output_directories [lrange $output_directories 0 99]
 
 			# If parent type is a transfer, the origin of this branch is a transfer IN
 			if {[dict get $parsed_parent type] eq "Trans"} {
-				puts "Early break == Transfer above edge with multiloss: 2"
 				set scenario 2
 				break
 			}
@@ -220,52 +232,163 @@ set output_directories [lrange $output_directories 0 99]
 			set sister_event	[GetSisterEvent $parent_event $penul_event $events_list]
 
 			set sister_fate		[TestAllChildren $sister_event $events_list]
-			puts "Current fate: $sister_fate"
+		}
+
+		if {$scenario eq ""} {
+			#puts $dir_log "\t--> Event: $initial_event has a Vertical history"
+			lappend NonTrans_AG_done "--> Event: $initial_event has a Vertical history"
+			dict set edge_heritage $initial_event "Vertical"
+		# In scenario 2 the parent event is a TransIn
+		} elseif {$scenario == 2} {
+			set reduced_transfer		[ReduceTransferBranch $tested_event $events_list $dir_log $out_dir]
+			set parsed_reduced			[ParseEvent $reduced_transfer]
+
+			set donor_edge				[dict get $parsed_parent donor_edge]	
+			set receiver_edge			[dict get $parsed_reduced edge]
+			set receiver_genet_parent	[dict get $parsed_reduced genet_parent]
+			set receiver_genet_child	[dict get $parsed_reduced genet_child]
+			
+			lappend OutAG_done	"$transfer_counter\tHGT(OutAG)\t$donor_edge\t$receiver_edge\t$receiver_genet_parent\t$receiver_genet_child\t\|\|\t$parent_event"
+			incr transfer_counter
+			incr total_into_AG
+
+			#puts $dir_log "\t--> Event: $initial_event is an HGT above AG root with multiple losses (Scenario 2)"
+			lappend NonTrans_AG_done "--> Event: $initial_event is an HGT above AG root with multiple losses (Scenario 2)"
+			incr scenario_2
+		} elseif {$scenario == 3} {
+			#puts $dir_log "\t--> Event: $initial_event is part of the root (Scenario 3)"
+			lappend NonTrans_AG_done "--> Event: $initial_event is part of the root (Scenario 3)"
+			dict set edge_heritage $initial_event "Root"
+			incr scenario_3
+		} else {
+			error "There can be no other fates. Directory: $out_dir. Code 9999"
+			exit
 		}
 	}
 
 
 
 
+	while {[llength $AG2AG_process] > 0} {
+		set AG2AG_transfer [lindex $AG2AG_process 0]
+		set delay_condition FALSE
 
-	if {[llength $HGT_table_out] == 1} {
-		lappend HGT_table_out "No transfers into Anoxy/Geobacillus"
-		lappend global_hgt_table "$out_dir\t0\t$scenario"
-		incr vertical
-	} else {
-		# lappend HGT_table_out "\n[join $ag2ag_event_l \n]"
-		lappend global_hgt_table "$out_dir\t1\t$scenario"
-		incr horizontal
+		set info			[wsplit $AG2AG_transfer ||]
+		set trans_event		[string trimleft [lindex $info end]]
+		set parsed_event	[ParseEvent $trans_event]
+		set test_edge		[dict get $parsed_event donor_edge]
+
+		# The transfer out can be the root, but in that case it's already been added to the heritage dictionary
+		if {[IsEventRoot $trans_event] == TRUE} {
+			set AG2AG_heritage	[dict get $edge_heritage $trans_event]
+			lappend AG2AG_done "$transfer_counter\t$AG2AG_transfer\t\|\|\tHeritage: $AG2AG_heritage"
+			set AG2AG_process [lremove $AG2AG_process $AG2AG_transfer]
+			continue
+		}
+
+		# Get the parental non-TransOut event to this AG2AG transfer
+		set parent_not_TransOut	[SkipAllTransOut $trans_event $test_edge $events_list "up"]
+		set parent_event		[dict get $parent_not_TransOut parent_event]
+
+		# If the immediate parent is not TransIn then then it can only be a Spec/Dup
+		while 1 {		
+		
+			set heritage_known	[dict exists $edge_heritage $parent_event]
+			if {$heritage_known == 1} {
+				set AG2AG_heritage	[dict get $edge_heritage $parent_event]
+				lappend AG2AG_done "$transfer_counter\t$AG2AG_transfer\t\|\|\tHeritage: $AG2AG_heritage"
+				incr transfer_counter
+				break
+			}
+
+			set parsed_parent	[ParseEvent $parent_event]
+			# If the event type is a transfer - it must be a TransIn (i.e. an OutAG)
+			if {[dict get $parsed_parent type] eq "Trans"} {
+
+				# Find the corresponding OutAG entry
+				set parsed_test		[ParseEvent $parent_event]
+				set genet_parent	[dict get $parsed_test genet_parent]
+				set genet_child		[dict get $parsed_test genet_child]
+
+				## If it's a TransIn - it could be from out (we can find it in $OutAG_done) or it can be from AG also (look in AG2AG done). It's possible this AG2AG is being tested before the one its descended from, in which case we simply move this AG2AG to the back of the processing list and continue
+
+				# Try to find it in OutAG
+				set match_OutAG [lsearch -all -inline -glob $OutAG_done "*||\t$parent_event*"]
+				if {[llength $match_OutAG] == 1} {
+					set match		[lindex $match_OutAG 0]
+					set heritage	"Heritage: HGT(OutAG) [lindex [split $match \t] 0]"
+				# Try to find it in AG2AG
+				} else {
+					set match_AG2AG [lsearch -all -inline -glob $AG2AG_done "*||\t$parent_event*"]
+					if {[llength $match_AG2AG] == 1} {
+						set match		[lindex $match_AG2AG 0]
+						set heritage	[string trim [lindex [wsplit $match ||] end]]
+					} else {
+						set delay_condition TRUE
+						break
+					}
+				}
+
+				lappend AG2AG_done "$transfer_counter\t$AG2AG_transfer\t\|\|\t$heritage"
+				incr transfer_counter
+				break
+			}
+
+			set parent_child_node	[dict get $parsed_parent child]
+			set parent_event	[dict get [GetParentEvent $parent_event $events_list] parent_event]
+		}
+
+		set AG2AG_process [lremove $AG2AG_process $AG2AG_transfer]
+		if {$delay_condition == TRUE} {
+			lappend AG2AG_process $AG2AG_transfer
+		}
 	}
+
+	set total_finished [expr [llength $AG2AG_done] + [llength $OutAG_done]]
+	if {$total_into_AG != $total_finished} {
+		error "P1GS"
+		exit
+	}
+
+	multiputs stdout $dir_log [join [concat $OutAG_done $AG2AG_done $NonTrans_AG_done] \n]
+	set HGT_table_out [concat $HGT_table_out $OutAG_done $AG2AG_done $NonTrans_AG_done]
+
+	set global_OutAG	[expr $global_OutAG + [llength $OutAG_done]]
+
+	##
+	## Per gene family output
+	##
+
+	if {[llength $OutAG_done] != 0} {
+		set HGT_present 1
+		incr OutAG_present
+		lappend global_hgt_table "$out_dir\t1"
+	} else {
+		set HGT_present 0
+		lappend global_hgt_table "$out_dir\t0"
+	}
+
 	# Write out the file containing all the donor and receiver edges for the transfers INTO geobacillus from an external source ##
 	set out [open Transfers_in.tsv w]
 	puts $out [join $HGT_table_out \n]
 	close $out
 
-	multiputs $dir_log stdout [join $HGT_table_out \n]
-
-	## Write out the log file 
+	# Write out the log file
+	puts "[join $HGT_table_out \n]"
 	close $dir_log
-
-	incr all_tested
 }
 		
+set global_hgt_table [lsort -dictionary $global_hgt_table]
+set out_table_filename $output_path/T$transfer_cost\_D2_L1_results.txt
+set out_stats_filename $output_path/T$transfer_cost\_D2_L1_stats.txt
 
-	# set global_hgt_table [lsort -dictionary $global_hgt_table]
+set out [open $out_table_filename w]
+puts $out [join $global_hgt_table \n]
+close $out
 
-
-	# set out_table_filename $output_path/T$transfer_cost\_D2_L1_results.txt
-	# set out_stats_filename $output_path/T$transfer_cost\_D2_L1_stats.txt
-
-
-	# set global_hgt_table [join $global_hgt_table \n]
-	# set out [open $out_table_filename w]
-	# puts $out $global_hgt_table
-	# close $out
-
-	# set stats [open $out_stats_filename w]
-	# puts $stats "Total number of gene families tested: $all_tested\nAG vertical: $vertical\nAG horizontal: $horizontal\n\nScenario 1: $scenario_1_hgt\nScenario 2: $scenario_2_hgt\nScenario 3: $scenario_3_hgt\nScenario 4: $scenario_4_hgt"
-	# close $stats
+set stats [open $out_stats_filename w]
+puts $stats		"Total number of gene families tested: [llength $output_directories]\nFamilies containing at least 1 OutAG: $OutAG_present\n\nTotal number of OutAG events: $global_OutAG\nTotal number of times where transfer into AG predicted above root (S2): $scenario_2\nTotal number of times where root is in AG (S3): $scenario_3\n"
+close $stats
 
 
 

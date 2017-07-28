@@ -1,5 +1,7 @@
 ## Procs for Mowgli output parsing ##
 
+## //// THIS NEEDS TO BE TIDIED 21/7/2017 - some obsolete functions need to be deleted //// ##
+
 proc ParseMappingFile {mapping_file} {
 	# Read in the Fullmapping file 
 	set recon_map [string trim [openfile $mapping_file]]
@@ -19,27 +21,6 @@ proc ParseMappingFile {mapping_file} {
 	return $events_list
 }
 
-proc GetTransferEvents {events} {
-	set transfer_events {}
-	foreach event $events {
-		if {[lsearch -glob $event *Tran*] > 0} {
-			lappend transfer_events $event
-		}
-	}
-	return $transfer_events
-}
-
-proc GetFinalSubevent {event} {
-	set event_data [split [string trim $event] \t]
-	set final_subevent [lindex $event_data end]
-	return $final_subevent
-}
-
-proc GetEventType {subevent} {
-	set event_type [lindex [split [string trim $subevent] " "] end]
-	return $event_type
-}
-
 proc IsSubeventTransfer {subevent} {
 	set is_transfer FALSE
 	if {[regexp {;} $subevent] == 1} {
@@ -48,96 +29,14 @@ proc IsSubeventTransfer {subevent} {
 	return $is_transfer
 }
 
-proc IsSubeventLoss {subevent} {
-	set is_loss FALSE
-	if {[regexp {Loss} $subevent] == 1} {
-		set is_loss TRUE
+proc IsEventRoot {event} {
+	set parsed_event	[ParseEvent $event]
+	set genet_parent	[dict get $parsed_event genet_parent]
+	if {[llength $genet_parent] == 0} {
+		return TRUE
+	} else {
+		return FALSE
 	}
-	return $is_loss
-}
-
-proc PutLossAtBack {non_trans_events} {
-
-	if {[llength $non_trans_events] > 1} {
-		foreach event $non_trans_events {
-			set final_subevent [GetFinalSubevent $event]
-			if {[IsSubeventLoss $final_subevent] == TRUE} {
-				set non_trans_events [lremove $non_trans_events $event]
-				lappend non_trans_events $event
-			}
-		}
-	}
-
-	return $non_trans_events
-}
-
-proc ReduceRedundantEdges {redundant_events} {
-	set non_redun_out {}
-
-	foreach event $redundant_events {
-		set final_subevent	[GetFinalSubevent $event]
-		set parsed_event	[ParseNontransSubevent $final_subevent]
-		set edge			[dict get $parsed_event edge]
-
-		if {[lsearch -glob $non_redun_out *$edge*] == -1} {
-			lappend non_redun_out $event
-		}
-	}
-	return $non_redun_out
-}
-
-proc ReduceTransferBranch {receiver_edge event_type events_list dir_log} {
-	set tested_edge $receiver_edge
-
-	while 1 {
-
-		# If the transfer is into a single taxon - there can be no lower node
-		if {$event_type eq "Extant"} {
-			break
-		}
-
-		set transfered_edge_child [lindex [split $tested_edge \,] 1]
-		set children [lsearch -all -inline -glob $events_list *\($transfered_edge_child,*]
-
-		set branch_fates {}
-		foreach child_event $children {
-			set final_subevent [GetFinalSubevent $child_event]
-			if {[IsSubeventTransfer $final_subevent] == TRUE || [IsSubeventLoss $final_subevent] == TRUE} {
-				continue
-			} else {
-				lappend branch_fates $final_subevent
-			}
-		}
-
-		## If there are duplications, for each duplication picked up - there will be two further speciations - we can reduce this down to a single entry for the fate ##
-		set branch_fates [ReduceRedundantEdges $branch_fates]
-	
-		## Check whether both speciated, or one was lost ##
-		if {[llength $branch_fates] == 2} {
-			multiputs $dir_log stdout "This is the final edge: $tested_edge"
-			set receiver_edge $tested_edge
-			break
-		} elseif {[llength $branch_fates] == 1} {
-			set parsed_event	[ParseNontransSubevent [lindex $branch_fates 0]]
-			set event_type		[dict get $parsed_event event_type]
-			set edge			[dict get $parsed_event edge]
-
-			# If of two fates, one is loss and the other is extant, there can be no further down-sampling of the tree #
-			if {$event_type eq "Extant"} {
-				set receiver_edge [string range $edge 1 end-1]
-				multiputs $dir_log stdout "This is the final edge: $receiver_edge"
-				break
-			} else {
-				multiputs $dir_log stdout "One branch was lost, continuing down..."
-				set tested_edge [string range $edge 1 end-1]
-			}
-		} else {
-			multiputs $dir_log stdout "Error: loss of both fates or more than two fates for branch: Tree: $out_dir A2"
-			exit
-		}
-	}
-
-	return $receiver_edge
 }
 
 proc ParseEvent {event} {
@@ -218,6 +117,7 @@ proc IsTransIntoEdge {event test_edge} {
 	return $TransIn
 }
 
+# Skip all transfer events out of the lineage being tested in a linear way. If going up (high order / more ancient branches) then we can stop at a transfer event coming IN. If we are moving down, there cannot be another transfer IN event along the same path.
 proc SkipAllTransOut {trans_event test_edge events_list {direction down}} {
 	set next_event $trans_event
 
@@ -225,8 +125,13 @@ proc SkipAllTransOut {trans_event test_edge events_list {direction down}} {
 	set type [dict get $parsed_event type]
 
 	# This loop has to run at least once because the event provided must be a transfer OUT #
+	set root_flag FALSE
 	while {$type eq "Trans" && [IsTransIntoEdge $next_event $test_edge] == FALSE} {
 		set previous_event $next_event
+
+		if {$root_flag == TRUE} {
+			break
+		}
 
 		# For every transfer up - there can only be one parent
 		if {$direction eq "up"} {
@@ -235,6 +140,7 @@ proc SkipAllTransOut {trans_event test_edge events_list {direction down}} {
 			# We might skip up to the root
 			if {[llength $next_event] == 0} {
 				set next_event		[lsearch -all -inline -glob $events_list "\(*,$genet_parent\)*"]
+				set root_flag		TRUE
 			}
 		# For every transfer down - there will be two children
 		} elseif {$direction eq "down"} {
@@ -254,6 +160,7 @@ proc SkipAllTransOut {trans_event test_edge events_list {direction down}} {
 		set parsed_event	[ParseEvent $next_event]
 		set type			[dict get $parsed_event type]
 	}
+
 	if {$direction eq "up"} {
 		set skipped_events [dict create parent_event $next_event]
 		dict set skipped_events penul_event $previous_event
@@ -274,7 +181,10 @@ proc GetParentEvent {child_event events_list} {
 
 	# Could be root - it has a different format: ( ,112)	(3640,3639) Spec0
 	if {[llength $parent_event] == 0} {
-		set parent_event		[lsearch -all -inline -glob $events_list "\( ,$child_genet_parent\)\t*"]
+		set root_flag		TRUE
+		set parent_event	[lsearch -all -inline -glob $events_list "\( ,$child_genet_parent\)\t*"]
+	} else {
+		set root_flag		FALSE
 	}
 
 	# If we still can't find a parent event - error.
@@ -286,9 +196,15 @@ proc GetParentEvent {child_event events_list} {
 	set parsed_parent		[ParseEvent $parent_event]
 
 	if {[dict get $parsed_parent type] eq "Trans" && [IsTransIntoEdge $parent_event $child_edge] == FALSE} {
-		set parent_child_events [SkipAllTransOut $parent_event $child_edge $events_list "up"] 
-		dict set parent_child_events child_event $child_event
-		puts "SKIPPED TRANSFER UP: [dict get $parent_child_events parent_event]"
+		# In v. rare situations the 'root' is actually a transfer event 'out'. E.g. 2085 T=5
+		if {$root_flag == TRUE} {
+			set parent_child_events [dict create parent_event $parent_event]
+			dict set parent_child_events penul_event $child_event
+			dict set parent_child_events child_event $child_event
+		} else {
+			set parent_child_events [SkipAllTransOut $parent_event $child_edge $events_list "up"]
+			dict set parent_child_events child_event $child_event
+		}
 	} else {
 		set parent_child_events [dict create parent_event $parent_event]
 		dict set parent_child_events penul_event $child_event
@@ -321,7 +237,7 @@ proc TestAllChildren {start_event events_list} {
 	while {[llength $events_to_test] != 0} {
 
 		set tested_event	[lindex $events_to_test 0]
-		puts $tested_event
+		# puts "---> Testing event: $tested_event"
 
 		set event_info		[ParseEvent $tested_event]
 		set type			[dict get $event_info type]
@@ -331,7 +247,7 @@ proc TestAllChildren {start_event events_list} {
 			set child_parent_events	[SkipAllTransOut $tested_event $test_edge $events_list "down"]
 			set next_event			[dict get $child_parent_events child_event]
 			set event_info			[ParseEvent $next_event]
-			puts "SKIPPED TRANSFER DOWN: $next_event"
+			# puts "SKIPPED TRANSFER DOWN: $next_event"
 		}
 
 		set event_type		[dict get $event_info event_type]
@@ -367,88 +283,45 @@ proc TestAllChildren {start_event events_list} {
 	return $condition
 }
 
+proc ReduceTransferBranch {top_event events_list dir_log out_dir} {
+	while 1 {
+		set parsed_event	[ParseEvent $top_event]
+		set genet_child		[dict get $parsed_event genet_child]
 
-# proc IsTransferInOut {transfer_event parent_node child_node} {
-# 	set final_subevent	[GetFinalSubevent $transfer_event]
-# 	set parsed_transfer		[ParseTransferSubevent $final_subevent]
-# 	set receiver_edge 		[dict get $parsed_transfer receiver_edge]
-# 	# set receiver_nodes 		[split $receiver_edge \,]
+		if {[dict get $parsed_event event_type] eq "Extant"} {
+			return $top_event
+			break
+		}
 
+		# Find the children events of the branch that received the transfer
+		set child_events	[lsearch -all -inline -glob $events_list "\{$genet_child\,*"]
 
-# 	if {$receiver_edge == "$parent_node,$child_node"} {
-# 		set transfer_type IN
-# 	} else {
-# 		set transfer_type OUT
-# 	}
+		foreach child_event $child_events {
+			set fate	[TestAllChildren $child_event $events_list]
+			if {$fate eq "Loss"} {
+				set child_events	[lremove $child_events $child_event]
+			}
+		}
 
-# 	return $transfer_type
-# }
+		# If there are still two child events - that means both branches down have extant taxa, if there is only one - there has been a total loss in one branch.
+		if {[llength $child_events] == 2} {
+			return $top_event
+			break
+		} elseif {[llength $child_events] == 1} {
+			set next_event [lindex $child_events 0]
 
+			# If a sister has been lost, it's possible that the next event in the remaining sister is a TransOut - we need to reduce this to find the next Spec/Dup/Ext (Loss?) event
+			if {[dict get [ParseEvent $next_event] type] eq "Trans"} {
+				set parsed_transfer	[ParseEvent $next_event]
+				set donor_edge		[dict get $parsed_transfer donor_edge]
+				set next_event		[dict get [SkipAllTransOut $next_event $donor_edge $events_list "down"] child_event]
+			}
 
-
-
-# proc PruneTransferEvents {events} {
-# 	set pruned_events {}
-
-# 	foreach event $events {
-# 		set final_subevent [GetFinalSubevent $event]
-# 		if {[IsSubeventTransfer $final_subevent] == FALSE} {
-# 			lappend pruned_events $event
-# 		}
-# 	}
-# 	return $pruned_events
-# }
-
-# proc transfer_subevent_parse {subevent} {
-# 	global trans_type
-# 	global gene_tree_xferred_child
-# 	global donor_edge
-# 	global receiver_edge
-
-# 	set trans_type [string trim [string range $subevent [string first " " $subevent] end]]
-# 	set subevent_split [split [string range $subevent 1 [string first " " $subevent]-2] \;]
-# 	set gene_tree_xferred_child [lindex $subevent_split 0]
-# 	set donor_edge [string range [lindex $subevent_split 1] 1 end-1]
-# 	set receiver_edge [string range [lindex $subevent_split 2] 1 end-1]
-# 	return
-# }
-
-# proc non_trans_subevent_parse {subevent} {
-# 	global edge
-# 	global child
-# 	global parent
-# 	global event_type
-
-# 	set event_type [string trim [string range $subevent [string first " " $subevent] end]]
-# 	set edge [string range $subevent 0 [string first " " $subevent]-1]
-# 	set subevent_split [split [string range $edge 1 end-1] \,]
-# 	set parent [lindex $subevent_split 0]
-# 	set child [lindex $subevent_split 1]
-# 	return
-# }
-
-# proc reduce_non_redundant_refine {redundant_events edge} {
-# 	set non_redun_output {}
-
-# 	## Put all the loss events at the end ##
-# 	set temp_loss_list {}
-# 	foreach event $redundant_events {
-# 		set event_type [GetEventType $event]
-
-# 		if {$event_type eq "Loss"} {
-# 			set redundant_events [lremove $redundant_events $event]
-# 			lappend temp_loss_list $event
-# 		}
-# 	}
-# 	set redundant_events [concat $redundant_events $temp_loss_list]
-
-# 	foreach event $redundant_events {
-# 		set parsed_event	[ParseNontransSubevent $event]
-# 		set edge 			[dict get $parsed_event edge]
-
-# 		if {[lsearch -glob $non_redun_output *$edge*] == -1} {
-# 			lappend non_redun_output $event
-# 		}
-# 	}
-# 	return $non_redun_output
-# }
+			multiputs stdout $dir_log "One child of TransIn-derived event:\n\t$top_event\nhas been lost. Continuing down to: $next_event"
+			set top_event $next_event
+		} else {
+			error "There should be some children left. Code 5555"
+			exit
+		}
+	}	
+}

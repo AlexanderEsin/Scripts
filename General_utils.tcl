@@ -200,6 +200,11 @@ proc lcount list {
   return $res
 }
 
+# Split a list by an arbitrary string with n > 1 characters
+proc wsplit {str sep} {
+  split [string map [list $sep \0] $str] \0
+}
+
 ############################################################
 ## Maths ##
 # Rounding proc to two dp #
