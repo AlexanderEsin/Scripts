@@ -7,23 +7,25 @@ source ~/Documents/Scripts/General_utils.tcl
 
 proc GetDonorNodes {group_hgt_event} {
 	set columns		[split [string trim $group_hgt_event] \t]
-	if {[llength $columns] != 4} {puts "Why not 4 columns in this event?: $group_hgt_event \{GetDonorNodes\}"; break 1}
-	set donor_edge	[lindex [split [lindex $columns 1] " "] 1]
+	if {[llength $columns] != 6} {puts "Why not 4 columns in this event?: $group_hgt_event \{GetDonorNodes\}"; exit 1}
+	# Get the edge and nodes
+	set donor_edge	[string range [lindex $columns 1] 1 end-1]
 	set donor_nodes	[split $donor_edge ","]
 	return $donor_nodes
 }
 
 proc GetReceptorNodes {group_hgt_event} {
 	set columns		[split [string trim $group_hgt_event] \t]
-	if {[llength $columns] != 4} {puts "Why not 4 columns in this event?: $group_hgt_event \{GetReceptorNodes\}"; break 1}
-	set receptor_edge	[lindex [split [lindex $columns 1] " "] end]
+	if {[llength $columns] != 6} {puts "Why not 4 columns in this event?: $group_hgt_event \{GetReceptorNodes\}"; exit 1}
+	# Get the edge and nodes
+	set receptor_edge	[string range [lindex $columns 2] 1 end-1]
 	set receptor_nodes	[split $receptor_edge ","]
 	return $receptor_nodes
 }
 
 proc GetHgtTips {group_hgt_event} {
 	set columns		[split [string trim $group_hgt_event] \t]
-	if {[llength $columns] != 4} {puts "Why not 4 columns in this event? $group_hgt_event \{GetHgtTips\}"; break 1}
+	if {[llength $columns] != 6} {puts "Why not 4 columns in this event? $group_hgt_event \{GetHgtTips\}"; exit 1}
 	set HGT_tips [split [lindex $columns end] " "]
 	return $HGT_tips
 }
@@ -52,6 +54,7 @@ proc GetConsistentEvents {events} {
 
 	# For each transfer event in the group...
 	foreach event $events {
+		puts "\n$event"
 		# Get event and the type (internal or external)
 		set HGT_event	[string trim [lindex [split $event {|}] 0]]
 		set HGT_type	[string trim [lindex [split $event {|}] 1]]
@@ -61,6 +64,7 @@ proc GetConsistentEvents {events} {
 		multiputs $per_group_log stdout "\n$HGT_type event: $HGT_event"
 
 		foreach HGT_tip $HGT_event_tips {
+			puts "\n\n$HGT_tip"
 			set HGT_event_contains_tip [lsearch -glob -inline -all $test_events *$HGT_tip*]
 			# It's possibe that the events at a lower penalty no longer contain the tips from events at higher penalties. I.e. HGT is no longer predicted into those tips - however, there may still be a predicted HGT into Geobacillus elsewhere in the gene tree
 			if {[llength $HGT_event_contains_tip] == 0} {
@@ -96,21 +100,14 @@ proc GetConsistentEvents {events} {
 set mowgli_dir /Users/aesin/Desktop/Mowgli
 
 # List of penalties for which to perform long-distance transfer refinement
-set long_HGT_penalty_l [list 3 4 5 6]
+set long_HGT_penalty_l	[list 3 4 5 6]
+set AG_incl_set			"AG2AG_incl"
 
 ## 2. I/O folder assignment ##
 ##############################
 
-# Scenarios BS - need to revisit. I/O paths
-set all_scenarios FALSE
-
-if {$all_scenarios == TRUE} {
-	set input_path  $mowgli_dir/Constant_events/All_scenarios
-	set output_path $mowgli_dir/Refined_events/All_scenarios
-} else {
-	set input_path  $mowgli_dir/Constant_events/Scenarios_1_2
-	set output_path $mowgli_dir/Refined_events/Scenarios_1_2
-}
+set input_path  $mowgli_dir/Constant_events
+set output_path $mowgli_dir/Refined_events
 
 # Make the necessary ouput folders #
 foreach penalty $long_HGT_penalty_l {
@@ -124,7 +121,7 @@ file mkdir $output_path/Events
 ###########################
 
 # Read in the per-penalty group/node/tip data #
-set per_penalty_HGT_folder $mowgli_dir/Mowgli_outputs/Per_penalty_tips
+set per_penalty_HGT_folder $mowgli_dir/Mowgli_outputs/Per_penalty_tips/$AG_incl_set
 foreach penalty $long_HGT_penalty_l {
 	set $penalty\_tip_data [lrange [split [string trim [openfile $per_penalty_HGT_folder/Per_penalty_tips_t$penalty\.tsv]] \n] 1 end]
 }
@@ -168,7 +165,6 @@ foreach orig_penalty $long_HGT_penalty_l {
 		# Total HGT events for this group at this penalty:
 		set independent_events [lsearch -glob -inline -all [expr $$orig_penalty\_tip_data] $HGT_group\t*]
 		
-
 		set group_hgt_events {}
 		
 		set per_group_hgt_loss {}

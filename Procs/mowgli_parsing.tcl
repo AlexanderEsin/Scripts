@@ -317,11 +317,25 @@ proc ReduceTransferBranch {top_event events_list dir_log out_dir} {
 				set next_event		[dict get [SkipAllTransOut $next_event $donor_edge $events_list "down"] child_event]
 			}
 
-			multiputs stdout $dir_log "One child of TransIn-derived event:\n\t$top_event\nhas been lost. Continuing down to: $next_event"
+			# multiputs stdout $dir_log "One child of TransIn-derived event:\n\t$top_event\nhas been lost. Continuing down to: $next_event"
 			set top_event $next_event
 		} else {
 			error "There should be some children left. Code 5555"
 			exit
 		}
 	}	
+}
+
+proc FormatHgtOutput {HGT_events} {
+	set formatted_list {}
+	foreach HGT_event $HGT_events {
+		set split_line		[wsplit $HGT_event ||]
+		# Space separate the transfer event
+		set format_trans	[join [split [string trim [lindex $split_line 1]] \t] " "]
+		set other_cols		[split [string trim [lindex $split_line 0]] \t]
+		lappend other_cols	$format_trans
+		set HGT_formatted	[join $other_cols \t]
+		lappend formatted_list $HGT_formatted
+	}
+	return $formatted_list
 }

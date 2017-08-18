@@ -1,0 +1,1557 @@
+---
+title: HGT Density Plotting
+date: 11 Aug 2017
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+    code_folding: hide
+    theme: cosmo
+---
+
+```{r global_options, include = FALSE}
+knitr::opts_chunk$set(	fig.width	= 10, 
+						fig.height	= 7, 
+						fig.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Figures/", 
+						fig.align	= 'center', 
+						dpi			= 300, 
+						cache.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Cache/", 
+						warning		= TRUE, 
+						message		= TRUE,
+						tidy		= TRUE)
+
+```
+## 0. Packages, functions & global variables {.tabset .tabset-fade}
+### Packages
+```{r packages, warning = FALSE, message = FALSE}
+# Phylo libraries #
+library(ape)
+library(phylobase)
+library(phytools)
+library(phangorn)
+library(geiger)
+
+# Other libraries #
+library(gtools)
+library(logspline)
+library(circular)
+library(polyclip)
+library(stringr)
+library(pander)
+library(png)
+library(grid)
+library(logspline)
+library(reshape2)
+library(dplyr)
+library(ggplot2)
+library(RCircos)
+
+# Replacing native ideogram plot so that we can shade the chromosome band without the need for actual band data #
+RCircos.Draw.Chromosome.Ideogram <- function(ideo.pos = NULL, ideo.width = NULL) {
+	RCircos.Cyto <- RCircos.Get.Plot.Ideogram()
+	RCircos.Pos <- RCircos.Get.Plot.Positions()
+	RCircos.Par <- RCircos.Get.Plot.Parameters()
+	if (is.null(ideo.pos)) 
+	   ideo.pos <- RCircos.Par$chr.ideo.pos
+	if (is.null(ideo.width)) 
+	   ideo.width <- RCircos.Par$chrom.width
+	outerPos <- ideo.pos + ideo.width
+	innerPos <- ideo.pos
+	chromosomes <- unique(RCircos.Cyto$Chromosome)
+	RCircos.Track.Outline(outerPos, innerPos, num.layers = 1, 
+	    chromosomes, track.colors = rep("white", length(chromosomes)))
+	whiteBands <- which(RCircos.Cyto$BandColor == "white")
+	# / Changed below: code no longer dependent on there being white bands present for colored band to be colored
+	if (!length(whiteBands)) {
+		darkBands <- RCircos.Cyto
+	} else {
+		darkBands <- RCircos.Cyto[-whiteBands, ]
+	}
+
+	for (aBand in seq_len(nrow(darkBands))) {
+	    aColor <- darkBands$BandColor[aBand]
+	    aStart <- darkBands$StartPoint[aBand]
+	    aEnd <- darkBands$EndPoint[aBand]
+	    posX <- c(RCircos.Pos[aStart:aEnd, 1] * outerPos, RCircos.Pos[aEnd:aStart, 
+	        1] * innerPos)
+	    posY <- c(RCircos.Pos[aStart:aEnd, 2] * outerPos, RCircos.Pos[aEnd:aStart, 
+	        2] * innerPos)
+	    polygon(posX, posY, col = aColor, border = NA)
+	}
+}
+assignInNamespace("RCircos.Draw.Chromosome.Ideogram", RCircos.Draw.Chromosome.Ideogram, "RCircos")
+
+# Replacing native link plot so non-integer linewidth can be used #
+RCircos.Link.Plot <- function(link.data = NULL, track.num = NULL, by.chromosome = FALSE, start.pos = NULL, genomic.columns = 3, is.sorted = TRUE, lineWidth = rep(1, nrow(link.data))) {
+    if (is.null(link.data)) 
+        stop("Link data missing in RCircos.Link.Plot().\n")
+    if (by.chromosome != TRUE && by.chromosome != FALSE) 
+        stop("Error: by.chromosome must be either TRUE or FALSE.\n")
+    ## No reason to have linewidth limited to integers! ##
+    # if (length(which(lineWidth < 1)) > 1) 
+    #     stop("Line width must be positive integer.")
+    RCircos.Par <- RCircos.Get.Plot.Parameters()
+    if (is.null(start.pos)) {
+        locations <- RCircos.Get.Plot.Boundary(track.num, side = "in", 
+            inside.pos = NULL, outside.pos = NULL, FALSE)
+        line.start <- locations[1]
+    }
+    else {
+        if (start.pos >= 1) 
+            stop("Link line must be inside chromosome ideogram")
+        line.start <- RCircos.Par$chr.ideo.pos * start.pos
+    }
+    if (is.null(genomic.columns) || genomic.columns < 3) 
+        stop("Incorrect number of columns for genomic position.\n")
+    link.data <- RCircos.Get.Paired.Points.Positions(link.data, 
+        genomic.columns, plot.type = "link")
+    link.colors <- RCircos.Get.Link.Colors(link.data, genomic.columns, 
+        by.chromosome)
+    RCircos.Pos <- RCircos.Get.Plot.Positions()
+    base.positions <- RCircos.Pos[, 1:2] * line.start
+    for (a.link in seq_len(nrow(link.data))) {
+        point.one <- as.numeric(link.data$LinkStart[a.link])
+        point.two <- as.numeric(link.data$LinkEnd[a.link])
+        if (point.one > point.two) {
+            point.one <- link.data$LinkEnd[a.link]
+            point.two <- link.data$LinkStart[a.link]
+        }
+        P0 <- as.numeric(base.positions[point.one, ])
+        P2 <- as.numeric(base.positions[point.two, ])
+        links <- RCircos.Link.Line(P0, P2)
+        lines(links$pos.x, links$pos.y, type = "l", lwd = lineWidth[a.link], 
+            col = link.colors[a.link])
+    }
+}
+assignInNamespace("RCircos.Link.Plot", RCircos.Link.Plot, "RCircos")
+```
+
+### Functions
+```{r functions, warning = FALSE, message = FALSE}
+
+# Read in full data tables #
+read_in_full_data	<- function(file_name) {
+	# Read in tab-sep data
+	all_data <- read.table(file = file_name, header = FALSE, sep = "\t", stringsAsFactors = FALSE)
+	# Convert to df. Order by group (1st column)
+	all_df <- as.data.frame(all_data[mixedorder(all_data$V1),])
+	rownames(all_df)	<- NULL
+	# Label columbs
+	if (ncol(all_df) == 17) {
+		colnames(all_df)	<- c("Group", "Full_protID", "ProtID", "New_protID", "Chromosome", "Start", "End", "Strand", "Locus", "Species", "Set", "File", "Ncbi", "Receptor_node", "Donor_node", "Rel_start", "Rel_end")
+	} else if (ncol(all_df) == 15) {
+		colnames(all_df)	<- c("Group", "Full_protID", "ProtID", "New_protID", "Chromosome", "Start", "End", "Strand", "Locus", "Species", "Set", "File", "Ncbi", "Rel_start", "Rel_end")
+	} else {
+		warning("Wrong number of columns")
+		stop()
+	}
+	return(all_df)
+}
+
+# Read in position data for rrna genes #
+read_in_rrna_data	<- function(file_name) {
+	rrna_data <- read.table(file = file_name, header = FALSE, sep = "\n")
+	colnames(rrna_data) <- c("Position")
+	return(rrna_data)
+}
+
+# Get a list of subgroup branches to partition the data #
+get_subgroup_branches	<- function() {
+	subgroupings	<- read.csv(file = "/Users/aesin/Desktop/Geo_analysis/Geo_omes/Subspecies_geo_groups.csv", header = TRUE, sep = ",")
+
+	# Get those tips that have a fellow tip in the same subgroup. Isolate all the subgroups that have more than one member #
+	subgroup_only	<- subset(subgroupings, duplicated(subgroupings$Group) | duplicated(subgroupings$Group, fromLast = TRUE))
+	subgroup.unique	<- unique(subgroup_only$Group)
+
+	# Tree #
+	species_tree_clado <- read.tree("/Users/aesin/Desktop/Mowgli/Species_tree/Reconciled_species_tree/outputSpeciesTree.mpr")
+
+	# Get the set of Geobacillus and Anoxybacillus tips and combine into a single set #
+	clado_tips <- grep("Geobacillus_|Anoxybacillus_", species_tree_clado$tip.label, value = TRUE)
+
+	# Anoxy/Geobacillus tips used to extract the Anoxy/Geobacillus subclade. Transform to phylo4 object #
+	anoxy_geo_clado		<- drop.tip(species_tree_clado, setdiff(species_tree_clado$tip.label, clado_tips))
+	anoxy_geo_clado4	<- phylo4(anoxy_geo_clado)
+	clado4_relab		<- anoxy_geo_clado4
+	clado4_relab@label	<- sapply(clado4_relab@label, str_sub, -4, -1)
+
+	# For each groups, use the list of species to get the corresponding branches #
+	subgroup_branches <- vector(mode = "list")
+	for (group in subgroup.unique) {
+		# Species names as they appear in the Subspecies_geo_groups file #
+	    tips_in_subgroup <- as.vector(subgroup_only$Species[which(subgroup_only$Group == group)])
+	    # Corresponding species names in the Mowgli format - matching the species_tree_clado #
+	   	tips_in_subgroup <- lapply(tips_in_subgroup, function(tip) grep(tip, clado_tips, value = T))
+	   	# All the descendent nodes of the common ancestor of all the species in a particular group #
+	    descend_nodes <- as.vector(descendants(anoxy_geo_clado4, MRCA(anoxy_geo_clado4, tips_in_subgroup), "all"))
+	    # For each node, get the corresponding edges - format the edges as {ancestor descendent} - the same format as the input branch column in the long-distance HGT data #
+	    descend_edges <- lapply(descend_nodes, function(node) {	ancestor	<- ancestor(clado4_relab, node);
+	    														node_lab	<- labels(clado4_relab, type = c("all"))[node];
+	    														ance_lab	<- labels(clado4_relab, type = c("all"))[ancestor];
+	    														branch_lab	<- paste(ance_lab, node_lab, sep = " ")})
+	    # Add to list of subgroup branches #
+	    subgroup_branches <- c(subgroup_branches, descend_edges)
+	}
+	# Return a list data structure: the first element is a vector of the subgroup branches (edges), second element is the list of subgroup species, third element is the anoxy/geo tree in phylo4 format #
+	return(list(subgroup_branches = unlist(subgroup_branches), species = as.vector(subgroup_only$Species), clado_tree = anoxy_geo_clado4))
+}
+
+# Get per species data required to build HGT distribution over each assembled genome #
+combined_species_data	<- function(species = species, penalty = penalty, bandwith = bandwith, window = window, subgroup_data = subgroup_data, set_names = c("all", "const", "long", "vert", "short")) {
+	
+	## Get position data for the four sets: all genes; constant-predicted HGTs, long-distance HGTs, vertical genes ##
+	master_dir	<- paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty)
+
+	## Prepare output list for all_dfs. These contain the full data for each gene in each set in each species ##
+	all_dfs <- setNames(vector("list", length(set_names)), set_names)
+
+	# Read in the per-penalty positions for each species #
+	all_dfs <- mapply(function(all_dfs, i) 	{	directory <- paste0(master_dir, "/Per_species_", i, "/Full_entries/");
+												file_name <- paste0(directory, grep(species, dir(directory), value = T));
+												read_in_full_data(file_name)
+											},	all_dfs, names(all_dfs), SIMPLIFY = FALSE)
+
+	# Circularise the start positions #
+	all_dfs <- lapply(all_dfs, function(set) {	circ_coords <- circular(set$Rel_start * (2 * pi));
+												cbind(set, Circular_start = circ_coords)
+											})
+
+	# If we are separating by subgroup, subset the group and subgroup positions into two individual list elements #
+	if (length(grep(species, subgroup_data$species)) != 0) {
+		subgroup_index <- unlist(lapply(subgroup_data$subgroup_branches, function(edge) which(all_dfs$long$Receptor_node == edge)))
+		all_dfs$long_group		<- all_dfs$long[-subgroup_index,]
+		all_dfs$long_subgroup	<- all_dfs$long[subgroup_index,]
+	}
+
+	# Get circular densities #
+	densities <- lapply(all_dfs, function(set) density.circular(set$Circular_start, kernel = "vonmises", bw = bandwith))
+
+
+	## Process the GC enrichment data ##
+	## Requires reworking ##
+
+	gc_dir	<- paste0("/users/aesin/desktop/Geo_analysis/HGT_position/GC_content/Window_", window, "/")
+	gc_file	<- paste0(gc_dir, grep(species, dir(gc_dir), value = T))
+	gc_data	<- read.table(gc_file, header = F, sep = "\t")
+
+	colnames(gc_data)	<- c("Position", "GC_content")
+	gc_data$Circular	<- circular(gc_data$Position * (2 * pi))
+	gc_data$AT_content	<- (1 - gc_data$GC_content)
+
+	# Critical values are those where AT or GC richness > 2 * sd of dataset #
+	crit_val_gc	<- 2 * sd(gc_data$GC_content)
+	crit_val_at <- 2 * sd(gc_data$AT_content)
+
+	# Isolate all windows with AT > critical value #
+	high_gc		<- gc_data[which(gc_data$GC_content > (mean(gc_data$GC_content) + crit_val_gc)),]
+	high_at		<- gc_data[which(gc_data$AT_content > (mean(gc_data$AT_content) + crit_val_at)),]
+
+	nuc_densities		<- list(high_gc = density.circular(high_gc$Circular, kernel = "vonmises", bw = bandwith))
+	nuc_densities		<- c(nuc_densities, list(high_at = density.circular(high_at$Circular, kernel = "vonmises", bw = bandwith)))
+
+	## Get rrna gene positions ##
+	rrna_dir	<- "/Users/aesin/Desktop/Geo_analysis/HGT_position/Ribosmal_rna_locations/Relative_start/"
+	rrna_file	<- paste0(rrna_dir, grep(species, dir(rrna_dir), value = T))
+	rrna_data	<- read_in_rrna_data(rrna_file)
+	# Circularise #
+	rrna_data$Circular	<- circular(rrna_data$Position * (2 * pi))
+
+	## Combine all the data for export ##
+	combined_data <- list(species = species, penalty = penalty, all_dfs = all_dfs, densities = densities, nuc_densities = nuc_densities, rrna_data = rrna_data)
+	return(combined_data)
+}
+
+# Function to produce circular density plots per species #
+per_species_plot	<- function(species, hgt_penalty = "T5", ver_penalty = NULL, set = "long", bg = "all", sep.subgroup = FALSE, title_cex = 1.1) {
+
+	if (is.null(ver_penalty)) {
+		ver_penalty <- hgt_penalty
+	}
+
+	# Check the background is set correctly and set colours #
+	if (bg != "all" && bg != "const" && bg != "vert") {
+		message("Set can be one of \"all\", \"const\", or \"vert\"")
+		stop()
+	}
+	if (set == "long" || set == "long_group" || set == "long_subgroup") {
+		line_col <- rgb(0,1,0,0.5)
+	} else if (set == "const") {
+		line_col <- rgb(0,0.4,0,0.5)
+	} else if (set == "vert") {
+		line_col <- rgb(0,0,1,0.5)
+	} else {
+		message("Set can be one of \"long\", \"const\", or \"vert\"")
+		stop()
+	}
+
+	if (sep.subgroup) {
+		if (set == "long")					{separation_name = "All transfers"}
+		else if (set == "long_group")		{separation_name = "Intergroup transfers"}
+		else if (set == "long_subgroup")	{separation_name = "Subgroup transfers"}
+	}
+
+	# Plot shrink factors
+	shrink_factor_inner = 2.25
+	shrink_factor_outer = 1.3
+
+	## Get all the plotting data we will use here (for clarity) ##
+	# For genes
+	dens_all	<- per_penalty_data_list[[as.character(hgt_penalty)]][[as.character(species)]]$densities$all
+	dens_vert	<- per_penalty_data_list[[as.character(ver_penalty)]][[as.character(species)]]$densities$vert
+	dens_set	<- per_penalty_data_list[[as.character(hgt_penalty)]][[as.character(species)]]$densities[[as.character(set)]]
+	dens_bg		<- per_penalty_data_list[[as.character(hgt_penalty)]][[as.character(species)]]$densities[[as.character(bg)]] # If background is vertical, use the vertical penalty data
+	if (bg == "vert") {
+		dens_bg		<- per_penalty_data_list[[as.character(ver_penalty)]][[as.character(species)]]$densities[[as.character(bg)]]
+	}
+	# For nucleotide enrichment & rrna
+	nucl_dens	<- per_penalty_data_list[[as.character(hgt_penalty)]][[as.character(species)]]$nuc_densities
+	rrna_locs	<- per_penalty_data_list[[as.character(hgt_penalty)]][[as.character(species)]]$rrna_data$Circular
+
+	# Count the number of genes for which enrichment is plotted #
+	pos_num		<-length(per_penalty_data_list[[as.character(hgt_penalty)]][[as.character(species)]]$all_dfs[[as.character(set)]]$Circular_start)
+
+	## Plots ##
+	# Initialise the internal ring plot with with the high-AT data #
+
+	plot_nuc_dens <- plot(	nucl_dens$high_at,
+							tol = 0.05,
+							ylab = NA,
+							xlab = NA,
+							axes = F,
+							xlim = c(-1, 1),
+							ylim = c(-1, 1),
+							control.circle = circle.control(type = "n"),
+							points.plot = F,
+							nosort = T,
+							lwd = 2,
+							shrink = shrink_factor_inner,
+							col = "black",
+							zero = (pi/2),
+							rotation = "clock",
+							main = "")
+
+	# Add high-GC data #
+	lines(nucl_dens$high_gc, plot.info = plot_nuc_dens, shrink = shrink_factor_inner, lwd = 2, col = "chocolate1")
+
+	# 0 line  & axes #
+	lines(x = circular(seq(0, (2 * pi), length.out = 200)), y = rep(0, 200), plot.info = plot_nuc_dens, shrink = shrink_factor_inner, lwd = 1.5, col = "gray60")
+	axis.circular(at = NULL, labels = c("","", "",""), zero = (pi/2), rotation = "clock", template = "none", tcl = 0.12, tcl.text = -0.4, lwd = 2, tick = T)
+	
+	# Add rrna gene positions #
+	points(rrna_locs, plot.info = plot_nuc_dens, stack = T, sep = 0.1, pch = 16, cex = 1, col = "mediumvioletred", bins = 500)
+
+
+	par(new = TRUE)
+	# Initialise outer ring plot with the all gene density distribution #
+	circ_plot <- plot(	dens_all,
+						tol = 0.05,
+						ylab = NA,
+						xlab = NA,
+						axes = F,
+						xlim = c(-1, 1),
+						ylim = c(-1, 1),
+						control.circle = circle.control(type = "n"),
+						points.plot = F,
+						nosort = T, 
+						lwd = 1,
+						shrink = shrink_factor_outer,
+						col = "red", 
+						zero = (pi/2), 
+						rotation = "clock", 
+						main = "")
+
+	if (sep.subgroup == FALSE) {
+		title(main = paste0(species, "\nn = ", pos_num, "  HGT_T = ", hgt_penalty, " Ver_T = ", ver_penalty), cex.main = title_cex, line = 1)
+	} else {
+		subtitle	<- paste0(separation_name, " n = ", pos_num, "  HGT_T = ", hgt_penalty, " Ver_T = ", ver_penalty)
+		title(main = paste0(species, "\n", subtitle), cex.main = title_cex, line = -2)
+	}
+
+
+	# Plot the two lines - background and comparison #
+	bg_line <- lines(dens_bg, lwd = 1, shrink = shrink_factor_outer, col = "black", zero = (pi/2), rotation = "clock")
+	data_line <- lines(dens_set, lwd= 0, shrink = shrink_factor_outer, col = "white", zero = (pi/2), rotation = "clock")
+	
+	# If the background is not "all" gene dataset, plot the "all" dataset as a black line #
+	if (bg != "all") {
+		all_line <- lines(dens_all, lwd = 1.5, col = "black", shrink = shrink_factor_outer, zero = (pi/2), rotation = "clock")
+	}
+
+	# Only plot a seperate blue line for "vertical" genes if vertical is not being the set being compared to a background #
+	if (set != "vert" && bg == "all") {
+		vert_line <- lines(dens_vert, lwd = 2, col = "blue", shrink = shrink_factor_outer, zero = (pi/2), rotation = "clock")
+	}
+
+	# Produce polygons #
+	lapply(polyclip(A=list("x"=data_line$x, "y"=data_line$y), B=list("x"=bg_line$x, "y"=bg_line$y), op="minus"), polygon, col = line_col, border = line_col)
+	lapply(polyclip(B=list("x"=data_line$x, "y"=data_line$y), A=list("x"=bg_line$x, "y"=bg_line$y), op="minus"), polygon, col = rgb(1,0,0,0.5), border = rgb(1,0,0,0.5))
+
+	# Plot outer circle axes last #
+	axis.circular(at = NULL, labels = c("Ori", "", "Ter", ""), zero = (pi/2), rotation = "clock", template = "none", tcl = 0.12, tcl.text = -0.38, lwd = 2, tick = F, cex = 1.5)
+
+	pt <- recordPlot()
+	return(pt)
+}
+
+# Function to plot circular density plots for data combined across speies
+combined_plot <- function(hgt_penalty = "5", ver_penalty = NULL, set = "long", shrink = 1.4, title_cex = 1.2, title_elev = -2) {
+
+	# Set veritcal penalty if unset
+	if(is.null(ver_penalty)) {
+		ver_penalty <- hgt_penalty
+	}
+
+	# Convert penalty numerals to the character names in list
+	hgt_name	<- paste0("T", hgt_penalty)
+	ver_name	<- paste0("T", ver_penalty)
+
+	# Set plot titles
+	if (set != "vert") {
+		plot_name	<- paste0("Set:", set, "\nGenes n = ", length(per_penalty_combined_xsets[[as.character(hgt_name)]][[as.character(set)]]$circular_pos), "\nHGT_T = ", hgt_penalty, " Ver_T = ", ver_penalty)
+	} else {
+		plot_name	<- paste0("Set:", set, "\nGenes n = ", length(per_penalty_combined_xsets[[as.character(ver_name)]][[as.character(set)]]$circular_pos), "\nVer_T = ", ver_penalty)
+	}
+
+	# Set density variables used
+	dens_all	<- per_penalty_combined_xsets[[as.character(hgt_name)]]$all$density
+	dens_long	<- per_penalty_combined_xsets[[as.character(hgt_name)]][[as.character(set)]]$density
+	dens_vert	<- per_penalty_combined_xsets[[as.character(ver_name)]]$vert$density
+
+	## Plotting function
+	# Initialise
+	plot(	dens_all,
+			points.plot = F,
+			axes = F,
+			xlab = NA,
+			ylab = NA,
+			control.circle = circle.control(type = "n"),
+			nosort = T,
+			lwd = 2,
+			col = "white",
+			ylim = c(-1.1, 1.1),
+			plot.type = "circle",
+			zero = (pi/2),
+			rotation = "clock",
+			shrink = shrink,
+			main = ""
+	)
+	# Plot title and axes
+	title(main = plot_name, line = title_elev, cex.main = title_cex)
+	axis.circular(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi /2), template = "none", tcl = 0.12, tcl.text = 0.2)
+
+	# Density lines
+	all_line	<- lines(dens_all, lwd = 1.5, col = "black", zero = (pi/2), rotation = "clock", ylim = c(-1.1, 1.1))
+	long_line	<- lines(dens_long, lwd= 0, col = "white", zero = (pi/2), rotation = "clock", ylim = c(-1.1, 1.1))
+
+	# Enrichment polygons
+	lapply(polyclip(A=list("x"=long_line$x, "y"=long_line$y), B=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(0,1,0,0.5), border = rgb(0,1,0,0.5))
+	lapply(polyclip(B=list("x"=long_line$x, "y"=long_line$y), A=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(1,0,0,0.5), border = rgb(1,0,0,0.5))
+	
+	# Vertical line, if not vertical set being plotted
+	if (set != "vert") {
+		vert_line <- lines(dens_vert, lwd = 1.5, col = "blue", zero = (pi/2), rotation = "clock")
+	}
+
+	pt <- recordPlot()
+	return(pt)
+}
+
+# Calculate the range of genes in a gene family across the genome (maximum value is 0.5) #
+circular_range	<- function(positions) {
+	distance_range <- range(positions)[2] - range(positions)[1]
+	if (distance_range > 0.5) {
+		distance_range = 1 - distance_range
+	}
+	return(distance_range)
+}
+
+# Calculate the range of distances of genes to the origin in a gene family (hypothetical maximum is 0.5) #
+range_distances_to_ori	<- function(positions) {
+	modal_distance <- lapply(positions, function (x) if (x > 0.5) {1 - x} else {x})
+	if (length(positions) > 1) {
+		range	<- circular_range(modal_distance)	
+	} else {
+		range	<- unlist(modal_distance)
+	}
+	return(range)
+}
+
+# Plot vertical gene densities with dot positions #
+single_dens_pos_plot	<- function(circular_density, bg_density, circular_positions = NULL, name, shrink, point.colour = "black") {
+	plot(	circular_density,
+			points.plot = F,
+			axes = F,
+			xlab = NA,
+			ylab = NA,
+			control.circle = circle.control(type = "n"),
+			nosort = T,
+			lwd = 2,
+			col = "blue",
+			ylim = c (-1.1, 1.1),
+			plot.type = "circle",
+			zero = (pi/2),
+			rotation = "clock",
+			shrink = shrink,
+			main = "")
+	title(main = name, line = -2)
+	axis.circular(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi /2), template = "none", tcl = 0.12, tcl.text = 0.2, cex = 1)
+
+	if (!is.null(circular_positions)) {
+		points.circular(circular_positions, zero = (pi/2), rotation = "clock", stack = T, sep = 0.15, pch = 16, cex = .3, col = point.colour, bins = 500)
+	}
+	all_line <- lines(bg_density, shrink = shrink, lwd = 1.2, col = "black", zero = (pi/2), rotation = "clock")
+
+	pt <- recordPlot()
+	return(pt)
+}
+
+# Get Geobacillus genome sizes #
+geo_genome_sizes	<- function(genome_size_file = "/users/aesin/Desktop/Geo_analysis/Geo_omes/Genome_lengths.tsv") {
+	if(!file.exists(genome_size_file)) {
+		return("Provide a valid path to the genome size file")
+	}
+	genome_size_df <- read.table(genome_size_file, header = FALSE, sep = "\t")
+	names(genome_size_df) <- c("Species", "Size")
+	return(genome_size_df)
+}
+
+# Normalise gene start/end data across genomes and sets (all, vert, const, long) #
+normalise_positions <- function(species, hgt_penalty = "5", ver_penalty = NULL, normalised_size, set_names)	{
+
+	if(is.null(ver_penalty)) {
+		ver_penalty <- hgt_penalty
+	}
+
+	hgt_name	<- paste0("T", hgt_penalty)
+	ver_name	<- paste0("T", ver_penalty)
+
+	norm_pos_dfs <- setNames(vector("list", length(set_names)), set_names)
+
+	norm_pos_dfs <- mapply(function(norm_pos_dfs, set) 	{	
+		genome_size	<- genome_size_tbl$Size[genome_size_tbl$Species == species]
+		# If we want the vertical data, extract it at the vertical penalty
+		if (set == "vert") {
+			position_df	<- subset(per_penalty_data_list[[as.character(ver_name)]][[as.character(species)]]$all_dfs[[as.character(set)]], select = c("Group", "Rel_start", "Rel_end"))
+
+		# If data exists for the set (e.g. for group/subgroup sets - if the species has been divided into such) - then extract the data
+		} else if (length(per_penalty_data_list[[as.character(hgt_name)]][[as.character(species)]]$all_dfs[[as.character(set)]]) > 0) {
+			position_df	<- subset(per_penalty_data_list[[as.character(hgt_name)]][[as.character(species)]]$all_dfs[[as.character(set)]], select = c("Group", "Rel_start", "Rel_end"))
+
+		# If the data doesn't exists and the set is long_group, add the data from the long set. By definition, if there is no group/subgroup division for a species all transfers are in the group set
+		} else if (set == "long_group") {
+			position_df	<- subset(per_penalty_data_list[[as.character(hgt_name)]][[as.character(species)]]$all_dfs$long, select = c("Group", "Rel_start", "Rel_end"))
+		
+		# Otherwise return an empty list element
+		} else {
+			return(NULL)
+		}
+		normal_df	<- cbind(Group = position_df[,1], round(position_df[,2:3] * normalised_size, digits = 0))
+
+	}, norm_pos_dfs, names(norm_pos_dfs), SIMPLIFY = FALSE)
+	return(list(norm_dfs = norm_pos_dfs))
+}
+
+# A modified version of collate_across_species_norm to allow for missing data
+collate_across_species_norm	<- function(set, species_l, group_list) {
+
+	per_group_positions		<- lapply(group_list, function(group) {
+		group_species_pos	<- lapply(species_l, function(species) {
+			ref_tbl	<- combined_norm_pos_data[[as.character(species)]]$norm_dfs[[as.character(set)]]
+			# If the table doesn't exist, e.g. for this species there is no "long_subgroup" division, return empty DF
+			if (is.null(ref_tbl)) {
+				return(data.frame(START = numeric(), END = numeric()))
+			}
+			df		<- ref_tbl[ref_tbl$Group == group,]
+			names(df)[2:3] <- c("START", "END")
+			return(df[,2:3])
+		})
+		names(group_species_pos)	<- assembled_species_l
+		present_group_species_pos	<- group_species_pos[lapply(group_species_pos, nrow) > 0]
+
+		keystone_spe	<- names(present_group_species_pos[1])
+		keystone_pos	<- cbind(Species = keystone_spe, present_group_species_pos[[as.character(keystone_spe)]][1,])
+
+		return(list(keystone = keystone_pos, pos_data = present_group_species_pos))
+	})
+	names(per_group_positions) <- group_list
+	return(per_group_positions)
+}
+
+circos_pairwise_data_list	<- function(group_pos_list, solo_plot = FALSE) {
+
+	output_list	<- lapply(group_pos_list, function(group) {
+		# If there's only one species (tip) involved in the transfer, we skip it as no connecting link can be made #
+		if(length(group$pos_data) == 1 && solo_plot == FALSE) {return()}
+
+		key_position <- group$keystone
+		pairwise_per_group	<- lapply(seq_along(group$pos_data), function(pos_tbl_index) {
+			# If this is the first set of coords in this group, we remove them because it would be identical to the key position #
+			if (pos_tbl_index == 1 && solo_plot == FALSE) {
+				pos_tbl	<- group$pos_data[[pos_tbl_index]][-1,]
+			} else {
+				pos_tbl	<- group$pos_data[[pos_tbl_index]]
+			}
+			if(nrow(pos_tbl) > 0) {
+				pairwise_per_spec	<- lapply(1:nrow(pos_tbl), function(row_index) {
+					return(data.frame(Chromosome = 1, chromStart = key_position$START, chromEND = key_position$END, Chromosome.1 = 1, chromStart.1 = pos_tbl[row_index, 1], chromEnd.1 = pos_tbl[row_index, 2]))
+				})
+				return(do.call(rbind.data.frame, pairwise_per_spec))
+			} else {
+				return(NULL)
+			}
+		})
+		names(pairwise_per_group)	<- names(group$pos_data)
+		merged_pairwise_df	<- do.call(rbind.data.frame, c(pairwise_per_group[lapply(pairwise_per_group, length) > 0], make.row.names = FALSE))
+		return(list(Keystone = group$keystone, Per_species_pairwise = pairwise_per_group, Merged_pairwise = merged_pairwise_df))
+	})
+	return(output_list)	
+}
+
+# Make link dataframe for input to circos linkplot. Input is a list data structure output from circos_pairwise_data_list function #
+circos_pairwise_link <- function(pairwise_data_list) {
+	pairwise_df_list <- lapply(pairwise_data_list, function(group) {
+		return(group$Merged_pairwise)
+	})
+	return(do.call(rbind.data.frame, c(pairwise_df_list, make.row.names = FALSE)))
+}
+
+# Plot linked gene positions on bacterial chromosome #
+circos_link_plot <- function(link_data, chrom_pad = NULL, title = NULL, linewidth = 0.2, title_cex = 1) {
+	bact_ideogram <- data.frame(Chromosome = 1, ChromStart = 0, ChromEnd = 5000000, band = 1, stain = "acen")
+	RCircos.Set.Core.Components(cyto.info = bact_ideogram, chr.exclude = NULL, tracks.inside = 1, tracks.outside = 0)
+
+	rcircos.params	<- RCircos.Get.Plot.Parameters()
+	rcircos.params$base.per.unit	<- 300
+	RCircos.Reset.Plot.Parameters(rcircos.params)
+	if (!is.null(chrom_pad)) {
+		rcircos.params$chrom.paddings	<- 300
+		RCircos.Reset.Plot.Parameters(rcircos.params)
+	}
+	rcircos.cyto	<- RCircos.Get.Plot.Ideogram()
+	rcircos.cyto$BandColor	<- "grey80"
+	RCircos.Reset.Plot.Ideogram(rcircos.cyto)
+
+	# RCircos.Set.Plot.Area()
+	plot.new()
+	par(mai = rep(0, 4))
+	plot.window(c(-1.5, 1.5), c(-1.5, 1.5))
+
+	# RCircos.Set.Plot.Area(margins = 0)
+	# par(omi = rep(0, 4))
+	# warning(rcircos.params$plot.radius)
+	RCircos.Draw.Chromosome.Ideogram()
+	RCircos.Highligh.Chromosome.Ideogram()
+	RCircos.Link.Plot(link_data, track.num = 1, is.sorted = FALSE, lineWidth = rep(linewidth, nrow(link_data)))
+	if (!is.null(title)) {
+		title(main = title, line = -1, cex.main = title_cex)
+	}
+}
+
+average_distance2ori	<- function(hgt_penalty = "T5", ver_penalty = NULL, set = "long") {
+
+	if(is.null(ver_penalty)) {
+		penalty	<- hgt_penalty
+	} else {
+		penalty	<- ver_penalty
+	}
+
+	genes	<- per_penalty_combined_xsets[[as.character(penalty)]][[as.character(set)]]$cross_set_data[,c("Group","Rel_start")]
+
+	distance_2ori_l	<- apply(genes, 1, function(gene) {
+		if (gene[2] > 0.5) mod <- 1 - gene[2] else mod <- gene[2]
+		output	<- c(gene, mod)
+		return(output)
+	})
+	distance_2ori_df	<- data.frame(t(distance_2ori_l))
+	names(distance_2ori_df)	<- c("Group", "Rel_start", "Mod_dist")
+	return(distance_2ori_df)
+}
+
+byposition_COGs	<- function(subdivs, set = "long") {
+
+	bysubdiv_data	<- lapply(1:length(subdivs), function(index) {
+
+		subdiv		<- subdivs[[index]]
+		subdiv_name	<- names(subdivs[index])
+
+		subdiv_cog_data	<- cog_data[[as.character(set)]]$cog_full_df[cog_data[[as.character(set)]]$cog_full_df$Mod_dist >= subdiv[1] & cog_data[[as.character(set)]]$cog_full_df$Mod_dist <= subdiv[2],]
+
+		bysubdiv_raw_COGs		<- subdiv_cog_data$COG[subdiv_cog_data$COG != "-"]
+
+		bysubdiv_cog_tab	<- data.frame(table(unlist(bysubdiv_raw_COGs)))
+		bysubdiv_cog_tab$Fract	<- bysubdiv_cog_tab$Freq / sum(bysubdiv_cog_tab$Freq)
+		names(bysubdiv_cog_tab)	<- c("COG", paste0("Freq_", subdiv_name), paste0("Fract_", subdiv_name))
+
+		return(list(data = subdiv_cog_data, cog_tab = bysubdiv_cog_tab))
+	})
+	subdiv_cog_tabs			<- lapply(bysubdiv_data, function(subdiv) return(subdiv$cog_tab))
+	reduced_subdiv_tabs		<- Reduce(function(df1, df2) full_join(df1, df2, by = "COG"), subdiv_cog_tabs)
+	reduced_subdiv_tabs[is.na(reduced_subdiv_tabs)] <- 0
+
+	return(list(full_data = bysubdiv_data, tab_df = reduced_subdiv_tabs))
+}
+
+```
+
+## 1. HGT density and separation by subgroup {.tabset .tabset-fade}
+### 1. Per-species HGT density plots
+List of the the assembled _Geobacillus_ genomes
+```{r per_spec_hgt_dens_all, warning = FALSE, message = FALSE, cache = TRUE}
+
+# Set the global penalty variables. We will read in data for all penalties (over penalty_l) - we can then select separate HGT and vertical penalties for which to get data #
+penalty_l	<- list("3", "4", "5", "6")
+HGT_penalty	<- "5"
+VER_penalty	<- "3"
+
+# Process the penalty names to be used for table subsetting downstream #
+HGT_name	<- paste0("T", HGT_penalty)
+ver_name	<- paste0("T", VER_penalty)
+
+# Get assembled species as list #
+assembled_species_l <- as.character(read.table("/users/aesin/desktop/Geo_analysis/HGT_position/assembled_geo.tsv", header = F, sep = "\n")$V1)
+print(assembled_species_l)
+
+# Get subgroup information #
+subgroup_data <- get_subgroup_branches()
+
+# Set the window size (gc-content) and bandwith (circular density) options #
+window_size	= 500
+bandwith 	= 400
+
+# Prepare list to hold all the data #
+per_penalty_data_list	<- lapply(penalty_l, function(penalty) {
+	per_species_data_list <- lapply(assembled_species_l, function(species) combined_species_data(species = species, penalty = penalty, bandwith = bandwith, window = window_size, subgroup_data = subgroup_data))
+	names(per_species_data_list) <- assembled_species_l
+	return(per_species_data_list)
+})
+names(per_penalty_data_list) <- lapply(penalty_l, function(penalty) paste0("T", penalty))
+```
+
+
+Per-species plots showing the HGT density enrichment <span style="color:mediumseagreen">(green)</span> across the bacterial genome. Areas depleted in HGTs are coloured in <span style="color:red">red</span>.
+```{r plot_per_species, warning = FALSE, message = FALSE, cache = TRUE, fig.width = 12, fig.height = 9, dev = 'png'}
+# Prepare the plotting device #
+par(mfrow = c(3, 4))
+par(mar = c(2, 0, 4, 0), oma = c(0, 0, 1, 0))
+
+# Write output to variable to hold any output text #
+temp <- lapply(assembled_species_l, function(species) {
+	species_plot <- per_species_plot(
+		species			= species,
+		hgt_penalty		= HGT_name,
+		ver_penalty		= ver_name,
+		set				= "long",
+		bg				= "all"
+	)
+	replayPlot(species_plot)
+})
+
+# Remove output #
+rm(temp)
+```
+
+### 2. Per-species by subgroup
+```{r find_labelled_tree, warning = FALSE, message = FALSE, cache = TRUE}
+path_to_labelled_tree <- "/Users/aesin/Desktop/Geo_analysis/New_geobacillus_consensus/Correlation/Figures/tree_for_correlations-1.png"
+if (file.exists(path_to_labelled_tree)) {
+	knitr::include_graphics(path_to_labelled_tree)
+}
+```
+
+```{r plot_overall, warning = FALSE, message = FALSE, cache = TRUE, fig.width = 10, fig.height = 5, dev = 'png'}
+## There are 9 species that are assembled and also part of subgroups ##
+cat(paste0("There are ", length(which(lapply(assembled_species_l, function(species) any(subgroup_data$species == species)) == TRUE))), "species that are assembled and also belong to subgroups")
+
+# Define the subsets of transfer to plot #
+plot_sets <- list("long", "long_group", "long_subgroup")
+
+temp	<- lapply(subgroup_data$species, function(species) {
+
+	if (any(assembled_species_l == species) == FALSE) {return("done")}
+	
+	par(mfrow = c(1, 3), mar = c(0, 0, 1, 0), oma = c(0, 0, 1, 0))
+	temp2	<- lapply(plot_sets, function(plot_set) {
+		density_plot <- per_species_plot(
+			species			= species,
+			hgt_penalty		= HGT_name,
+			ver_penalty		= ver_name,
+			set				= plot_set,
+			bg				= "all",
+			sep.subgroup	= TRUE,
+			title_cex		= 1
+		)
+		replayPlot(density_plot)
+	})
+	three_plots <- recordPlot()
+	replayPlot(three_plots)
+	return("done")
+})
+rm(temp)
+```
+
+### 3. All species combined
+```{r combine_data_across_sets, message = FALSE, warning = FALSE, cache = TRUE}
+
+# Define the sets for which we combine data across species
+combine_sets	<- list("all", "vert", "const", "long", "long_group", "long_subgroup", "short")
+
+# Set the penalty  and bandwith options
+bandwith = 2000
+per_penalty_combined_xsets	<- lapply(penalty_l, function (penalty) {
+
+	penalty_name	<- paste0("T", penalty)
+
+	combined_across_sets	<- lapply(combine_sets, function (set)	{
+		# For each set, get the relative starts per species. If the set is long_group, we must include the full long HGT set for those species that don't have subgroup branches
+		across_species_data_l	<- lapply(assembled_species_l, function(species) {
+
+			if (length(per_penalty_data_list[[as.character(penalty_name)]][[as.character(species)]]$all_dfs[[as.character(set)]]$Rel_start) > 0) {
+				temp_tbl <- per_penalty_data_list[[as.character(penalty_name)]][[as.character(species)]]$all_dfs[[as.character(set)]]
+				return(temp_tbl)
+			} else if (set == "long_group") {
+				temp_tbl <- per_penalty_data_list[[as.character(penalty_name)]][[as.character(species)]]$all_dfs$long;
+				return(temp_tbl)
+			}	
+		})
+		across_species_data_df <- do.call(rbind.data.frame, across_species_data_l)
+
+		# Unlist and circularise. Calculate density
+		per_set_circular	<- circular(across_species_data_df$Rel_start * (2 * pi))
+		per_set_density		<- density.circular(per_set_circular, kernel = "vonmises", bw = bandwith)
+		return(list(cross_set_data = across_species_data_df, circular_pos = per_set_circular, density = per_set_density))
+	})
+	names(combined_across_sets) <- combine_sets
+	return(combined_across_sets)
+
+})
+names(per_penalty_combined_xsets) <- lapply(penalty_l, function(penalty) paste0("T", penalty))
+
+```
+
+Compare the vertical, long and short-distance HGT densities. Then also separate by either transfers into subgroups or more diverged branches (groups).
+```{r plot_combined_main, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 6, dev = 'png'}
+
+main_plot_sets	<- list("vert", "long", "short")
+sub_plot_set	<- list("long_group", "long_subgroup")
+
+# Plot parameters for main densities plots														
+par(mfrow = c(1, 3), mar = c(1, 0, 1, 0), oma = c(0, 0, 1, 0))
+temp	<- lapply(main_plot_sets, function(set) {
+	set_plot	<- combined_plot(
+		hgt_penalty	<- "5",
+		ver_penalty	<- "3",
+		set			<- set,
+		title_cex	= 1.4,
+		title_elev	= -4
+	)
+	replayPlot(set_plot)
+})
+
+# devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Long_density.svg", height = 10, width = 10)
+
+temp <- combined_plot(
+		hgt_penalty	<- "5",
+		ver_penalty	<- "3",
+		set			<- "long",
+		)
+replayPlot(temp)
+# dev.off()
+
+```
+```{r plot_combined_sub, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 6, dev = 'png'}
+par(mfrow = c(1, 2), mar = c(1, 0, 1, 0), oma = c(0, 0, 1, 0))
+
+temp	<- lapply(sub_plot_set, function(set) {
+	set_plot	<- combined_plot(
+		hgt_penalty	<- "5",
+		ver_penalty	<- "3",
+		set			<- set,
+		title_cex	= 1,
+		title_elev	= -2
+	)
+	replayPlot(set_plot)
+})
+
+# devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Group_density.svg", height = 10, width = 10)
+
+temp <- combined_plot(
+		hgt_penalty	<- "5",
+		ver_penalty	<- "3",
+		set			<- "long_group",
+		)
+replayPlot(temp)
+# dev.off()
+
+# devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Subroup_density.svg", height = 10, width = 10)
+
+temp <- combined_plot(
+		hgt_penalty	<- "5",
+		ver_penalty	<- "3",
+		set			<- "long_subgroup",
+		)
+replayPlot(temp)
+# dev.off()
+
+```
+
+## 2. Location and movement of vertically inherited genes {.tabset .tabset-fade}
+### 1. Distribution of vertical genes {#sect2.1}
+Take only those vertical groups that have 12 gene entries (one per fully assembled genome). Calculate the range of the genes in each gene family - a large range indicates that orthologues have moved around the genome. We work with the most conservative prediction of vertical genes - consistent transfers from T3 (i.e. consistent over penalties 6, 5, 4 & 3 with 3 being the least permissive).
+```{r vertical_one_per_genome, message = FALSE, warning = FALSE, cache = TRUE}
+
+unique_vert_groups	<- unique(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group)
+
+vert_groups_all_assembled	<- lapply(unique_vert_groups, function(group) {
+	one2one_orth <- unlist(lapply(assembled_species_l, function(species) {
+		# Check group is present in the vertical gene set of the species #
+		presence <- per_penalty_data_list[[as.character(ver_name)]][[as.character(species)]]$all_dfs$vert$Group %in% group
+		# If present, and only once, return TRUE, else FALE #
+		if (sum(presence, na.rm = TRUE) == 1) {return(TRUE)} else {return(FALSE)}
+	}))
+	return(data.frame(Group = group, One2one_Ortholog =  all(one2one_orth)))
+})
+vert_groups_all_assembled	<- do.call(rbind.data.frame, vert_groups_all_assembled)
+vert_groups_one2one_orth	<- vert_groups_all_assembled$Group[vert_groups_all_assembled$One2one_Ortholog == TRUE]
+
+print(paste0("Out of ", length(unique_vert_groups), " vertical groups ", length(vert_groups_one2one_orth), " groups are made up of 1:1 orthologs."))
+
+distance_ranges		<- lapply(vert_groups_one2one_orth, function(group) c(group, circular_range(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Rel_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group == group])))
+distance_ranges_df	<- do.call(rbind.data.frame, distance_ranges)
+names(distance_ranges_df) <- c("Group", "Range")
+
+# Distance of ranges #
+plot(logspline(distance_ranges_df$Range), xlab = "Maximum distance between genes within a vertical gene family", ylab = "Density", main = "Density of gene distribution ranges")
+```
+
+
+### 2. Moving & unmoving gene families {#sect2.2}
+In the density plot [1. Distribution of vertical genes](#sect2.1) there is a clear division between subsets of vertical genes that either have a very low (almost 0) range of gene positions, and genes with a substantial range of gene positions. Here, we plot the density distributions of these two sets.
+```{r plot_moving_unmoving, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 9, dev = 'png'}
+
+# Only groups with ranges > 0.1. Putative inversions? #
+movement_df		<- distance_ranges_df[distance_ranges_df$Range >= 0.1,]
+# Only groups with ranges < 0.1. These don't move? #
+no_movement_df	<- distance_ranges_df[distance_ranges_df$Range <= 0.1,]
+
+# Extract circular position data for gene families with large ranges of gene positions (movement) or low ranges of gene positions (no movement) #
+movement_circular_pos	<- per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Circular_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group %in% movement_df$Group]
+no_move_circular_pos	<- per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Circular_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group %in% no_movement_df$Group]
+
+# Calculate circular densities for plotting #
+bandwith = 1000
+bg_density		<- density.circular(per_penalty_combined_xsets[[as.character(ver_name)]]$all$circular_pos, kernel = "vonmises", bw = bandwith)
+all_vert_dens	<- density.circular(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$circular_pos, kernel = "vonmises", bw = bandwith)
+movement_dens	<- density.circular(movement_circular_pos, kernel = "vonmises", bw = bandwith)
+no_move_dens	<- density.circular(no_move_circular_pos, kernel = "vonmises", bw = bandwith)
+
+# Replay plots onto gfx device #
+par(mfrow = c(1, 3))
+par(mar = c(1, 0, 1, 0), oma = c(0, 0, 1, 0))
+par(cex = 1)
+
+all_plot		<- single_dens_pos_plot(all_vert_dens, bg_density, shrink = 1.7, name = "All vertical genes")
+move_plot		<- single_dens_pos_plot(movement_dens, bg_density, shrink = 1.7, name = "Vertical families: high movement range")
+no_move_plot	<- single_dens_pos_plot(no_move_dens, bg_density, shrink = 1.7, name = "Vertical families: low movement range")
+```
+
+Here we normalise gene position data for all sets of genes (all, vertical, HGT(const), HGT(long)). We use the relative (to the Ori) position of each gene to give it a position in a hypothetical 5MB genome.
+```{r prep_normalised_distance_data, message = FALSE, warning = FALSE, cache = TRUE}
+genome_size_tbl	<- geo_genome_sizes()
+normalised_size	<- 5000000
+set_names	<- c("all", "vert", "const", "long", "short", "long_group", "long_subgroup")
+
+combined_norm_pos_data <- lapply(assembled_species_l, function(species) normalise_positions(species = species, hgt_penalty = 5, ver_penalty = 3, normalised_size = normalised_size, set_names = set_names))
+names(combined_norm_pos_data) <- assembled_species_l
+```
+
+
+### 3. "Unmoving" gene families do not rearrange
+In the density plot [1. Distribution of vertical genes](#sect2.1) a subset of gene families have very low ranges. These are either gene families in which genes have not moved around the genome, or have moved a very short distance (e.g. near the origin but some moved across the Ori/Ter axis) - see [2. Moving/unmoving genes](#sect2.2). If they have moved across the Ori/Ter axis, the mean position of these genes would be very different. If 0.01 = downstream of Ori and 0.99 = just upstream of Ori, then for genes in a gene family that has moved across the boundary mean position = ~0.5.
+
+```{r unmoving_genes, message = FALSE, warning = FALSE, cache = TRUE}
+# Only groups with ranges < 0.1#
+print(paste0("Out of ", length(vert_groups_one2one_orth), " vertical groups with 1:1 orthologs (12 genomes) - ", length(no_movement_df$Group), " show a range of less than 10% genome length. At vertical penalty = ", VER_penalty))
+
+# Calculate the mean positon of genes in gene families with a narrow position range (unmoving) #
+mean_position_per_group <- unlist(lapply(no_movement_df$Group, function(group) mean(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Rel_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group == group])))
+	
+```
+We do not see any gene families with a mean position between 0.1 and 0.9 indicating that 1: Gene families that are around the origin do not have genes both up and dowstream of the origin.
+
+We can also show this visually with a Circos plot. Each line represents a pairwise link between the _G. kaustophilus_ ortholog of that gene family and an ortholog in a second _Geobacillus_ genome. Thus for each gene family, there would be 11 lines.
+Critically, we see no lines intersecting the exaggerated origin - implying that vertical genes directly up or downstream do not invert around the origin.
+
+```{r plot_unmoving_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, dev = 'png'}
+
+no_move_collate		<- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = no_movement_df$Group)
+no_move_pairwise	<- circos_pairwise_data_list(no_move_collate)
+no_move_link		<- circos_pairwise_link(no_move_pairwise)
+
+# Plot #
+no_move_link_plot	<- circos_link_plot(no_move_link, chrom_pad = 300)
+```
+
+## 3. Vertical genes: moving {.tabset .tabset-fade}
+__Vertical gene families that move around the genome can be further subdivided by the nature of movement. By measuring the mean distance to the origin of every gene in each gene family, we can differentiate between symmetrical movement across the Ori-Ter axis (low average distance to origin) and all other rearrangements.__
+
+
+### 1. Average distance to origin
+```{r vert_average_ori_dist, message = FALSE, warning = FALSE, cache = TRUE}
+distances2ori	<- lapply(movement_df$Group, function(group) c(group, range_distances_to_ori(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Rel_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group == group])))
+distance2ori_df	<- do.call(rbind.data.frame, distances2ori)
+names(distance2ori_df)	<- c("Group", "Range")
+
+print(paste0("Total number of groups for which average distance to origin is measured: ", length(distance2ori_df$Group), " of a total of ", length(vert_groups_one2one_orth), " vertical groups with 1:1 orthologs in 12 genomes."))
+```
+
+Based on the plot below, we can subdivide the genes into three further sets: low dist to Ori (<0.05), quarter dist to origin (0.24-0.26), other dist to origin (>= 0.05, <= 0.24, >= 0.26).
+```{r plot_vert_average_ori_dist, message = FALSE, warning = FALSE, cache = TRUE}
+plot(logspline(distance2ori_df$Range), xlab = "Range of distances to origin between genes within a vertical gene family", ylab = "Density")
+abline(v = c(0.05, 0.24, 0.26), col = "red")
+```
+
+```{r subdivide_av_dist2ori, message = FALSE, warning = FALSE, cache = TRUE}
+
+low_dist2ori_groups		<- distance2ori_df$Group[distance2ori_df$Range < 0.05]
+low_dist2ori_circ_pos	<- per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Circular_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group %in% low_dist2ori_groups]
+low_dist2ori_dens		<- density.circular(low_dist2ori_circ_pos, kernel = "vonmises", bw = 400)
+
+quart_dist2ori_groups	<- distance2ori_df$Group[distance2ori_df$Range > 0.24 & distance2ori_df$Range < 0.26]
+quart_dist2ori_circ_pos	<- per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Circular_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group %in% quart_dist2ori_groups]
+quart_dist2ori_dens		<- density.circular(quart_dist2ori_circ_pos, kernel = "vonmises", bw = 400)
+
+other_dist2ori_groups	<- distance2ori_df$Group[distance2ori_df$Range >= 0.05 & distance2ori_df$Range <= 0.24 | distance2ori_df$Range >= 0.26]
+other_dist2ori_circ_pos	<- per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Circular_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group %in% other_dist2ori_groups]
+other_dist2ori_dens		<- density.circular(other_dist2ori_circ_pos, kernel = "vonmises", bw = 400)
+```
+
+Vertical gene density plots of the positions of genes in the subdivided gene families
+```{r plot_subdivide_av_dist2ori_dens, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 4, dev = 'png'}
+par(mfrow = c(1, 3))
+par(mai = rep(0.1, 4))
+par(omi = rep(0.1, 4))
+single_dens_pos_plot(circular_density = low_dist2ori_dens, bg_density, name = paste0("Low dist to Ori\n", length(low_dist2ori_groups)), shrink = 1.5)
+single_dens_pos_plot(circular_density = quart_dist2ori_dens, bg_density, name = paste0("Quarter dist to Ori\n", length(quart_dist2ori_groups)), shrink = 1.5)
+single_dens_pos_plot(circular_density = other_dist2ori_dens, bg_density, name = paste0("Other dist to Ori\n", length(other_dist2ori_groups)), shrink = 1.5)
+```
+
+### 2. Low dist to origin
+These are vertical gene families that have genes dispersed in a manner consistent with inversion(s) symmetrical along the Ori-Ter axis.
+
+```{r low_dist2ori, message = FALSE, warning = FALSE, cache = TRUE}
+all_species_vert_l 	<- lapply(assembled_species_l, function(species) subset(subset(per_penalty_data_list[[as.character(ver_name)]][[as.character(species)]]$all_dfs$vert, select = c("Group", "Rel_start", "Rel_end"))))
+names(all_species_vert_l)		<- assembled_species_l
+
+low_dist_species_pos_l		<- lapply(all_species_vert_l, function(row) {row[row$Group %in% low_dist2ori_groups,1:2]})
+low_dist2ori_species_pos_melt	<- melt(low_dist_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
+```
+
+```{r plot_low_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = 'png'}
+ggplot(low_dist2ori_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of Ori-Ter symmetric vertical genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r low_dist_circos_data, message = FALSE, warning = FALSE, cache = TRUE}
+low_dist2ori_collated	<- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = low_dist2ori_groups)
+low_dist2ori_pairwise	<- circos_pairwise_data_list(low_dist2ori_collated)
+low_dist2ori_link		<- circos_pairwise_link(low_dist2ori_pairwise)
+```
+
+```{r plot_low_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = 'png'}
+lowdist_link_plot	<- circos_link_plot(low_dist2ori_link)
+```
+
+
+### 3. Quarter dist to origin
+```{r quarter_dist2ori, message = FALSE, warning = FALSE, cache = TRUE}
+quart_dist_species_pos_l		<- lapply(all_species_vert_l, function(row) {row[row$Group %in% quart_dist2ori_groups,1:2]})
+quart_dist_species_pos_melt		<- melt(quart_dist_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
+```
+
+```{r plot_quart_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = 'png'}
+ggplot(quart_dist_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of quarter dist genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r quart_dist_circos_data, message = FALSE, warning = FALSE, cache = TRUE}
+quart_dist2ori_collated	<- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = quart_dist2ori_groups)
+quart_dist2ori_pairwise	<- circos_pairwise_data_list(quart_dist2ori_collated)
+quart_dist2ori_link		<- circos_pairwise_link(quart_dist2ori_pairwise)
+```
+
+```{r plot_quart_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = 'png'}
+quartdist_link_plot	<- circos_link_plot(quart_dist2ori_link)
+```
+
+### 4. Other dist to origin
+```{r other_dist2ori, message = FALSE, warning = FALSE, cache = TRUE}
+other_dist_species_pos_l		<- lapply(all_species_vert_l, function(row) {row[row$Group %in% other_dist2ori_groups,1:2]})
+other_dist_species_pos_melt		<- melt(other_dist_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
+```
+
+```{r plot_other_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = 'png'}
+ggplot(other_dist_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of other dist genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r other_dist_circos_data, message = FALSE, warning = FALSE, cache = TRUE}
+other_dist2ori_collated	<- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = other_dist2ori_groups)
+other_dist2ori_pairwise	<- circos_pairwise_data_list(other_dist2ori_collated)
+other_dist2ori_link		<- circos_pairwise_link(other_dist2ori_pairwise)
+```
+
+```{r plot_othert_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = 'png'}
+otherdist_link_plot	<- circos_link_plot(other_dist2ori_link)
+```
+
+
+### 5. Rearrangement towards origin
+The most interesting are genes that seem to have rearranged non-symmetrically ("other dist to origin") either into or away from the origin. We look at these in more detail.
+```{r other_near_ori, message = FALSE, warning = FALSE, cache = TRUE}
+other_dist_per_species_starts	<- sapply(as.character(other_dist2ori_groups), function(group) {
+	species_group_starts	<- lapply(all_species_vert_l, function(species) {
+		return(species$Rel_start[species$Group == group])
+	})
+	return(data.frame(Species = names(species_group_starts), Rel_pos = as.numeric(unlist(species_group_starts))))
+}, simplify = FALSE, USE.NAMES = TRUE)
+
+# Select just the ones near the origin
+any_genes_near_ori <- other_dist_per_species_starts[lapply(other_dist_per_species_starts, function(group) any(group$Rel_pos < 0.2 | group$Rel_pos > 0.8)) == TRUE]
+print(paste0(length(any_genes_near_ori), " groups have non-symmetric gene distribution with some genes near the origin"))
+
+other_near_ori_collated <- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = names(any_genes_near_ori))
+other_near_ori_pairwise	<- circos_pairwise_data_list(other_near_ori_collated)
+other_near_ori_link		<- circos_pairwise_link(other_near_ori_pairwise)
+```
+
+```{r plot_other_near_ori, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 7, fig.height = 7, out.width = '1000px', dev = 'png'}
+other_near_ori_plot	<- circos_link_plot(other_near_ori_link)
+```
+
+A lot of this signal is coming from a secondary large scale inversion. We can identify which organism this is by looking at the 'near origin' outlier in the relative positions of these groups.
+```{r outlier_genome_other, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 9, fig.height = 7, dev = 'png'}
+other_near_ori_species_pos_l	<- lapply(all_species_vert_l, function(row) {row[row$Group %in% names(any_genes_near_ori),1:2]})
+other_near_ori_species_pos_melt	<- melt(other_near_ori_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
+other_near_ori_species_pos_melt	<- other_near_ori_species_pos_melt[other_near_ori_species_pos_melt$value < 0.25,]
+
+ggplot(other_near_ori_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of genes non-symmetrically rearranging close to origin genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The major genome contributing to this signal is _Geobacillus sp. Y412MC61_. We can exclude all the groups that would otherwise be considered symmetrical inversions if not for Y412MC61.
+```{r remove_outlier_genome, message = FALSE, warning = FALSE, cache = TRUE}
+any_genes_near_ori_outlier_rem <- lapply(any_genes_near_ori, function(x) {x[!x$Species == "Geobacillus_sp_Y412MC61",]})
+
+new_distances2ori <- mapply(function(x, i) 	{
+	return(data.frame(Group = i, Dist2ori = range_distances_to_ori(x$Rel_pos)))
+},	any_genes_near_ori_outlier_rem, names(any_genes_near_ori_outlier_rem), SIMPLIFY = FALSE)
+new_distances2ori_df	<- do.call(rbind.data.frame, new_distances2ori)
+still_non_sym			<- as.character(new_distances2ori_df$Group[new_distances2ori_df$Dist2ori > 0.05])
+
+no_outlier_full_groups	<- any_genes_near_ori[as.character(still_non_sym)]
+print(paste0(length(no_outlier_full_groups), " groups still have non-symmetric gene distribution after removing the outlier genome"))
+other_near_ori_out_rem_collated <- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = names(no_outlier_full_groups))
+other_near_ori_out_rem_pairwise	<- circos_pairwise_data_list(other_near_ori_out_rem_collated)
+other_near_ori_out_rem_link		<- circos_pairwise_link(other_near_ori_out_rem_pairwise)
+```
+
+```{r plot_other_near_ori_outlier_rem, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, out.width = '1000px', dev = 'png'}
+grid_size <- c(ceiling(length(still_non_sym) / 3), 3)
+par(mfrow = grid_size)
+temp_out	<- lapply(seq_along(no_outlier_full_groups), function(i) {
+	other_near_ori_out_rem_collated <- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = names(no_outlier_full_groups)[[i]])
+	other_near_ori_out_rem_pairwise	<- circos_pairwise_data_list(other_near_ori_out_rem_collated)
+	other_near_ori_out_rem_link		<- circos_pairwise_link(other_near_ori_out_rem_pairwise)
+
+	other_near_ori_out_rem_plot	<- circos_link_plot(other_near_ori_out_rem_link, title = paste0("Group: ", names(no_outlier_full_groups)[[i]]), linewidth = 1.5)
+})
+```
+
+
+## 4. Location and movement of HGT genes {.tabset .tabset-fade}
+### 1. Long and short distance HGTs
+```{r long_and_short_data, message = FALSE, warning = FALSE, cache = TRUE}
+print(paste0("Working on transfers predicted consistently for penalty = ", HGT_penalty))
+
+x_species_HGT_data <- per_penalty_combined_xsets[[as.character(HGT_name)]]
+
+unique_lHGT_groups	<- unique(x_species_HGT_data$long$cross_set_data$Group)
+unique_sHGT_groups	<- unique(x_species_HGT_data$short$cross_set_data$Group)
+
+unique_lgrpHGT_groups	<- unique(x_species_HGT_data$long_group$cross_set_data$Group)
+unique_lsubHGT_groups	<- unique(x_species_HGT_data$long_subgroup$cross_set_data$Group)
+
+hgt_sets	<- list("long", "short", "long_group", "long_subgroup")
+hgt_link_data	<- lapply(hgt_sets, function(set) {
+	unique_set_groups	<- unique(x_species_HGT_data[[as.character(set)]]$cross_set_data$Group)
+
+	# Prepare link data
+	collated_data	<- collate_across_species_norm(set = set, group_list = unique_set_groups, species_l = assembled_species_l)
+	pairwise_data	<- circos_pairwise_data_list(collated_data, solo_plot = TRUE)
+	link_df			<- circos_pairwise_link(pairwise_data)
+
+	return(link_df)
+})
+names(hgt_link_data)	<- hgt_sets
+```
+
+```{r plot_long_short_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, dev = 'png'}
+par(mfrow = c(1,2))
+circos_link_plot(hgt_link_data$long, title = paste0("All long distance HGT gene families"))
+circos_link_plot(hgt_link_data$short, title = paste0("All short distance HGT gene families"))
+```
+
+###2. Group and subgroup transfers
+```{r plot_group_subgroup_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, dev = 'png'}
+par(mfrow = c(1,2))
+circos_link_plot(hgt_link_data$long_group, title = paste0("All long (group) distance HGT gene families"), title_cex = 0.8)
+circos_link_plot(hgt_link_data$long_subgroup, title = paste0("All long (subgroup) distance HGT gene families"), title_cex = 0.8)
+```
+
+
+
+
+
+
+
+
+///// NOT READY BELOW /////
+
+
+
+
+
+
+
+
+
+
+### READ IN FUNC COGS ###
+
+funct_annot_file	<- "/Users/aesin/desktop/Geo_analysis/Geo_ortholog_nucl/Functional_annotation/Group2COG_table.tsv"
+funct_annot_df		<- read.table(funct_annot_file, sep = "\t", header = TRUE)
+
+full_cog_list <- vector(mode = "list")
+for (group in funct_annot_df$Group) {
+	cog_cats <- as.character(funct_annot_df$COG_categories[funct_annot_df$Group == group])
+
+	if (str_count(cog_cats, " | ") > 0) {
+		cog_cats <- str_split(cog_cats, " | ")[[1]][c(1,3)];
+	}
+	for (cog in cog_cats) {
+		full_cog_list <- c(full_cog_list, list(c(group, cog)))
+	}
+}
+
+full_cog_df	<- data.frame(matrix(unlist(full_cog_list), nrow=length(full_cog_list), byrow = T), stringsAsFactors = FALSE)
+names(full_cog_df)	<- c("Group", "COG")
+
+
+
+distance_2ori_data	<- lapply(hgt_sets, function(set) average_distance2ori(hgt_penalty = HGT_name, set = set))
+names(distance_2ori_data)	<- hgt_sets
+distance_2ori_data$vert		<- average_distance2ori(ver_penalty = ver_name, set = "vert")
+
+par(mfrow = c(3,1))
+plot(logspline(distance_2ori_data$vert$Mod_dist), xlab = "Distribution of average distance of genes in Vertical families to origin", ylab = "Density", xlim = c(0, 0.5))
+abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
+plot(logspline(distance_2ori_data$long$Mod_dist), xlab = "Distribution of average distance of genes in lHGT families to origin", ylab = "Density", xlim = c(0, 0.5))
+abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
+plot(logspline(distance_2ori_data$short$Mod_dist), xlab = "Distribution of average distance of genes in sHGT families to origin", ylab = "Density", xlim = c(0, 0.5))
+abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
+
+par(mfrow = c(2,1))
+plot(logspline(distance_2ori_data$long_group$Mod_dist), xlab = "Distribution of average distance of genes in lHGT GROUP families to origin", ylab = "Density", xlim = c(0, 0.5))
+abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
+plot(logspline(distance_2ori_data$long_subgroup$Mod_dist), xlab = "Distribution of average distance of genes in lHGT SUBGROUP families to origin", ylab = "Density", xlim = c(0, 0.5))
+abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
+
+cog_data	<- lapply(1:length(distance_2ori_data), function(index) {
+
+	set			<- distance_2ori_data[[index]]
+	set_name	<- names(distance_2ori_data[index])
+	
+	HGT_cog_list <- apply(set, 1, function(entry) {
+		COG	<- full_cog_df$COG[full_cog_df$Group == entry[1]]
+
+		if (length(COG)	> 0) {
+			per_cog_data	<- lapply(COG, function(cog) {
+				return(data.frame(Group = entry[1], Rel_start = entry[2], Mod_dist = entry[3], COG = cog))
+			})
+			per_cog_df	<- do.call(bind_rows, per_cog_data)
+		} else {
+			per_cog_df	<- data.frame(Group = entry[1], Rel_start = entry[2], Mod_dist = entry[3], COG = "-")
+		}
+		return(per_cog_df)
+
+	})
+	HGT_cog_df	<- do.call(bind_rows, HGT_cog_list)
+	HGT_cog_df	<- HGT_cog_df[order(HGT_cog_df$Group),]
+
+	HGT_cog_tab	<- data.frame(table(HGT_cog_df$COG[HGT_cog_df$COG != "-"]))
+	HGT_cog_tab$Fract	<- HGT_cog_tab$Freq / sum(HGT_cog_tab$Freq)
+	names(HGT_cog_tab)	<- c("COG", paste0("Freq_", set_name), paste0("Fract_", set_name))
+
+	return(list(cog_full_df = HGT_cog_df, cog_tab = HGT_cog_tab))
+})
+names(cog_data)	<- names(distance_2ori_data)
+
+COG_tables	<- lapply(cog_data, function(set) {
+	return(set$cog_tab)
+})
+
+redu_COG_tabs		<- Reduce(function(df1, df2) full_join(df1, df2, by = "COG"), COG_tables)
+melt_COG_tabs		<- melt(redu_COG_tabs[,c(1,3,5,7,9,11)], id.vars = "COG")
+melt_COG_tabs[is.na(melt_COG_tabs)]	<- 0
+
+melt_COG_tabs_nOS	<- melt_COG_tabs[melt_COG_tabs$COG != "S",]
+
+ggplot(melt_COG_tabs, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of HGT genes belonging to COG")
+ggplot(melt_COG_tabs_nOS, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of HGT genes belonging to COG")
+
+
+
+
+# Long groupd close to ori & ter #
+subdivs	<- list(ori = c(0, 0.05), nearori = c(0.05, 0.15), farori = c(0.15, 0.25), farter = c(0.25, 0.35), nearter = c(0.35, 0.45), ter = c(0.45, 05))
+
+sets_bysubdiv	<- lapply(names(cog_data), function(set) {
+	subdiv_data	<- byposition_COGs(subdivs, set)
+})
+names(sets_bysubdiv)	<- names(cog_data)
+
+# Long group vs subgroup #
+
+melt_lHGT_subdiv		<- melt(sets_bysubdiv$long$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
+ggplot(melt_lHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of lHGT genes close to Ori or Ter")
+
+melt_lgrpHGT_subdiv		<- melt(sets_bysubdiv$long_group$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
+ggplot(melt_lgrpHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of GROUP lHGT genes close to Ori or Ter")
+
+melt_lsubHGT_subdiv		<- melt(sets_bysubdiv$long_subgroup$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
+ggplot(melt_lsubHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of SUBGROUP lHGT genes close to Ori or Ter")
+
+melt_vert_subdiv		<- melt(sets_bysubdiv$vert$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
+ggplot(melt_lsubHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of vertical genes close to Ori or Ter")
+
+
+
+cross_set_subdiv	<- lapply(names(cog_data), function(set) {
+	unique_cogs	<- unique(cog_data[[as.character(set)]]$cog_full_df$COG)
+
+	all_cog_subdiv	<- lapply(unique_cogs, function(cog) {
+		per_cog_per_subdiv	<- lapply(1:length(subdivs), function(index) {
+			subdiv		<- subdivs[[index]]
+			subdiv_name	<- names(subdivs[index])
+
+			subdiv_cog_data	<- cog_data[[as.character(set)]]$cog_full_df[cog_data[[as.character(set)]]$cog_full_df$COG == cog & cog_data[[as.character(set)]]$cog_full_df$Mod_dist >= subdiv[1] & cog_data[[as.character(set)]]$cog_full_df$Mod_dist <= subdiv[2],]
+			how_many		<- nrow(subdiv_cog_data)
+			return(how_many)
+		})
+
+		per_cog_per_subdiv_out	<- as.numeric(unlist(per_cog_per_subdiv))
+
+		per_cog_per_subdiv_row	<- data.frame(COG = cog, total = sum(per_cog_per_subdiv_out), matrix(per_cog_per_subdiv_out, ncol = length(subdivs)))
+		names(per_cog_per_subdiv_row)[3:ncol(per_cog_per_subdiv_row)]	<- names(subdivs)
+		return(per_cog_per_subdiv_row)
+	})
+
+	all_cog_subdiv_df	<- do.call(bind_rows, all_cog_subdiv)
+	all_cog_subdiv_fr	<- cbind(COG = all_cog_subdiv_df[,1], sweep(all_cog_subdiv_df[,-1:-2], 1, rowSums(all_cog_subdiv_df[,-1:-2]), "/"))
+	
+	melt_all_cog_subdiv_df	<- melt(all_cog_subdiv_df[,-2], id.vars = "COG")
+	melt_all_cog_subdiv_fr	<- melt(all_cog_subdiv_fr, id.vars = "COG")
+	melt_all_cog_subdiv_fr$raw	<- melt_all_cog_subdiv_df$value
+	melt_all_cog_subdiv_fr$set	<- rep(set, nrow(melt_all_cog_subdiv_fr))
+	# melt_no_S_subdiv_df		<- melt_all_cog_subdiv_df[melt_all_cog_subdiv_df$COG != "S",]
+	return(list(df_raw = all_cog_subdiv_df, df_fract = all_cog_subdiv_fr, melt_raw = melt_all_cog_subdiv_df, melt_fract = melt_all_cog_subdiv_fr))
+
+})
+names(cross_set_subdiv) <- names(cog_data)
+
+vert_long		<- rbind(cross_set_subdiv$vert$melt_fract, cross_set_subdiv$long$melt_fract)
+vert_long$set_f	<- factor(vert_long$set, levels = c("vert", "long"))
+
+vert_long_all	<- vert_long[vert_long$COG != "-",]
+vert_long_all$cog_f	<- factor(vert_long_all$COG, levels = c("S", "J", "K", "L", "B", "D", "V", "O", "T", "M", "N", "U", "Z", "C", "E", "F", "G", "H", "I", "P", "Q"))
+
+col_ramp <- brewer.pal(9,"RdYlBu")
+col_palette <- colorRampPalette(col_ramp[1:9])(6)
+
+# devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Long_vert_COG_bar.svg", height = 10, width = 10)
+
+ggplot(vert_long_all, aes(x = set_f, y = value, fill = variable, label = raw)) + geom_bar(stat = "identity") + geom_text(size = 3, position = position_stack(vjust = 0.5)) + ggtitle("Per cog distribution of genes over genome regions") + theme(plot.title = element_text(hjust = 0.5)) + facet_wrap(~cog_f, nrow = 3, ncol = 7) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_fill_manual(values = col_palette)
+
+# dev.off()
+
+## Long vert comparison with all groups having > 50 COGs assigned ##
+over_50_long	<- cog_data$long$cog_tab$COG[cog_data$long$cog_tab$Freq_long >= 20]
+over_50_vert	<- cog_data$vert$cog_tab$COG[cog_data$vert$cog_tab$Freq_vert >= 20]
+
+over_50_both	<- intersect(over_50_vert, over_50_long)
+as_input		<- dput(as.character(over_50_both))
+vert_long_50	<- vert_long_all[vert_long_all$COG %in% as_input,]
+vert_long_50$cog_f	<- factor(vert_long_50$COG, levels = as_input)
+
+ggplot(vert_long_50, aes(x = set_f, y = value, fill = variable, label = raw)) + geom_bar(stat = "identity") + geom_text(size = 3, position = position_stack(vjust = 0.5)) + ggtitle("Per cog distribution of genes over genome regions") + theme(plot.title = element_text(hjust = 0.5)) + facet_wrap(~cog_f, nrow = 3, ncol = 7) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_fill_manual(values = col_palette)
+
+over_20_unique_COGs	<- unique(vert_long_50$COG)
+
+## Group / subgroup comparison > 20 COGs assigned ##
+
+grp_sub		<- rbind(cross_set_subdiv$vert$melt_fract, cross_set_subdiv$long_group$melt_fract, cross_set_subdiv$long_subgroup$melt_fract)
+grp_sub$set_f	<- factor(grp_sub$set, levels = c("vert", "long_group", "long_subgroup"))
+
+grp_sub_all	<- grp_sub[grp_sub$COG != "-",]
+
+over_20_ver	<- cog_data$vert$cog_tab$COG[cog_data$vert$cog_tab$Freq_vert >= 10]
+over_20_grp	<- cog_data$long_group$cog_tab$COG[cog_data$long_group$cog_tab$Freq_long_group >= 10]
+over_20_sub	<- cog_data$long_subgroup$cog_tab$COG[cog_data$long_subgroup$cog_tab$Freq_long_subgroup >= 10]
+
+over_20_comb	<- Reduce(intersect, list(over_20_ver, over_20_grp, over_20_sub))
+as_input		<- dput(as.character(over_20_comb))
+grp_sub_20	<- grp_sub_all[grp_sub_all$COG %in% as_input,]
+grp_sub_20$cog_f	<- factor(grp_sub_20$COG, levels = as_input)
+
+ggplot(grp_sub_20, aes(x = set_f, y = value, fill = variable, label = raw)) + geom_bar(stat = "identity") + geom_text(size = 3, position = position_stack(vjust = 0.5)) + ggtitle("Per cog distribution of genes over genome regions") + theme(plot.title = element_text(hjust = 0.5)) + facet_wrap(~cog_f, nrow = 3, ncol = 7) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+## STATS ##
+
+for_fish_longvert <- merge(x = cross_set_subdiv$long$df_raw[,1:2], y = cross_set_subdiv$vert$df_raw[,1:2], by = "COG") 
+
+# Do not apply chisq over the "non-assigned" COG (row 1)
+chisq.test(for_fish_longvert[-1,2:3])
+
+# data:  for_fish_longvert[-1, 2:3]
+# X-squared = 1038, df = 18, p-value < 2.2e-16
+
+# Shared cogs long/vert
+long_ver_shared	<- intersect(cross_set_subdiv$long$df_raw$COG, cross_set_subdiv$vert$df_raw$COG)
+
+lapply(long_ver_shared, function(COG) {
+	bound	<- rbind(cross_set_subdiv$long$df_raw[cross_set_subdiv$long$df_raw$COG == COG,], cross_set_subdiv$vert$df_raw[cross_set_subdiv$vert$df_raw$COG == COG,])
+	for_fish 	<- bound[,-1:-2]
+	if (COG == "S") {
+		f <- chisq.test(for_fish)
+	} else {
+		f <- fisher.test(for_fish, workspace = 2e9)
+	}
+	print(bound)
+	print(f)
+	return(data.frame(COG = COG, f = f$p.value))
+})
+
+
+grp_sub_shared	<- intersect(cross_set_subdiv$long_group$df_raw$COG, cross_set_subdiv$long_subgroup$df_raw$COG)
+
+grp_sub_stat	<- lapply(grp_sub_shared, function(COG) {
+	bound	<- rbind(cross_set_subdiv$long_group$df_raw[cross_set_subdiv$long_group$df_raw$COG == COG,], cross_set_subdiv$long_subgroup$df_raw[cross_set_subdiv$long_subgroup$df_raw$COG == COG,])
+	for_fish 	<- bound[,-1:-2]
+	f <- fisher.test(for_fish, workspace = 2e9)
+	print(bound)
+	print(f)
+	return(data.frame(COG = COG, f = f$p.value))
+})
+
+
+
+## Clust long ##
+
+for_clust_long	<- cross_set_subdiv$long$df_raw[,-2]
+rownames(for_clust_long) <- for_clust_long[,1]
+for_clust_long <- for_clust_long[,-1]
+
+for_clust_long_fract	<- sweep(for_clust_long, 1, rowSums(for_clust_long), "/")
+for_clust_long_fract_out	<- for_clust_long_fract[rownames(for_clust_long_fract) %in% over_20_unique_COGs,]
+
+par(mfrow = c(2,2))
+
+plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "ward.D2"))
+plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "ward.D"))
+plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "complete"))
+plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "average"))
+
+vert_clust <- plot(as.phylo.hclust(hclust(dist(as.matrix(for_clust_vert_fract_out)), method = "ward.D2")))
+
+
+### vert ###
+for_clust_vert	<- cross_set_subdiv$vert$df_raw[,-2]
+rownames(for_clust_vert) <- for_clust_vert[,1]
+for_clust_vert <- for_clust_vert[,-1]
+
+for_clust_vert_fract	<- sweep(for_clust_vert, 1, rowSums(for_clust_vert), "/")
+for_clust_vert_fract_out	<- for_clust_vert_fract[!rownames(for_clust_vert_fract) %in% c("B", "-"),]
+
+plot(hclust(dist(as.matrix(for_clust_vert_fract_out)), method = "ward.D2"))
+
+vert_clust <- plot(as.phylo.hclust(hclust(dist(as.matrix(for_clust_vert_fract_out)), method = "ward.D2")))
+
+
+
+
+for (cog_1 in long_COGS) {
+	for (cog_2 in long_COGS) {
+		if (cog_1 == cog_2) {
+			next
+		}
+
+		cog_comp	<- rbind(cross_set_subdiv$long$df_raw[cross_set_subdiv$long$df_raw$COG == cog_1,], cross_set_subdiv$long$df_raw[cross_set_subdiv$long$df_raw$COG == cog_2,])
+		for_fish 	<- cog_comp[,-1:-2]
+
+		if (cog_1 == "S" || cog_2 == "S") {
+			f <- chisq.test(for_fish)
+		} else {
+			f <- fisher.test(for_fish, workspace = 2e9)
+		}
+
+
+
+	}
+}
+
+
+# ##### 5. Functional annotation
+```{r read_in_func_annot, message = FALSE, warning = FALSE, cache = TRUE}
+
+
+# COG frequency table for all genes #
+all_COG_tab	<- data.frame(table(full_cog_df$COG))
+all_COG_tab$Fract_all	<- all_COG_tab$Freq / sum(all_COG_tab$Freq)
+names(all_COG_tab)[1:2]	<- c("COG", "Freq_all")
+
+# COG frequency table for only vertical genes #
+vert_COG_tab <- data.frame(table(full_cog_df$COG[full_cog_df$Group %in% vert_groups_one2one_orth]))
+vert_COG_tab$Fract_vert	<- vert_COG_tab$Freq / sum(vert_COG_tab$Freq)
+names(vert_COG_tab)[1:2]	<- c("COG", "Freq_vert")
+
+# COG frequency table for non-mobile gene families #
+non_move_COG_tab	<- data.frame(table(full_cog_df$COG[full_cog_df$Group %in% no_movement_df$Group]))
+non_move_COG_tab$Fract_nonmove	<- non_move_COG_tab$Freq / sum(non_move_COG_tab$Freq)
+names(non_move_COG_tab)[1:2]	<- c("COG", "Freq_nonmove")
+
+# COG frequency for Ori-Ter symmetric mobile families # low_dist2ori_groups
+OTsym_move_COG_tab	<- data.frame(table(full_cog_df$COG[full_cog_df$Group %in% low_dist2ori_groups]))
+OTsym_move_COG_tab$Fract_OTsymmove	<- OTsym_move_COG_tab$Freq / sum(OTsym_move_COG_tab$Freq)
+names(OTsym_move_COG_tab)[1:2]	<- c("COG", "Freq_OTsymmove")
+
+# Add these to a list that will hold all the COG data #
+funct_list	<- list(all = all_COG_tab[order(-all_COG_tab$Fract_all),])
+funct_list	<- c(funct_list, list(vert = vert_COG_tab[order(-vert_COG_tab$Fract_vert),]))
+funct_list	<- c(funct_list, list(nonmove = non_move_COG_tab[order(-non_move_COG_tab$Fract_nonmove),]))
+funct_list	<- c(funct_list, list(OTsymmove = OTsym_move_COG_tab[order(-OTsym_move_COG_tab$Fract_OTsymmove),]))
+
+reduced_func_list	<- Reduce(function(df1, df2) full_join(df1, df2, by = "COG"), funct_list)
+melt_func_list		<- melt(reduced_func_list[,c(1,3,5,7,9)], id.vars = "COG")
+melt_func_list[is.na(melt_func_list)] <- 0
+
+ggplot(melt_func_list, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of vertical genes belonging to COG")
+# ```
+
+
+
+
+
+
+
+
+
+
+
