@@ -175,11 +175,12 @@ for (tree in input_trees) {
     }
     test_vector <- c(test_vector, new_label)
 
+
+
     ## Check whether the binomial label appears more than once, if so - number the binomial name accordingly. Otherwise, label the tip as _1 (otherwise Mowgli gets upset) ##
     multi_taxa <- length(grep(num_fix_label, test_vector))
-    new_label <- paste0(num_fix_label, "_", multi_taxa)
+    new_label <- paste0(num_fix_label, "-", multi_taxa)
       
-
     ## Rename the tip in the tree object ##
     tree_data$tip.label[n] <- new_label
 
@@ -192,6 +193,8 @@ for (tree in input_trees) {
         output_map <- str_c(output_map, "\n", paste0(num_fix_label, "_*", "\t", num_fix_label))
       }
     }
+    
+
     
   }
   if (mowgli_mp_root_switch == 1) {

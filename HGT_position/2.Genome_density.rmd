@@ -33,6 +33,7 @@ library(phangorn)
 library(geiger)
 
 # Other libraries #
+library(data.table)
 library(gtools)
 library(logspline)
 library(circular)
@@ -46,6 +47,8 @@ library(reshape2)
 library(dplyr)
 library(ggplot2)
 library(RCircos)
+library(gridExtra)
+library(ggpubr)
 
 # Replacing native ideogram plot so that we can shade the chromosome band without the need for actual band data #
 RCircos.Draw.Chromosome.Ideogram <- function(ideo.pos = NULL, ideo.width = NULL) {
@@ -125,6 +128,36 @@ RCircos.Link.Plot <- function(link.data = NULL, track.num = NULL, by.chromosome 
     }
 }
 assignInNamespace("RCircos.Link.Plot", RCircos.Link.Plot, "RCircos")
+
+# Fix the dist.circular function so it doesn't try to convert the values (already in 2pi radians) into radians (conversion.circular). Conversion.circular is broken as it can't actually read in the numeric values in the circular object (stupid), but our values are already in 2pi format
+dist.circular <- function (x, method = "correlation", diag = FALSE, upper = FALSE) {
+	# modulo = "2pi" removed from conversion.circular
+    x <- conversion.circular(x, units = "radians", zero = 0, 
+        rotation = "counter")
+    attr(x, "class") <- attr(x, "circularp") <- NULL
+    if (!is.na(pmatch(method, "correlation"))) 
+        method <- "correlation"
+    METHODS <- c("correlation", "angularseparation", "chord", 
+        "geodesic")
+    method <- pmatch(method, METHODS)
+    if (is.na(method)) 
+        stop("invalid distance method")
+    if (method == -1) 
+        stop("ambiguous distance method")
+    N <- nrow(x <- as.matrix(x))
+    d <- .C("R_distance", x = as.double(x), nr = N, nc = ncol(x), 
+        d = double(N * (N - 1)/2), diag = as.integer(FALSE), 
+        method = as.integer(method), NAOK = TRUE, PACKAGE = "circular")$d
+    attr(d, "Size") <- N
+    attr(d, "Labels") <- dimnames(x)[[1]]
+    attr(d, "Diag") <- diag
+    attr(d, "Upper") <- upper
+    attr(d, "method") <- METHODS[method]
+    attr(d, "call") <- match.call()
+    class(d) <- "dist"
+    return(d)
+}
+assignInNamespace("dist.circular", dist.circular, ns = "circular")
 ```
 
 ### Functions
@@ -197,8 +230,41 @@ get_subgroup_branches	<- function() {
 	return(list(subgroup_branches = unlist(subgroup_branches), species = as.vector(subgroup_only$Species), clado_tree = anoxy_geo_clado4))
 }
 
+# Get COG data #
+GetCOGData	<- function() {
+	emap_files	<- Sys.glob(file.path("/Users/aesin/Desktop/Geo_analysis/Geo_ortholog_nucl/Functional_annot/Output_annots", "*emapper.annotations"))
+	# We need to define each column, otherwise F COGs are read in as a logical
+	col_class	<- c("character", "character", "numeric", "numeric", "character", "character", "character", "character", "character", "character", "character", "character")
+
+	# A list containing the eggNOG annotation output for each group
+	group_tbls <- lapply(emap_files, function(file) {
+		group_name	<- str_extract(file, "[0-9]+")
+		annot_data	<- read.table(file, header = T, sep = "\t", colClasses = col_class)
+		# The group number is added as a seperate column
+		annot_data$Group	<- rep(group_name, nrow(annot_data))
+		return(annot_data)
+	})
+
+	# Make into a data table and set a key on the protein ID
+	full_cog_tbl <- data.table(bind_rows(group_tbls))
+	setkey(full_cog_tbl, query_name)
+
+	# Annotate mobile elements as a separate column
+	search_string	<- paste(c("transposase", "integrase", "transposon"), collapse = "|")
+	full_cog_tbl$mob_element	<- apply(full_cog_tbl, 1, function(row) {
+		# message(row)
+		if (length(grep(search_string, row[12], ignore.case = TRUE)) > 0) {
+			TRUE
+		} else {
+			FALSE
+		}
+	})
+
+	return(full_cog_tbl)
+}
+
 # Get per species data required to build HGT distribution over each assembled genome #
-combined_species_data	<- function(species = species, penalty = penalty, bandwith = bandwith, window = window, subgroup_data = subgroup_data, set_names = c("all", "const", "long", "vert", "short")) {
+combined_species_data	<- function(species = species, penalty = penalty, bandwith = bandwith, window = window, subgroup_data = subgroup_data, cog_data = cog_data, set_names = c("all", "const", "long", "vert", "short")) {
 	
 	## Get position data for the four sets: all genes; constant-predicted HGTs, long-distance HGTs, vertical genes ##
 	master_dir	<- paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty)
@@ -207,26 +273,50 @@ combined_species_data	<- function(species = species, penalty = penalty, bandwith
 	all_dfs <- setNames(vector("list", length(set_names)), set_names)
 
 	# Read in the per-penalty positions for each species #
-	all_dfs <- mapply(function(all_dfs, i) 	{	directory <- paste0(master_dir, "/Per_species_", i, "/Full_entries/");
-												file_name <- paste0(directory, grep(species, dir(directory), value = T));
+	all_dfs <- mapply(function(all_dfs, i) 	{	directory <- paste0(master_dir, "/Per_species_", i, "/Full_entries/")
+												file_name <- paste0(directory, grep(species, dir(directory), value = T))
 												read_in_full_data(file_name)
 											},	all_dfs, names(all_dfs), SIMPLIFY = FALSE)
 
 	# Circularise the start positions #
-	all_dfs <- lapply(all_dfs, function(set) {	circ_coords <- circular(set$Rel_start * (2 * pi));
-												cbind(set, Circular_start = circ_coords)
-											})
+	all_dfs <- lapply(all_dfs, function(set)	{	circ_coords <- circular(set$Rel_start * (2 * pi));
+													cbind(set, Circular_start = circ_coords)
+												})
+
+	# Add functional annotation to each protein entry #
+	cog_dfs	<- lapply(all_dfs, function(set) {
+
+		with_cog_l	<- apply(set, 1, function(row) {
+
+			cog_tbl_row	<- cog_data[.(row[2]), nomatch = 0L]
+
+			if (nrow(cog_tbl_row) == 0) {
+				new_cols	<- data.frame(COG = I(list("-")), NOG = I(list("-")), Prot_name = "-", Mobile_element = FALSE, stringsAsFactors = FALSE)
+			} else {
+				COGs		<- list(str_trim(unlist(str_split(cog_tbl_row$COG.cat, ","))))
+				NOGs		<- list(grep("@NOG", unlist(str_split(cog_tbl_row$OGs, ",")), value = TRUE))
+				
+				prot_name	<- cog_tbl_row$eggNOG.annot
+				mob_element	<- cog_tbl_row$mob_element
+
+				new_cols	<- data.frame(COG = I(COGs), NOG = I(NOGs), Prot_name = prot_name, Mobile_element = mob_element, stringsAsFactors = FALSE)
+			}
+			return(new_cols)
+		})
+		cog_cols <- bind_rows(with_cog_l)
+		return(data.frame(cbind(set, cog_cols)))
+	})
+	names(cog_dfs) <- names(all_dfs)
 
 	# If we are separating by subgroup, subset the group and subgroup positions into two individual list elements #
 	if (length(grep(species, subgroup_data$species)) != 0) {
-		subgroup_index <- unlist(lapply(subgroup_data$subgroup_branches, function(edge) which(all_dfs$long$Receptor_node == edge)))
-		all_dfs$long_group		<- all_dfs$long[-subgroup_index,]
-		all_dfs$long_subgroup	<- all_dfs$long[subgroup_index,]
+		subgroup_index <- unlist(lapply(subgroup_data$subgroup_branches, function(edge) which(cog_dfs$long$Receptor_node == edge)))
+		cog_dfs$long_group		<- cog_dfs$long[-subgroup_index,]
+		cog_dfs$long_subgroup	<- cog_dfs$long[subgroup_index,]
 	}
 
 	# Get circular densities #
-	densities <- lapply(all_dfs, function(set) density.circular(set$Circular_start, kernel = "vonmises", bw = bandwith))
-
+	densities <- lapply(cog_dfs, function(set) density.circular(set$Circular_start, kernel = "vonmises", bw = bandwith))
 
 	## Process the GC enrichment data ##
 	## Requires reworking ##
@@ -258,7 +348,7 @@ combined_species_data	<- function(species = species, penalty = penalty, bandwith
 	rrna_data$Circular	<- circular(rrna_data$Position * (2 * pi))
 
 	## Combine all the data for export ##
-	combined_data <- list(species = species, penalty = penalty, all_dfs = all_dfs, densities = densities, nuc_densities = nuc_densities, rrna_data = rrna_data)
+	combined_data <- list(species = species, penalty = penalty, all_dfs = cog_dfs, densities = densities, nuc_densities = nuc_densities, rrna_data = rrna_data)
 	return(combined_data)
 }
 
@@ -656,15 +746,24 @@ average_distance2ori	<- function(hgt_penalty = "T5", ver_penalty = NULL, set = "
 		penalty	<- ver_penalty
 	}
 
-	genes	<- per_penalty_combined_xsets[[as.character(penalty)]][[as.character(set)]]$cross_set_data[,c("Group","Rel_start")]
+	genes	<- per_penalty_combined_xsets[[as.character(penalty)]][[as.character(set)]]$cross_set_data[,c("Full_protID", "Group", "Rel_start", "Circular_start")]
+	genes$Rel_start	<- as.numeric(genes$Rel_start)
 
 	distance_2ori_l	<- apply(genes, 1, function(gene) {
-		if (gene[2] > 0.5) mod <- 1 - gene[2] else mod <- gene[2]
+		start <- as.numeric(gene[3])
+
+		if (start > 0.5) {
+			mod = 1 - start}
+		else {
+			mod = start
+		}
+
 		output	<- c(gene, mod)
 		return(output)
 	})
-	distance_2ori_df	<- data.frame(t(distance_2ori_l))
-	names(distance_2ori_df)	<- c("Group", "Rel_start", "Mod_dist")
+
+	distance_2ori_df	<- data.frame(t(distance_2ori_l), stringsAsFactors = FALSE)
+	names(distance_2ori_df)	<- c("Full_proteinID", "Group", "Rel_start", "Circular_start", "Mod_dist")
 	return(distance_2ori_df)
 }
 
@@ -692,6 +791,99 @@ byposition_COGs	<- function(subdivs, set = "long") {
 	return(list(full_data = bysubdiv_data, tab_df = reduced_subdiv_tabs))
 }
 
+FunctionalEnrichmentBetweenSets	<- function(set_1, set_2, mobile_exclude = FALSE) {
+
+	prop_table_list	<- lapply(penalty_l, function(penalty) {
+		penalty_name	<- paste0("T", penalty)
+
+		if (!mobile_exclude) {
+			set1_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$COG)))[-1,]
+			set2_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$COG)))[-1,]
+		} else {
+			set1_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$Mobile_element == FALSE])))[-1,]
+			set2_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$Mobile_element == FALSE])))[-1,]
+
+			set1_df <- rbind(set1_df, data.frame(Var1 = "W", Freq = length(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$Mobile_element == TRUE]))))
+			set2_df <- rbind(set2_df, data.frame(Var1 = "W", Freq = length(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$Mobile_element == TRUE]))))
+
+			rownames(set1_df) <- NULL
+			rownames(set2_df) <- NULL
+		}
+
+		table_l <- lapply(list(set1_df, set2_df), function(table) {
+			names(table) <- c("COG", "Freq")
+			table$Fraction	<- table$Freq / sum(table$Freq)
+			return(table)
+		})
+
+		merged <- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), table_l)
+
+		prop_table	<- as.data.frame(bind_cols(COG = merged[,1], Prop = (merged[,3]/merged[,5])))
+		names(prop_table)	<- c("COG", penalty_name)
+		return(prop_table)
+	})
+	return(merged_prop_df	<- Reduce(function(df1, df2) full_join(df1, df2), prop_table_list))
+}
+
+PlotRelativeEnrichmentBoxes <- function(merged_prop_df, set_1_name, set_2_name) {
+
+	## Log the table 
+	merged_prop_log_df	<- cbind(COG = merged_prop_df[,1], log(merged_prop_df[,-1]))
+	if (nrow(merged_prop_log_df[merged_prop_log_df$COG == "W",]) > 0) {
+		title_add <- " - Mobile Element (W) seperate"
+	} else {
+		title_add <- ""
+	}
+
+	## Melt for plotting ##
+	merged_prop_molten	<- melt(merged_prop_log_df, id.vars = "COG")
+	merged_prop_molten	<- merged_prop_molten[!is.na(merged_prop_molten$value),] 
+	merged_prop_molten$COG <- factor(merged_prop_molten$COG, levels = unique(merged_prop_molten$COG[order(-merged_prop_molten$value)]))
+
+	## Set up a colour ramp palette ##
+	col_ramp <- brewer.pal(9,"YlOrRd")
+	col_palette <- colorRampPalette(col_ramp[1:9])(ncol(merged_prop_log_df)-1)
+
+	## Prepare the point plot ##
+	font_size = 12
+	plot_relative_HGT <- ggplot(merged_prop_molten, aes(x = COG, y = value, group = variable, color = variable)) + 
+			geom_point(size = 3) +
+			scale_y_continuous(paste0("Enrichment: ", set_1_name, " / ", set_2_name)) +
+			ggtitle(paste0("COG enrichment for \"", set_1_name, "\" set versus \"", set_2_name, "\" set ", title_add)) + 
+			theme(plot.title = element_text(hjust = 0.5)) +
+			theme(panel.grid.major = element_line(color = "grey"), plot.title = element_text(size = 12), legend.key = element_rect(fill = "gray55"), legend.text = element_text(size = font_size), legend.title = element_text(size = font_size), axis.title.x = element_text(size = font_size), axis.title.y = element_text(size = font_size), axis.text = element_text(size = font_size, colour = "black")) +
+			guides(colour = guide_legend(title.hjust = 0.5)) +
+			scale_color_manual(values = col_palette, name = "HGT Penalty")
+
+	## Draw boxes ##
+	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
+
+	for (i in 1:length(merged_prop_log_df$COG)) {
+		COG_needed <- levels(merged_prop_molten$COG)[i]
+		row_number <- which(merged_prop_log_df$COG == COG_needed)
+
+		## Do not count NAs in identifying min/max values ##
+		data_line <- merged_prop_log_df[row_number,-1]
+		data_line_clean <- data_line[,as.vector(!is.na(data_line))]
+
+		## Calculate the max and min values for the boxes ##
+		max_y <- max(data_line_clean)
+		min_y <- min(data_line_clean)
+
+		## Add vertical lines ##
+		coordinate_df[nrow(coordinate_df)+1, ] <- c((i - 0.2), (i - 0.2), min_y, max_y)
+		coordinate_df <- rbind(coordinate_df, c((i + 0.2), (i + 0.2), min_y, max_y))
+
+		## Add horizontal lines ##
+		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), min_y, min_y))
+		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), max_y, max_y))
+	}
+
+	plot_relative_HGT_boxes <- plot_relative_HGT + geom_segment(aes(x = x1, y = y1, xend = x2, yend = y2), data = coordinate_df, inherit.aes = FALSE)
+	return(plot_relative_HGT_boxes)
+}
+
+
 ```
 
 ## 1. HGT density and separation by subgroup {.tabset .tabset-fade}
@@ -712,8 +904,9 @@ ver_name	<- paste0("T", VER_penalty)
 assembled_species_l <- as.character(read.table("/users/aesin/desktop/Geo_analysis/HGT_position/assembled_geo.tsv", header = F, sep = "\n")$V1)
 print(assembled_species_l)
 
-# Get subgroup information #
-subgroup_data <- get_subgroup_branches()
+# Get subgroup information and COG data for each group
+subgroup_data	<- get_subgroup_branches()
+cog_data		<- GetCOGData()
 
 # Set the window size (gc-content) and bandwith (circular density) options #
 window_size	= 500
@@ -721,7 +914,11 @@ bandwith 	= 400
 
 # Prepare list to hold all the data #
 per_penalty_data_list	<- lapply(penalty_l, function(penalty) {
-	per_species_data_list <- lapply(assembled_species_l, function(species) combined_species_data(species = species, penalty = penalty, bandwith = bandwith, window = window_size, subgroup_data = subgroup_data))
+	message("Penatly: ", penalty)
+	per_species_data_list <- lapply(assembled_species_l, function(species) {
+		message("\tSpecies: ", species)
+		combined_species_data(species = species, penalty = penalty, bandwith = bandwith, window = window_size, subgroup_data = subgroup_data, cog_data = cog_data)
+	})
 	names(per_species_data_list) <- assembled_species_l
 	return(per_species_data_list)
 })
@@ -810,13 +1007,14 @@ per_penalty_combined_xsets	<- lapply(penalty_l, function (penalty) {
 				temp_tbl <- per_penalty_data_list[[as.character(penalty_name)]][[as.character(species)]]$all_dfs[[as.character(set)]]
 				return(temp_tbl)
 			} else if (set == "long_group") {
-				temp_tbl <- per_penalty_data_list[[as.character(penalty_name)]][[as.character(species)]]$all_dfs$long;
+				temp_tbl <- per_penalty_data_list[[as.character(penalty_name)]][[as.character(species)]]$all_dfs$long
 				return(temp_tbl)
 			}	
 		})
 		across_species_data_df <- do.call(rbind.data.frame, across_species_data_l)
 
 		# Unlist and circularise. Calculate density
+		across_species_data_df$Dist2ori	<- with(across_species_data_df, ifelse(Rel_start < 0.5, Rel_start, 1 - Rel_start))
 		per_set_circular	<- circular(across_species_data_df$Rel_start * (2 * pi))
 		per_set_density		<- density.circular(per_set_circular, kernel = "vonmises", bw = bandwith)
 		return(list(cross_set_data = across_species_data_df, circular_pos = per_set_circular, density = per_set_density))
@@ -1210,348 +1408,157 @@ circos_link_plot(hgt_link_data$long_subgroup, title = paste0("All long (subgroup
 
 
 
+## 5. Functional enrichment {.tabset .tabset-fade}
 
+### 1. Functional profile
+```{r plot_VertLong_v_All_COG, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6, dev = 'png'}
+plot_vert_v_all	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("vert", "all"), "vert", "all")
+plot_long_v_all	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("long", "all"), "long", "all")
+plot(plot_vert_v_all)
+plot(plot_long_v_all)
+```
 
-///// NOT READY BELOW /////
+```{r plot_long_v_vert_COG_enrich, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6, dev = 'png'}
+plot_long_v_vert_COGenrich	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("long", "vert"), "long", "vert")
+plot(plot_long_v_vert_COGenrich)
+```
 
-
-
-
-
-
-
-
-
-
-### READ IN FUNC COGS ###
-
-funct_annot_file	<- "/Users/aesin/desktop/Geo_analysis/Geo_ortholog_nucl/Functional_annotation/Group2COG_table.tsv"
-funct_annot_df		<- read.table(funct_annot_file, sep = "\t", header = TRUE)
-
-full_cog_list <- vector(mode = "list")
-for (group in funct_annot_df$Group) {
-	cog_cats <- as.character(funct_annot_df$COG_categories[funct_annot_df$Group == group])
-
-	if (str_count(cog_cats, " | ") > 0) {
-		cog_cats <- str_split(cog_cats, " | ")[[1]][c(1,3)];
-	}
-	for (cog in cog_cats) {
-		full_cog_list <- c(full_cog_list, list(c(group, cog)))
-	}
-}
-
-full_cog_df	<- data.frame(matrix(unlist(full_cog_list), nrow=length(full_cog_list), byrow = T), stringsAsFactors = FALSE)
-names(full_cog_df)	<- c("Group", "COG")
-
-
-
-distance_2ori_data	<- lapply(hgt_sets, function(set) average_distance2ori(hgt_penalty = HGT_name, set = set))
-names(distance_2ori_data)	<- hgt_sets
-distance_2ori_data$vert		<- average_distance2ori(ver_penalty = ver_name, set = "vert")
-
-par(mfrow = c(3,1))
-plot(logspline(distance_2ori_data$vert$Mod_dist), xlab = "Distribution of average distance of genes in Vertical families to origin", ylab = "Density", xlim = c(0, 0.5))
-abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
-plot(logspline(distance_2ori_data$long$Mod_dist), xlab = "Distribution of average distance of genes in lHGT families to origin", ylab = "Density", xlim = c(0, 0.5))
-abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
-plot(logspline(distance_2ori_data$short$Mod_dist), xlab = "Distribution of average distance of genes in sHGT families to origin", ylab = "Density", xlim = c(0, 0.5))
-abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
-
-par(mfrow = c(2,1))
-plot(logspline(distance_2ori_data$long_group$Mod_dist), xlab = "Distribution of average distance of genes in lHGT GROUP families to origin", ylab = "Density", xlim = c(0, 0.5))
-abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
-plot(logspline(distance_2ori_data$long_subgroup$Mod_dist), xlab = "Distribution of average distance of genes in lHGT SUBGROUP families to origin", ylab = "Density", xlim = c(0, 0.5))
-abline(v = c(0.05, 0.15, 0.25, 0.35, 0.45, 0.5), col = c("red", "blue", "blue", "blue", "blue", "red"))
-
-cog_data	<- lapply(1:length(distance_2ori_data), function(index) {
-
-	set			<- distance_2ori_data[[index]]
-	set_name	<- names(distance_2ori_data[index])
-	
-	HGT_cog_list <- apply(set, 1, function(entry) {
-		COG	<- full_cog_df$COG[full_cog_df$Group == entry[1]]
-
-		if (length(COG)	> 0) {
-			per_cog_data	<- lapply(COG, function(cog) {
-				return(data.frame(Group = entry[1], Rel_start = entry[2], Mod_dist = entry[3], COG = cog))
-			})
-			per_cog_df	<- do.call(bind_rows, per_cog_data)
-		} else {
-			per_cog_df	<- data.frame(Group = entry[1], Rel_start = entry[2], Mod_dist = entry[3], COG = "-")
-		}
-		return(per_cog_df)
-
+```{r change_in_prot_groups_nums, message = FALSE, warning = FALSE, cache = TRUE}
+# Number of proteins & groups in: all, vertical, long, short
+all_penalties_stats	<- lapply(penalty_l, function(penalty) {
+	penalty_name	<- paste0("T", penalty)
+	stats_list	<- lapply(c("all", "vert", "long", "short"), function(set) {
+		prot_number	<- length(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Full_protID)
+		grp_number	<- length(unique(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Group))
+		return(data.frame(Penalty = penalty_name, Set = set, NumProteins = prot_number, NumGroups = grp_number))
 	})
-	HGT_cog_df	<- do.call(bind_rows, HGT_cog_list)
-	HGT_cog_df	<- HGT_cog_df[order(HGT_cog_df$Group),]
-
-	HGT_cog_tab	<- data.frame(table(HGT_cog_df$COG[HGT_cog_df$COG != "-"]))
-	HGT_cog_tab$Fract	<- HGT_cog_tab$Freq / sum(HGT_cog_tab$Freq)
-	names(HGT_cog_tab)	<- c("COG", paste0("Freq_", set_name), paste0("Fract_", set_name))
-
-	return(list(cog_full_df = HGT_cog_df, cog_tab = HGT_cog_tab))
-})
-names(cog_data)	<- names(distance_2ori_data)
-
-COG_tables	<- lapply(cog_data, function(set) {
-	return(set$cog_tab)
+	per_penalty_l <- bind_rows(stats_list)
 })
 
-redu_COG_tabs		<- Reduce(function(df1, df2) full_join(df1, df2, by = "COG"), COG_tables)
-melt_COG_tabs		<- melt(redu_COG_tabs[,c(1,3,5,7,9,11)], id.vars = "COG")
-melt_COG_tabs[is.na(melt_COG_tabs)]	<- 0
+across_penalty_df <- bind_rows(all_penalties_stats)
+across_penalty_df <- across_penalty_df[order(across_penalty_df$Set),]
+print(across_penalty_df)
+```
 
-melt_COG_tabs_nOS	<- melt_COG_tabs[melt_COG_tabs$COG != "S",]
+### 2. Mobile elements
+```{r plot_mobile_elems_COG, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 4, fig.height = 4, dev = 'png'}
+# What COGs do mobile elements belong to?
+mobile_element_COGs	<- as.data.frame(table(unlist(per_penalty_combined_xsets$T3$all$cross_set_data$COG[per_penalty_combined_xsets$T3$all$cross_set_data$Mobile_element == TRUE])))
+mobile_element_COGs$Fraction	<- mobile_element_COGs$Freq / sum(mobile_element_COGs$Freq)
+names(mobile_element_COGs) <- c("COG", "Frequency", "Fraction")
+mobile_element_COG_plot	<-	ggplot(mobile_element_COGs, aes(x = COG, y = Fraction, fill = COG)) +
+							geom_bar(stat = "identity") +
+							scale_y_continuous("Fraction of Mobile elements in COG") +
+							ggtitle("Mobile elements per COG") +
+							theme_bw() +
+							theme(axis.text = element_text(size = 12), axis.title = element_text(size = 14,face = "bold"), plot.title = element_text(size = 20, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_text(size = 18), legend.key.size = unit(1, "cm"))
+```
 
-ggplot(melt_COG_tabs, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of HGT genes belonging to COG")
-ggplot(melt_COG_tabs_nOS, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of HGT genes belonging to COG")
+```{r mobile_elems_change_with_other_sets, message = FALSE, warning = FALSE, cache = TRUE}
+# Number of mobile elements in all the sets across different penalties #
+across_pen_mobile_l <- lapply(c("all", "vert", "long", "short"), function(set) {
 
-
-
-
-# Long groupd close to ori & ter #
-subdivs	<- list(ori = c(0, 0.05), nearori = c(0.05, 0.15), farori = c(0.15, 0.25), farter = c(0.25, 0.35), nearter = c(0.35, 0.45), ter = c(0.45, 05))
-
-sets_bysubdiv	<- lapply(names(cog_data), function(set) {
-	subdiv_data	<- byposition_COGs(subdivs, set)
-})
-names(sets_bysubdiv)	<- names(cog_data)
-
-# Long group vs subgroup #
-
-melt_lHGT_subdiv		<- melt(sets_bysubdiv$long$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
-ggplot(melt_lHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of lHGT genes close to Ori or Ter")
-
-melt_lgrpHGT_subdiv		<- melt(sets_bysubdiv$long_group$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
-ggplot(melt_lgrpHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of GROUP lHGT genes close to Ori or Ter")
-
-melt_lsubHGT_subdiv		<- melt(sets_bysubdiv$long_subgroup$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
-ggplot(melt_lsubHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of SUBGROUP lHGT genes close to Ori or Ter")
-
-melt_vert_subdiv		<- melt(sets_bysubdiv$vert$tab_df[,c(1,3,5,7,9,11,13)], id.vars = "COG")
-ggplot(melt_lsubHGT_subdiv, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of vertical genes close to Ori or Ter")
-
-
-
-cross_set_subdiv	<- lapply(names(cog_data), function(set) {
-	unique_cogs	<- unique(cog_data[[as.character(set)]]$cog_full_df$COG)
-
-	all_cog_subdiv	<- lapply(unique_cogs, function(cog) {
-		per_cog_per_subdiv	<- lapply(1:length(subdivs), function(index) {
-			subdiv		<- subdivs[[index]]
-			subdiv_name	<- names(subdivs[index])
-
-			subdiv_cog_data	<- cog_data[[as.character(set)]]$cog_full_df[cog_data[[as.character(set)]]$cog_full_df$COG == cog & cog_data[[as.character(set)]]$cog_full_df$Mod_dist >= subdiv[1] & cog_data[[as.character(set)]]$cog_full_df$Mod_dist <= subdiv[2],]
-			how_many		<- nrow(subdiv_cog_data)
-			return(how_many)
-		})
-
-		per_cog_per_subdiv_out	<- as.numeric(unlist(per_cog_per_subdiv))
-
-		per_cog_per_subdiv_row	<- data.frame(COG = cog, total = sum(per_cog_per_subdiv_out), matrix(per_cog_per_subdiv_out, ncol = length(subdivs)))
-		names(per_cog_per_subdiv_row)[3:ncol(per_cog_per_subdiv_row)]	<- names(subdivs)
-		return(per_cog_per_subdiv_row)
+	set_mobile <- lapply(penalty_l, function(penalty) {
+		penalty_name <- paste0("T", penalty)
+		num_mob <- length(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Full_protID[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Mobile_element == TRUE])
+		return(data.frame(Penalty = penalty_name, Set = set, Mobile_elements = num_mob))
 	})
-
-	all_cog_subdiv_df	<- do.call(bind_rows, all_cog_subdiv)
-	all_cog_subdiv_fr	<- cbind(COG = all_cog_subdiv_df[,1], sweep(all_cog_subdiv_df[,-1:-2], 1, rowSums(all_cog_subdiv_df[,-1:-2]), "/"))
-	
-	melt_all_cog_subdiv_df	<- melt(all_cog_subdiv_df[,-2], id.vars = "COG")
-	melt_all_cog_subdiv_fr	<- melt(all_cog_subdiv_fr, id.vars = "COG")
-	melt_all_cog_subdiv_fr$raw	<- melt_all_cog_subdiv_df$value
-	melt_all_cog_subdiv_fr$set	<- rep(set, nrow(melt_all_cog_subdiv_fr))
-	# melt_no_S_subdiv_df		<- melt_all_cog_subdiv_df[melt_all_cog_subdiv_df$COG != "S",]
-	return(list(df_raw = all_cog_subdiv_df, df_fract = all_cog_subdiv_fr, melt_raw = melt_all_cog_subdiv_df, melt_fract = melt_all_cog_subdiv_fr))
-
+	set_mobile_df	<- bind_rows(set_mobile)
 })
-names(cross_set_subdiv) <- names(cog_data)
+across_pen_mobile_df	<- bind_rows(across_pen_mobile_l)
+across_pen_mobile_df	<- across_pen_mobile_df[order(across_pen_mobile_df$Set),]
+print(across_pen_mobile_df)
 
-vert_long		<- rbind(cross_set_subdiv$vert$melt_fract, cross_set_subdiv$long$melt_fract)
-vert_long$set_f	<- factor(vert_long$set, levels = c("vert", "long"))
+total_num_stats_df	<- merge(across_penalty_df, across_pen_mobile_df, by = c("Penalty", "Set"))
+total_num_stats_df	<- total_num_stats_df[order(total_num_stats_df$Set),]
 
-vert_long_all	<- vert_long[vert_long$COG != "-",]
-vert_long_all$cog_f	<- factor(vert_long_all$COG, levels = c("S", "J", "K", "L", "B", "D", "V", "O", "T", "M", "N", "U", "Z", "C", "E", "F", "G", "H", "I", "P", "Q"))
+# Correlation of number of Mob. Elements with number of long/vert proteins
+print(cor(total_num_stats_df$NumProteins[total_num_stats_df$Set == "long"], total_num_stats_df$Mobile_elements[total_num_stats_df$Set == "long"]))
+# [1] 0.980108
+print(cor(total_num_stats_df$NumProteins[total_num_stats_df$Set == "vert"], total_num_stats_df$Mobile_elements[total_num_stats_df$Set == "vert"]))
+# [1] 0.9558743
+```
 
-col_ramp <- brewer.pal(9,"RdYlBu")
-col_palette <- colorRampPalette(col_ramp[1:9])(6)
+```{r plot_mobile_elems_xpen_xset, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 4, fig.height = 4, dev = 'png'}
+xpenalty_mobile_elem_num	<- across_pen_mobile_df[across_pen_mobile_df$Set %in% c("long", "vert", "short"), ]
+xpenalty_mob_elem_num_plot	<-	ggplot(xpenalty_mobile_elem_num, aes(x=Penalty, y = Mobile_elements, fill = Set)) +
+								geom_bar(stat = "identity") +
+								facet_wrap(~Set) +
+								scale_y_continuous("Number of mobile elements") +
+								ggtitle("Mobile element prediction across penalties/sets") +
+								theme_bw() +
+								theme(axis.text = element_text(size = 12), axis.title = element_text(size = 14,face = "bold"), plot.title = element_text(size = 20, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_text(size = 18), legend.key.size = unit(1, "cm"), strip.text.x = element_text(size = 12))
 
-# devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Long_vert_COG_bar.svg", height = 10, width = 10)
+plot(xpenalty_mob_elem_num_plot)
+```
 
-ggplot(vert_long_all, aes(x = set_f, y = value, fill = variable, label = raw)) + geom_bar(stat = "identity") + geom_text(size = 3, position = position_stack(vjust = 0.5)) + ggtitle("Per cog distribution of genes over genome regions") + theme(plot.title = element_text(hjust = 0.5)) + facet_wrap(~cog_f, nrow = 3, ncol = 7) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_fill_manual(values = col_palette)
+```{r T4_T5_mob_elem_jump, message = FALSE, warning = FALSE, cache = TRUE}
 
-# dev.off()
+# large increase in mobile elements in Vertical set between T4 and T5 (and decrease in long set) due to 3 genes being predicted 
+vert_T5 <- unique(per_penalty_combined_xsets$T5$vert$cross_set_data$Group[per_penalty_combined_xsets$T5$vert$cross_set_data$Mobile_element == TRUE])
+long_T4	<- unique(per_penalty_combined_xsets$T4$long$cross_set_data$Group[per_penalty_combined_xsets$T4$long$cross_set_data$Mobile_element == TRUE])
+long_to_vert	<- intersect(vert_T5, long_T4)
 
-## Long vert comparison with all groups having > 50 COGs assigned ##
-over_50_long	<- cog_data$long$cog_tab$COG[cog_data$long$cog_tab$Freq_long >= 20]
-over_50_vert	<- cog_data$vert$cog_tab$COG[cog_data$vert$cog_tab$Freq_vert >= 20]
+# 3 groups intersect both sets
+cat(paste0("Groups that intersect between T4_long and T5 vert: ", paste(long_to_vert, collapse = " ")))
 
-over_50_both	<- intersect(over_50_vert, over_50_long)
-as_input		<- dput(as.character(over_50_both))
-vert_long_50	<- vert_long_all[vert_long_all$COG %in% as_input,]
-vert_long_50$cog_f	<- factor(vert_long_50$COG, levels = as_input)
+# However > 60 proteins belong to these 3 groups
+number_of_proteins	<- nrow(per_penalty_combined_xsets$T5$all$cross_set_data[per_penalty_combined_xsets$T5$all$cross_set_data$Group %in% long_to_vert, ])
+cat(paste0("Total number of proteins belonging to these groups: ", number_of_proteins))
+```
 
-ggplot(vert_long_50, aes(x = set_f, y = value, fill = variable, label = raw)) + geom_bar(stat = "identity") + geom_text(size = 3, position = position_stack(vjust = 0.5)) + ggtitle("Per cog distribution of genes over genome regions") + theme(plot.title = element_text(hjust = 0.5)) + facet_wrap(~cog_f, nrow = 3, ncol = 7) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_fill_manual(values = col_palette)
-
-over_20_unique_COGs	<- unique(vert_long_50$COG)
-
-## Group / subgroup comparison > 20 COGs assigned ##
-
-grp_sub		<- rbind(cross_set_subdiv$vert$melt_fract, cross_set_subdiv$long_group$melt_fract, cross_set_subdiv$long_subgroup$melt_fract)
-grp_sub$set_f	<- factor(grp_sub$set, levels = c("vert", "long_group", "long_subgroup"))
-
-grp_sub_all	<- grp_sub[grp_sub$COG != "-",]
-
-over_20_ver	<- cog_data$vert$cog_tab$COG[cog_data$vert$cog_tab$Freq_vert >= 10]
-over_20_grp	<- cog_data$long_group$cog_tab$COG[cog_data$long_group$cog_tab$Freq_long_group >= 10]
-over_20_sub	<- cog_data$long_subgroup$cog_tab$COG[cog_data$long_subgroup$cog_tab$Freq_long_subgroup >= 10]
-
-over_20_comb	<- Reduce(intersect, list(over_20_ver, over_20_grp, over_20_sub))
-as_input		<- dput(as.character(over_20_comb))
-grp_sub_20	<- grp_sub_all[grp_sub_all$COG %in% as_input,]
-grp_sub_20$cog_f	<- factor(grp_sub_20$COG, levels = as_input)
-
-ggplot(grp_sub_20, aes(x = set_f, y = value, fill = variable, label = raw)) + geom_bar(stat = "identity") + geom_text(size = 3, position = position_stack(vjust = 0.5)) + ggtitle("Per cog distribution of genes over genome regions") + theme(plot.title = element_text(hjust = 0.5)) + facet_wrap(~cog_f, nrow = 3, ncol = 7) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
-
-
-## STATS ##
-
-for_fish_longvert <- merge(x = cross_set_subdiv$long$df_raw[,1:2], y = cross_set_subdiv$vert$df_raw[,1:2], by = "COG") 
-
-# Do not apply chisq over the "non-assigned" COG (row 1)
-chisq.test(for_fish_longvert[-1,2:3])
-
-# data:  for_fish_longvert[-1, 2:3]
-# X-squared = 1038, df = 18, p-value < 2.2e-16
-
-# Shared cogs long/vert
-long_ver_shared	<- intersect(cross_set_subdiv$long$df_raw$COG, cross_set_subdiv$vert$df_raw$COG)
-
-lapply(long_ver_shared, function(COG) {
-	bound	<- rbind(cross_set_subdiv$long$df_raw[cross_set_subdiv$long$df_raw$COG == COG,], cross_set_subdiv$vert$df_raw[cross_set_subdiv$vert$df_raw$COG == COG,])
-	for_fish 	<- bound[,-1:-2]
-	if (COG == "S") {
-		f <- chisq.test(for_fish)
-	} else {
-		f <- fisher.test(for_fish, workspace = 2e9)
-	}
-	print(bound)
-	print(f)
-	return(data.frame(COG = COG, f = f$p.value))
-})
-
-
-grp_sub_shared	<- intersect(cross_set_subdiv$long_group$df_raw$COG, cross_set_subdiv$long_subgroup$df_raw$COG)
-
-grp_sub_stat	<- lapply(grp_sub_shared, function(COG) {
-	bound	<- rbind(cross_set_subdiv$long_group$df_raw[cross_set_subdiv$long_group$df_raw$COG == COG,], cross_set_subdiv$long_subgroup$df_raw[cross_set_subdiv$long_subgroup$df_raw$COG == COG,])
-	for_fish 	<- bound[,-1:-2]
-	f <- fisher.test(for_fish, workspace = 2e9)
-	print(bound)
-	print(f)
-	return(data.frame(COG = COG, f = f$p.value))
-})
-
-
-
-## Clust long ##
-
-for_clust_long	<- cross_set_subdiv$long$df_raw[,-2]
-rownames(for_clust_long) <- for_clust_long[,1]
-for_clust_long <- for_clust_long[,-1]
-
-for_clust_long_fract	<- sweep(for_clust_long, 1, rowSums(for_clust_long), "/")
-for_clust_long_fract_out	<- for_clust_long_fract[rownames(for_clust_long_fract) %in% over_20_unique_COGs,]
+```{r plot_COG_enrich_mobile, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6, dev = 'png'}
+long_v_vert_mob_remove	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("long", "vert", mobile_exclude = TRUE), "long", "vert")
+plot(long_v_vert_mob_remove)
+```
 
 par(mfrow = c(2,2))
+per_penalty_distances	<- lapply(penalty_l, function(penalty) {
+	penalty_name	<- paste0("T", penalty)
+	working_sets	<- c("all", "vert", "long", "short")
+	per_set_distances	<- lapply(working_sets, function(set) {
 
-plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "ward.D2"))
-plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "ward.D"))
-plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "complete"))
-plot(hclust(dist(as.matrix(for_clust_long_fract_out), method = "euclidean"), method = "average"))
+		message(paste0(penalty_name, " : ", set))
 
-vert_clust <- plot(as.phylo.hclust(hclust(dist(as.matrix(for_clust_vert_fract_out)), method = "ward.D2")))
+		set_groups	<- unique(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Group)
+		per_group_distances	<- lapply(set_groups, function(group) {
+			per_group_df	<- per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Group == group,]
+			mob_el_state	<- all(per_group_df$Mobile_element)
 
+			if (nrow(per_group_df) > 2) {
+				group_av_dist	<- (mean(dist.circular(circular(per_group_df$Circular_start), method = "geodesic")))/(2*pi)
+				return(data.frame(Group = group, Av_dist = as.numeric(group_av_dist), Mobile_element = mob_el_state, stringsAsFactors = FALSE))
+			} else {
+				return(NA)
+			}
+		})
+		per_group_distances		<- per_group_distances[!is.na(per_group_distances)]
+		per_group_distances_df	<- bind_rows(per_group_distances)
+		per_group_distances_df	<- per_group_distances_df[order(per_group_distances_df$Av_dist),]
+	})
+	names(per_set_distances)	<- working_sets
+	per_set_distances$long_mob	<- per_set_distances$long[per_set_distances$long$Mobile_element == TRUE,]
+	df_list <- lapply(names(per_set_distances),function(set_name) as.data.frame(cbind(Set = set_name, per_set_distances[[set_name]])))
+	df <- bind_rows(df_list)
+	ggplot(df, aes(x = Set, y = Av_dist)) + geom_boxplot()
+	return(0)
+})
 
-### vert ###
-for_clust_vert	<- cross_set_subdiv$vert$df_raw[,-2]
-rownames(for_clust_vert) <- for_clust_vert[,1]
-for_clust_vert <- for_clust_vert[,-1]
-
-for_clust_vert_fract	<- sweep(for_clust_vert, 1, rowSums(for_clust_vert), "/")
-for_clust_vert_fract_out	<- for_clust_vert_fract[!rownames(for_clust_vert_fract) %in% c("B", "-"),]
-
-plot(hclust(dist(as.matrix(for_clust_vert_fract_out)), method = "ward.D2"))
-
-vert_clust <- plot(as.phylo.hclust(hclust(dist(as.matrix(for_clust_vert_fract_out)), method = "ward.D2")))
-
-
-
-
-for (cog_1 in long_COGS) {
-	for (cog_2 in long_COGS) {
-		if (cog_1 == cog_2) {
-			next
-		}
-
-		cog_comp	<- rbind(cross_set_subdiv$long$df_raw[cross_set_subdiv$long$df_raw$COG == cog_1,], cross_set_subdiv$long$df_raw[cross_set_subdiv$long$df_raw$COG == cog_2,])
-		for_fish 	<- cog_comp[,-1:-2]
-
-		if (cog_1 == "S" || cog_2 == "S") {
-			f <- chisq.test(for_fish)
-		} else {
-			f <- fisher.test(for_fish, workspace = 2e9)
-		}
+par(mfrow = c(2,2))
+lapply(per_penalty_distances, function(plot) replayPlot(plot))
 
 
 
+long_T4_dists	<- lapply(unique(per_penalty_combined_xsets$T4$long$cross_set_data$Group), function(group) {
+	per_group_df	<- per_penalty_combined_xsets$T4$long$cross_set_data[per_penalty_combined_xsets$T4$long$cross_set_data$Group == group,]
+	mob_el_state	<- all(per_group_df$Mobile_element)
+	if (nrow(per_group_df) > 1) {
+		group_av_dist	<- (mean(dist.circular(circular(per_group_df$Circular_start), method = "geodesic")))/(2*pi)
+		return(data.frame(Group = group, Av_dist = as.numeric(group_av_dist), Mobile_element = mob_el_state, stringsAsFactors = FALSE))
+	} else {
+		return(NA)
 	}
-}
-
-
-# ##### 5. Functional annotation
-```{r read_in_func_annot, message = FALSE, warning = FALSE, cache = TRUE}
-
-
-# COG frequency table for all genes #
-all_COG_tab	<- data.frame(table(full_cog_df$COG))
-all_COG_tab$Fract_all	<- all_COG_tab$Freq / sum(all_COG_tab$Freq)
-names(all_COG_tab)[1:2]	<- c("COG", "Freq_all")
-
-# COG frequency table for only vertical genes #
-vert_COG_tab <- data.frame(table(full_cog_df$COG[full_cog_df$Group %in% vert_groups_one2one_orth]))
-vert_COG_tab$Fract_vert	<- vert_COG_tab$Freq / sum(vert_COG_tab$Freq)
-names(vert_COG_tab)[1:2]	<- c("COG", "Freq_vert")
-
-# COG frequency table for non-mobile gene families #
-non_move_COG_tab	<- data.frame(table(full_cog_df$COG[full_cog_df$Group %in% no_movement_df$Group]))
-non_move_COG_tab$Fract_nonmove	<- non_move_COG_tab$Freq / sum(non_move_COG_tab$Freq)
-names(non_move_COG_tab)[1:2]	<- c("COG", "Freq_nonmove")
-
-# COG frequency for Ori-Ter symmetric mobile families # low_dist2ori_groups
-OTsym_move_COG_tab	<- data.frame(table(full_cog_df$COG[full_cog_df$Group %in% low_dist2ori_groups]))
-OTsym_move_COG_tab$Fract_OTsymmove	<- OTsym_move_COG_tab$Freq / sum(OTsym_move_COG_tab$Freq)
-names(OTsym_move_COG_tab)[1:2]	<- c("COG", "Freq_OTsymmove")
-
-# Add these to a list that will hold all the COG data #
-funct_list	<- list(all = all_COG_tab[order(-all_COG_tab$Fract_all),])
-funct_list	<- c(funct_list, list(vert = vert_COG_tab[order(-vert_COG_tab$Fract_vert),]))
-funct_list	<- c(funct_list, list(nonmove = non_move_COG_tab[order(-non_move_COG_tab$Fract_nonmove),]))
-funct_list	<- c(funct_list, list(OTsymmove = OTsym_move_COG_tab[order(-OTsym_move_COG_tab$Fract_OTsymmove),]))
-
-reduced_func_list	<- Reduce(function(df1, df2) full_join(df1, df2, by = "COG"), funct_list)
-melt_func_list		<- melt(reduced_func_list[,c(1,3,5,7,9)], id.vars = "COG")
-melt_func_list[is.na(melt_func_list)] <- 0
-
-ggplot(melt_func_list, aes(x = COG, y = value, fill = factor(variable))) + geom_bar(stat = "identity", position = "dodge") + labs(y = "Relative proportion of vertical genes belonging to COG")
-# ```
-
-
-
-
-
-
-
-
+})
 
 
 
