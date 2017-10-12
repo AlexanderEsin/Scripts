@@ -9,7 +9,7 @@ mv NW_018335738.1[1..380642].fa Ovtex_HB_scaff.fa
 mkdir Ovtex_index
 bowtie2-build Ovtex_HB_scaff.fasta ./Ovtex_index/Ovtex_HB
 
-# We want to include mixed reads because of cases where one mate is in a non-Ovtex represented region
+# We want to include mixed reads because of cases where one mate is in a non-Ovtex represented region. Local is more permissive as ends don't have to map.
 bowtie2 --local -p 20 -x ./Ovtex_index/Ovtex_HB -1 ./Reads/Ovirg_paired_R1.fastq -2 ./Reads/Ovirg_paired_R2.fastq -S ./Mapped/Ovirg2Ovtex_local.sam
 
 # 163656267 reads; of these:
@@ -27,17 +27,20 @@ bowtie2 --local -p 20 -x ./Ovtex_index/Ovtex_HB -1 ./Reads/Ovirg_paired_R1.fastq
 #         2375321 (0.78%) aligned exactly 1 time
 #         7215535 (2.36%) aligned >1 times
 # 9.48% overall alignment rate
+
 # For comaprison - without "local"
 # 3.21% overall alignment rate
 
 
-# Extract all mapped reads (regardless of mapped mate)
+## Samtools version 1.6 
+
+# Extract all mapped reads (regardless of mapped mate). Use 20 threads (-@ 20), include header (-h), min MAPQ quality of 1 (-q 1)
 samtools view -@ 20 -h -b -F 4 -q 1 ./Mapped/Ovirg2Ovtex_local.sam > ./Mapped/Ovirg2Ovtex_onemap_Q1.bam
-# Name sort
+# Sort by read name
 samtools sort -n -@ 20 -o ./Mapped/Ovirg2Ovtex_onemap_namesort.bam ./Mapped/Ovirg2Ovtex_onemap_Q1.bam
-# Add ms and MC tags for markdup to use later
+# Add ms and MC tags for markdup to use later.
 samtools fixmate -m ./Mapped/Ovirg2Ovtex_onemap_namesort.bam ./Mapped/Ovirg2Ovtex_onemap_fixmate.bam
-# Coordinate sort
+# Sort by coordinates
 samtools sort -@ 20 -o ./Mapped/Ovirg2Ovtex_onemap_coordsort.bam ./Mapped/Ovirg2Ovtex_onemap_fixmate.bam
 # Mark + remove duplicates. Print some stats with -s
 samtools markdup -@ 20 -r -s ./Mapped/Ovirg2Ovtex_onemap_coordsort.bam ./Mapped/Ovirg2Ovtex_onemap_remdup.bam

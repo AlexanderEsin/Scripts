@@ -1,11 +1,12 @@
 ---
 title: HGT Density Plotting
-date: 11 Aug 2017
+date: 5 Oct 2017
 output:
   html_document:
     toc: true
-    toc_depth: 4
+    toc_depth: 3
     toc_float: true
+    number_sections: true
     code_folding: hide
     theme: cosmo
 ---
@@ -22,8 +23,8 @@ knitr::opts_chunk$set(	fig.width	= 10,
 						tidy		= TRUE)
 
 ```
-## 0. Packages, functions & global variables {.tabset .tabset-fade}
-### Packages
+# Packages, functions & global variables {.tabset .tabset-fade}
+## Packages
 ```{r packages, warning = FALSE, message = FALSE}
 # Phylo libraries #
 library(ape)
@@ -49,6 +50,7 @@ library(ggplot2)
 library(RCircos)
 library(gridExtra)
 library(ggpubr)
+library(RColorBrewer)
 
 # Replacing native ideogram plot so that we can shade the chromosome band without the need for actual band data #
 RCircos.Draw.Chromosome.Ideogram <- function(ideo.pos = NULL, ideo.width = NULL) {
@@ -160,7 +162,7 @@ dist.circular <- function (x, method = "correlation", diag = FALSE, upper = FALS
 assignInNamespace("dist.circular", dist.circular, ns = "circular")
 ```
 
-### Functions
+## Functions
 ```{r functions, warning = FALSE, message = FALSE}
 
 # Read in full data tables #
@@ -219,10 +221,12 @@ get_subgroup_branches	<- function() {
 	   	# All the descendent nodes of the common ancestor of all the species in a particular group #
 	    descend_nodes <- as.vector(descendants(anoxy_geo_clado4, MRCA(anoxy_geo_clado4, tips_in_subgroup), "all"))
 	    # For each node, get the corresponding edges - format the edges as {ancestor descendent} - the same format as the input branch column in the long-distance HGT data #
-	    descend_edges <- lapply(descend_nodes, function(node) {	ancestor	<- ancestor(clado4_relab, node);
-	    														node_lab	<- labels(clado4_relab, type = c("all"))[node];
-	    														ance_lab	<- labels(clado4_relab, type = c("all"))[ancestor];
-	    														branch_lab	<- paste(ance_lab, node_lab, sep = " ")})
+	    descend_edges <- lapply(descend_nodes, function(node) {
+	    	ancestor	<- ancestor(clado4_relab, node)
+	    	node_lab	<- labels(clado4_relab, type = c("all"))[node]
+	    	ance_lab	<- labels(clado4_relab, type = c("all"))[ancestor]
+	    	branch_lab	<- paste(ance_lab, node_lab, sep = " ")
+	    })
 	    # Add to list of subgroup branches #
 	    subgroup_branches <- c(subgroup_branches, descend_edges)
 	}
@@ -230,13 +234,15 @@ get_subgroup_branches	<- function() {
 	return(list(subgroup_branches = unlist(subgroup_branches), species = as.vector(subgroup_only$Species), clado_tree = anoxy_geo_clado4))
 }
 
-# Get COG data #
+# / Get COG data / #
 GetCOGData	<- function() {
+	# / List of the eggNOG mapping annotation files / #
 	emap_files	<- Sys.glob(file.path("/Users/aesin/Desktop/Geo_analysis/Geo_ortholog_nucl/Functional_annot/Output_annots", "*emapper.annotations"))
-	# We need to define each column, otherwise F COGs are read in as a logical
+
+	# / We need to define each column, otherwise F COGs are read in as a logical / #
 	col_class	<- c("character", "character", "numeric", "numeric", "character", "character", "character", "character", "character", "character", "character", "character")
 
-	# A list containing the eggNOG annotation output for each group
+	# / A list containing the eggNOG annotation table for each group (file) / #
 	group_tbls <- lapply(emap_files, function(file) {
 		group_name	<- str_extract(file, "[0-9]+")
 		annot_data	<- read.table(file, header = T, sep = "\t", colClasses = col_class)
@@ -251,15 +257,9 @@ GetCOGData	<- function() {
 
 	# Annotate mobile elements as a separate column
 	search_string	<- paste(c("transposase", "integrase", "transposon"), collapse = "|")
-	full_cog_tbl$mob_element	<- apply(full_cog_tbl, 1, function(row) {
-		# message(row)
-		if (length(grep(search_string, row[12], ignore.case = TRUE)) > 0) {
-			TRUE
-		} else {
-			FALSE
-		}
-	})
+	full_cog_tbl$mob_element	<- grepl(search_string, full_cog_tbl$eggNOG.annot, ignore.case = TRUE)
 
+	names(full_cog_tbl)[1]	<- "Full_protID"
 	return(full_cog_tbl)
 }
 
@@ -279,32 +279,49 @@ combined_species_data	<- function(species = species, penalty = penalty, bandwith
 											},	all_dfs, names(all_dfs), SIMPLIFY = FALSE)
 
 	# Circularise the start positions #
-	all_dfs <- lapply(all_dfs, function(set)	{	circ_coords <- circular(set$Rel_start * (2 * pi));
-													cbind(set, Circular_start = circ_coords)
-												})
+	all_dfs <- lapply(all_dfs, function(set) {
+		circ_coords <- circular(set$Rel_start * (2 * pi));
+		cbind(set, Circular_start = circ_coords)
+	})
 
 	# Add functional annotation to each protein entry #
 	cog_dfs	<- lapply(all_dfs, function(set) {
 
-		with_cog_l	<- apply(set, 1, function(row) {
+		# ptm <- proc.time()
+		# with_cog_l	<- apply(set, 1, function(row) {
 
-			cog_tbl_row	<- cog_data[.(row[2]), nomatch = 0L]
+		# 	cog_tbl_row	<- cog_data[.(row[2]), nomatch = 0L]
 
-			if (nrow(cog_tbl_row) == 0) {
-				new_cols	<- data.frame(COG = I(list("-")), NOG = I(list("-")), Prot_name = "-", Mobile_element = FALSE, stringsAsFactors = FALSE)
-			} else {
-				COGs		<- list(str_trim(unlist(str_split(cog_tbl_row$COG.cat, ","))))
-				NOGs		<- list(grep("@NOG", unlist(str_split(cog_tbl_row$OGs, ",")), value = TRUE))
+		# 	if (nrow(cog_tbl_row) == 0) {
+		# 		new_cols	<- data.frame(COG = I(list("-")), NOG = I(list("-")), Prot_name = "-", Mobile_element = FALSE, stringsAsFactors = FALSE)
+		# 	} else {
+		# 		COGs		<- list(str_trim(unlist(str_split(cog_tbl_row$COG.cat, ","))))
+		# 		NOGs		<- list(grep("@NOG", unlist(str_split(cog_tbl_row$OGs, ",")), value = TRUE))
 				
-				prot_name	<- cog_tbl_row$eggNOG.annot
-				mob_element	<- cog_tbl_row$mob_element
+		# 		prot_name	<- cog_tbl_row$eggNOG.annot
+		# 		mob_element	<- cog_tbl_row$mob_element
 
-				new_cols	<- data.frame(COG = I(COGs), NOG = I(NOGs), Prot_name = prot_name, Mobile_element = mob_element, stringsAsFactors = FALSE)
-			}
-			return(new_cols)
-		})
-		cog_cols <- bind_rows(with_cog_l)
-		return(data.frame(cbind(set, cog_cols)))
+		# 		new_cols	<- data.frame(COG = I(COGs), NOG = I(NOGs), Prot_name = prot_name, Mobile_element = mob_element, stringsAsFactors = FALSE)
+		# 	}
+		# 	return(new_cols)
+		# })
+		# proc.time() - ptm
+
+		# ptm <- proc.time()
+		# Assume cog_data[1] is named "Full_protID"
+		set_cog_df <- merge(set, cog_data[,c(1,9,11,12,14)], by = "Full_protID", all.x = TRUE, sort = FALSE)
+		names(set_cog_df)[(ncol(set_cog_df)-3):ncol(set_cog_df)]	<- c("NOG", "COG", "Prot_name", "Mobile_element")
+		# Any NA mobile element values change to FALSE
+		set_cog_df$Mobile_element[is.na(set_cog_df$Mobile_element)] <- FALSE
+		set_cog_df[is.na(set_cog_df)] <- "-"
+		set_cog_df$COG	<- str_split(set_cog_df$COG, ",")
+		set_cog_df$NOG	<- lapply(str_split(set_cog_df$NOG, ","), function(OGs) grep("@NOG", unlist(OGs), value = TRUE))
+
+		return(set_cog_df)
+
+
+		# cog_cols <- bind_rows(with_cog_l)
+		# return(data.frame(cbind(set, cog_cols)))
 	})
 	names(cog_dfs) <- names(all_dfs)
 
@@ -791,20 +808,23 @@ byposition_COGs	<- function(subdivs, set = "long") {
 	return(list(full_data = bysubdiv_data, tab_df = reduced_subdiv_tabs))
 }
 
-FunctionalEnrichmentBetweenSets	<- function(set_1, set_2, mobile_exclude = FALSE) {
+FunctionalEnrichmentBetweenSets	<- function(set_1, set_2, mobile_seperate = FALSE) {
 
 	prop_table_list	<- lapply(penalty_l, function(penalty) {
 		penalty_name	<- paste0("T", penalty)
 
-		if (!mobile_exclude) {
-			set1_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$COG)))[-1,]
-			set2_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$COG)))[-1,]
-		} else {
-			set1_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$Mobile_element == FALSE])))[-1,]
-			set2_df	<- as.data.frame(table(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$Mobile_element == FALSE])))[-1,]
+		set1_data	<- per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data
+		set2_data	<- per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data
 
-			set1_df <- rbind(set1_df, data.frame(Var1 = "W", Freq = length(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_1)]]$cross_set_data$Mobile_element == TRUE]))))
-			set2_df <- rbind(set2_df, data.frame(Var1 = "W", Freq = length(unlist(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$COG[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set_2)]]$cross_set_data$Mobile_element == TRUE]))))
+		if (!mobile_seperate) {
+			set1_df	<- as.data.frame(table(str_trim(unlist(set1_data$COG))))
+			set2_df	<- as.data.frame(table(str_trim(unlist(set2_data$COG))))
+		} else {
+			set1_df	<- as.data.frame(table(str_trim(unlist(set1_data$COG[set1_data$Mobile_element == FALSE]))))
+			set2_df	<- as.data.frame(table(str_trim(unlist(set2_data$COG[set2_data$Mobile_element == FALSE]))))
+
+			set1_df <- rbind(set1_df, data.frame(Var1 = "W", Freq = length(unlist(set1_data$COG[set1_data$Mobile_element == TRUE]))))
+			set2_df <- rbind(set2_df, data.frame(Var1 = "W", Freq = length(unlist(set2_data$COG[set2_data$Mobile_element == TRUE]))))
 
 			rownames(set1_df) <- NULL
 			rownames(set2_df) <- NULL
@@ -822,7 +842,7 @@ FunctionalEnrichmentBetweenSets	<- function(set_1, set_2, mobile_exclude = FALSE
 		names(prop_table)	<- c("COG", penalty_name)
 		return(prop_table)
 	})
-	return(merged_prop_df	<- Reduce(function(df1, df2) full_join(df1, df2), prop_table_list))
+	merged_prop_df	<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), prop_table_list)
 }
 
 PlotRelativeEnrichmentBoxes <- function(merged_prop_df, set_1_name, set_2_name) {
@@ -883,11 +903,27 @@ PlotRelativeEnrichmentBoxes <- function(merged_prop_df, set_1_name, set_2_name) 
 	return(plot_relative_HGT_boxes)
 }
 
+# / Cumulative fraction plot for two vectors of data (as graphic for KS-test) / #
+CumulFractPlot	<- function(set_1, set_2, names = c("set_1", "set_2"), x_label = "x_value", plot_title = "NA") {
+	# / Order the data / #
+	set_1.ord	<- sort(set_1)
+	set_2.ord	<- sort(set_2)
+
+	# / Count data / #
+	n_set_1		<- sum(!is.na(set_1.ord))
+	n_set_2		<- sum(!is.na(set_2.ord))
+
+	# / Plot data / #
+	plot(set_1.ord, (1:n_set_1)/n_set_1, type = "s", xlab = x_label, ylab = 'Cumulative Frequency', main = plot_title)
+	lines(set_2.ord, (1:n_set_2)/n_set_2, type = "s", col = "red")
+	legend("bottomright", legend = names, lty=c(1,1), lwd = c(2,2), col = c("black", "red"))
+}
+
 
 ```
 
-## 1. HGT density and separation by subgroup {.tabset .tabset-fade}
-### 1. Per-species HGT density plots
+# HGT density and separation by subgroup {.tabset .tabset-fade}
+## Per-species HGT density plots
 List of the the assembled _Geobacillus_ genomes
 ```{r per_spec_hgt_dens_all, warning = FALSE, message = FALSE, cache = TRUE}
 
@@ -914,7 +950,7 @@ bandwith 	= 400
 
 # Prepare list to hold all the data #
 per_penalty_data_list	<- lapply(penalty_l, function(penalty) {
-	message("Penatly: ", penalty)
+	message("Penalty: ", penalty)
 	per_species_data_list <- lapply(assembled_species_l, function(species) {
 		message("\tSpecies: ", species)
 		combined_species_data(species = species, penalty = penalty, bandwith = bandwith, window = window_size, subgroup_data = subgroup_data, cog_data = cog_data)
@@ -948,7 +984,7 @@ temp <- lapply(assembled_species_l, function(species) {
 rm(temp)
 ```
 
-### 2. Per-species by subgroup
+## Per-species by subgroup
 ```{r find_labelled_tree, warning = FALSE, message = FALSE, cache = TRUE}
 path_to_labelled_tree <- "/Users/aesin/Desktop/Geo_analysis/New_geobacillus_consensus/Correlation/Figures/tree_for_correlations-1.png"
 if (file.exists(path_to_labelled_tree)) {
@@ -987,7 +1023,7 @@ temp	<- lapply(subgroup_data$species, function(species) {
 rm(temp)
 ```
 
-### 3. All species combined
+## All species combined
 ```{r combine_data_across_sets, message = FALSE, warning = FALSE, cache = TRUE}
 
 # Define the sets for which we combine data across species
@@ -1046,7 +1082,6 @@ temp	<- lapply(main_plot_sets, function(set) {
 	replayPlot(set_plot)
 })
 
-# devSVG(file = "/Users/aesin/Desktop/SMBE_poster/Long_density.svg", height = 10, width = 10)
 
 temp <- combined_plot(
 		hgt_penalty	<- "5",
@@ -1054,7 +1089,7 @@ temp <- combined_plot(
 		set			<- "long",
 		)
 replayPlot(temp)
-# dev.off()
+
 
 ```
 ```{r plot_combined_sub, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 6, dev = 'png'}
@@ -1093,8 +1128,8 @@ replayPlot(temp)
 
 ```
 
-## 2. Location and movement of vertically inherited genes {.tabset .tabset-fade}
-### 1. Distribution of vertical genes {#sect2.1}
+# Location and movement of vertically inherited genes {.tabset .tabset-fade}
+## Distribution of vertical genes {#sect2.1}
 Take only those vertical groups that have 12 gene entries (one per fully assembled genome). Calculate the range of the genes in each gene family - a large range indicates that orthologues have moved around the genome. We work with the most conservative prediction of vertical genes - consistent transfers from T3 (i.e. consistent over penalties 6, 5, 4 & 3 with 3 being the least permissive).
 ```{r vertical_one_per_genome, message = FALSE, warning = FALSE, cache = TRUE}
 
@@ -1123,7 +1158,7 @@ plot(logspline(distance_ranges_df$Range), xlab = "Maximum distance between genes
 ```
 
 
-### 2. Moving & unmoving gene families {#sect2.2}
+## Moving & unmoving gene families {#sect2.2}
 In the density plot [1. Distribution of vertical genes](#sect2.1) there is a clear division between subsets of vertical genes that either have a very low (almost 0) range of gene positions, and genes with a substantial range of gene positions. Here, we plot the density distributions of these two sets.
 ```{r plot_moving_unmoving, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 9, dev = 'png'}
 
@@ -1164,7 +1199,7 @@ names(combined_norm_pos_data) <- assembled_species_l
 ```
 
 
-### 3. "Unmoving" gene families do not rearrange
+## "Unmoving" gene families do not rearrange
 In the density plot [1. Distribution of vertical genes](#sect2.1) a subset of gene families have very low ranges. These are either gene families in which genes have not moved around the genome, or have moved a very short distance (e.g. near the origin but some moved across the Ori/Ter axis) - see [2. Moving/unmoving genes](#sect2.2). If they have moved across the Ori/Ter axis, the mean position of these genes would be very different. If 0.01 = downstream of Ori and 0.99 = just upstream of Ori, then for genes in a gene family that has moved across the boundary mean position = ~0.5.
 
 ```{r unmoving_genes, message = FALSE, warning = FALSE, cache = TRUE}
@@ -1190,11 +1225,11 @@ no_move_link		<- circos_pairwise_link(no_move_pairwise)
 no_move_link_plot	<- circos_link_plot(no_move_link, chrom_pad = 300)
 ```
 
-## 3. Vertical genes: moving {.tabset .tabset-fade}
+# Vertical genes: moving {.tabset .tabset-fade}
 __Vertical gene families that move around the genome can be further subdivided by the nature of movement. By measuring the mean distance to the origin of every gene in each gene family, we can differentiate between symmetrical movement across the Ori-Ter axis (low average distance to origin) and all other rearrangements.__
 
 
-### 1. Average distance to origin
+## Average distance to origin
 ```{r vert_average_ori_dist, message = FALSE, warning = FALSE, cache = TRUE}
 distances2ori	<- lapply(movement_df$Group, function(group) c(group, range_distances_to_ori(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Rel_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group == group])))
 distance2ori_df	<- do.call(rbind.data.frame, distances2ori)
@@ -1234,7 +1269,7 @@ single_dens_pos_plot(circular_density = quart_dist2ori_dens, bg_density, name = 
 single_dens_pos_plot(circular_density = other_dist2ori_dens, bg_density, name = paste0("Other dist to Ori\n", length(other_dist2ori_groups)), shrink = 1.5)
 ```
 
-### 2. Low dist to origin
+## Low dist to origin
 These are vertical gene families that have genes dispersed in a manner consistent with inversion(s) symmetrical along the Ori-Ter axis.
 
 ```{r low_dist2ori, message = FALSE, warning = FALSE, cache = TRUE}
@@ -1245,7 +1280,7 @@ low_dist_species_pos_l		<- lapply(all_species_vert_l, function(row) {row[row$Gro
 low_dist2ori_species_pos_melt	<- melt(low_dist_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
 ```
 
-```{r plot_low_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = 'png'}
+```{r plot_low_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = c('jpeg', 'png')}
 ggplot(low_dist2ori_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of Ori-Ter symmetric vertical genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
 ```
 
@@ -1255,18 +1290,18 @@ low_dist2ori_pairwise	<- circos_pairwise_data_list(low_dist2ori_collated)
 low_dist2ori_link		<- circos_pairwise_link(low_dist2ori_pairwise)
 ```
 
-```{r plot_low_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = 'png'}
+```{r plot_low_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = c('jpeg', 'png')}
 lowdist_link_plot	<- circos_link_plot(low_dist2ori_link)
 ```
 
 
-### 3. Quarter dist to origin
+## Quarter dist to origin
 ```{r quarter_dist2ori, message = FALSE, warning = FALSE, cache = TRUE}
 quart_dist_species_pos_l		<- lapply(all_species_vert_l, function(row) {row[row$Group %in% quart_dist2ori_groups,1:2]})
 quart_dist_species_pos_melt		<- melt(quart_dist_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
 ```
 
-```{r plot_quart_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = 'png'}
+```{r plot_quart_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = c('jpeg', 'png')}
 ggplot(quart_dist_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of quarter dist genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
 ```
 
@@ -1276,17 +1311,17 @@ quart_dist2ori_pairwise	<- circos_pairwise_data_list(quart_dist2ori_collated)
 quart_dist2ori_link		<- circos_pairwise_link(quart_dist2ori_pairwise)
 ```
 
-```{r plot_quart_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = 'png'}
+```{r plot_quart_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = c('jpeg','png')}
 quartdist_link_plot	<- circos_link_plot(quart_dist2ori_link)
 ```
 
-### 4. Other dist to origin
+## Other dist to origin
 ```{r other_dist2ori, message = FALSE, warning = FALSE, cache = TRUE}
 other_dist_species_pos_l		<- lapply(all_species_vert_l, function(row) {row[row$Group %in% other_dist2ori_groups,1:2]})
 other_dist_species_pos_melt		<- melt(other_dist_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
 ```
 
-```{r plot_other_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = 'png'}
+```{r plot_other_dist_per_species, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 6, fig.height = 5, dev = c('jpeg','png')}
 ggplot(other_dist_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of other dist genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
 ```
 
@@ -1296,13 +1331,13 @@ other_dist2ori_pairwise	<- circos_pairwise_data_list(other_dist2ori_collated)
 other_dist2ori_link		<- circos_pairwise_link(other_dist2ori_pairwise)
 ```
 
-```{r plot_othert_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = 'png'}
+```{r plot_othert_dist_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 5, fig.height = 5, out.width = '1000px', dev = c('jpeg','png')}
 otherdist_link_plot	<- circos_link_plot(other_dist2ori_link)
 ```
 
 
-### 5. Rearrangement towards origin
-The most interesting are genes that seem to have rearranged non-symmetrically ("other dist to origin") either into or away from the origin. We look at these in more detail.
+## Rearrangement towards origin
+#### The most interesting are genes that seem to have rearranged non-symmetrically ("other dist to origin") either into or away from the origin. We look at these in more detail.
 ```{r other_near_ori, message = FALSE, warning = FALSE, cache = TRUE}
 other_dist_per_species_starts	<- sapply(as.character(other_dist2ori_groups), function(group) {
 	species_group_starts	<- lapply(all_species_vert_l, function(species) {
@@ -1320,12 +1355,12 @@ other_near_ori_pairwise	<- circos_pairwise_data_list(other_near_ori_collated)
 other_near_ori_link		<- circos_pairwise_link(other_near_ori_pairwise)
 ```
 
-```{r plot_other_near_ori, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 7, fig.height = 7, out.width = '1000px', dev = 'png'}
+```{r plot_other_near_ori, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 6, fig.height = 6, out.width = '1000px', dev = c('jpeg','png')}
 other_near_ori_plot	<- circos_link_plot(other_near_ori_link)
 ```
 
-A lot of this signal is coming from a secondary large scale inversion. We can identify which organism this is by looking at the 'near origin' outlier in the relative positions of these groups.
-```{r outlier_genome_other, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 9, fig.height = 7, dev = 'png'}
+#### A lot of this signal is coming from a secondary large scale inversion. We can identify which organism this is by looking at the 'near origin' outlier in the relative positions of these groups.
+```{r outlier_genome_other, message = FALSE, warning = FALSE, cache = TRUE, fig.length = 9, fig.height = 7, dev = c('jpeg', 'png')}
 other_near_ori_species_pos_l	<- lapply(all_species_vert_l, function(row) {row[row$Group %in% names(any_genes_near_ori),1:2]})
 other_near_ori_species_pos_melt	<- melt(other_near_ori_species_pos_l, id.vars = "Group", measure.vars = "Rel_start")
 other_near_ori_species_pos_melt	<- other_near_ori_species_pos_melt[other_near_ori_species_pos_melt$value < 0.25,]
@@ -1333,7 +1368,7 @@ other_near_ori_species_pos_melt	<- other_near_ori_species_pos_melt[other_near_or
 ggplot(other_near_ori_species_pos_melt, aes(x = value, y = L1, color = L1)) + geom_point() + ggtitle("Distribution of genes non-symmetrically rearranging close to origin genes across species") + labs(x = "Relative position along genome", y = "", color = "Species") +  theme(plot.title = element_text(hjust = 0.5))
 ```
 
-The major genome contributing to this signal is _Geobacillus sp. Y412MC61_. We can exclude all the groups that would otherwise be considered symmetrical inversions if not for Y412MC61.
+#### The major genome contributing to this signal is _Geobacillus sp. Y412MC61_. We can exclude all the groups that would otherwise be considered symmetrical inversions if not for Y412MC61.
 ```{r remove_outlier_genome, message = FALSE, warning = FALSE, cache = TRUE}
 any_genes_near_ori_outlier_rem <- lapply(any_genes_near_ori, function(x) {x[!x$Species == "Geobacillus_sp_Y412MC61",]})
 
@@ -1350,7 +1385,8 @@ other_near_ori_out_rem_pairwise	<- circos_pairwise_data_list(other_near_ori_out_
 other_near_ori_out_rem_link		<- circos_pairwise_link(other_near_ori_out_rem_pairwise)
 ```
 
-```{r plot_other_near_ori_outlier_rem, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, out.width = '1000px', dev = 'png'}
+
+```{r plot_other_near_ori_outlier_rem, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 9, fig.height = 3, out.width = '1000px', dev = 'png'}
 grid_size <- c(ceiling(length(still_non_sym) / 3), 3)
 par(mfrow = grid_size)
 temp_out	<- lapply(seq_along(no_outlier_full_groups), function(i) {
@@ -1363,22 +1399,20 @@ temp_out	<- lapply(seq_along(no_outlier_full_groups), function(i) {
 ```
 
 
-## 4. Location and movement of HGT genes {.tabset .tabset-fade}
-### 1. Long and short distance HGTs
+# Location and movement of HGT genes {.tabset .tabset-fade}
+### HGTs: Long vs Short
+#### Looking at the distribution / movement of HGT genes that are consistently predicted at penalty =  `r HGT_penalty`
 ```{r long_and_short_data, message = FALSE, warning = FALSE, cache = TRUE}
-print(paste0("Working on transfers predicted consistently for penalty = ", HGT_penalty))
 
-x_species_HGT_data <- per_penalty_combined_xsets[[as.character(HGT_name)]]
+# / Define a shortcut for the data set / #
+x_species_HGT_data <- per_penalty_combined_xsets[[HGT_name]]
 
-unique_lHGT_groups	<- unique(x_species_HGT_data$long$cross_set_data$Group)
-unique_sHGT_groups	<- unique(x_species_HGT_data$short$cross_set_data$Group)
-
-unique_lgrpHGT_groups	<- unique(x_species_HGT_data$long_group$cross_set_data$Group)
-unique_lsubHGT_groups	<- unique(x_species_HGT_data$long_subgroup$cross_set_data$Group)
-
+# / For each set of interest, identify unique groups and
+# prepara the data for Circos plotting / #
 hgt_sets	<- list("long", "short", "long_group", "long_subgroup")
+
 hgt_link_data	<- lapply(hgt_sets, function(set) {
-	unique_set_groups	<- unique(x_species_HGT_data[[as.character(set)]]$cross_set_data$Group)
+	unique_set_groups	<- unique(x_species_HGT_data[[set]]$cross_set_data$Group)
 
 	# Prepare link data
 	collated_data	<- collate_across_species_norm(set = set, group_list = unique_set_groups, species_l = assembled_species_l)
@@ -1387,75 +1421,115 @@ hgt_link_data	<- lapply(hgt_sets, function(set) {
 
 	return(link_df)
 })
+# / Rename the list to match the set names / #
 names(hgt_link_data)	<- hgt_sets
 ```
 
-```{r plot_long_short_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, dev = 'png'}
+```{r plot_long_short_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, dev = c('jpeg','png')}
 par(mfrow = c(1,2))
+# / Plot the lHGT vs sHGT comparison / #
 circos_link_plot(hgt_link_data$long, title = paste0("All long distance HGT gene families"))
 circos_link_plot(hgt_link_data$short, title = paste0("All short distance HGT gene families"))
 ```
 
-###2. Group and subgroup transfers
-```{r plot_group_subgroup_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, dev = 'png'}
+### lHGTS: Group vs Subgroup
+```{r plot_group_subgroup_circos, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, dev = c('jpeg','png')}
 par(mfrow = c(1,2))
+# / Plot the lGrpHGT vs lSubHGT comparison / #
 circos_link_plot(hgt_link_data$long_group, title = paste0("All long (group) distance HGT gene families"), title_cex = 0.8)
 circos_link_plot(hgt_link_data$long_subgroup, title = paste0("All long (subgroup) distance HGT gene families"), title_cex = 0.8)
 ```
 
 
 
-
-
-
-## 5. Functional enrichment {.tabset .tabset-fade}
-
-### 1. Functional profile
+# Functional enrichment {.tabset .tabset-fade}
+## COG Functional Profiles
+### COG Enrichment: Versus "All"
+#### Do the Vertical (vert) and lHGT (long) predicted gene sets have particular patterns of COG functional enrichment? We might expect highly conserved, well networked genes (e.g. Cell Motility - N) to be enriched in the Vertical gene set and depleted in the lHGT set relative to the total set (all) of genes. Similarly, Defence (V) genes may be enriched in the lHGT set
 ```{r plot_VertLong_v_All_COG, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6, dev = 'png'}
-plot_vert_v_all	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("vert", "all"), "vert", "all")
-plot_long_v_all	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("long", "all"), "long", "all")
-plot(plot_vert_v_all)
-plot(plot_long_v_all)
+
+# / Calculate the per-penalty enrichment between vert / long and the whole (all) set / #
+VertVsAll_COG_enrich	<- FunctionalEnrichmentBetweenSets("vert", "all")
+LongVsAll_COG_enrich	<- FunctionalEnrichmentBetweenSets("long", "all")
+
+# / Plot the enrinchment profiles per COG. The plot is done on a log-scale, so 0 = no enrichment / #
+VertVsAll_plot		<- PlotRelativeEnrichmentBoxes(VertVsAll_COG_enrich, "vert", "all")
+LongVsAll_plot		<- PlotRelativeEnrichmentBoxes(LongVsAll_COG_enrich, "long", "all")
+
+# / Display plots / #
+plot(VertVsAll_plot)
+plot(LongVsAll_plot)
 ```
 
+### COG Enrichment: lHGT vs Vertical
+#### Here we calculate lHGT enrichment over the vertical genes - the "core" genome. A clear picture appears, though interestingly "L" - Replication, Recombination, Repair appears enriched for lHGT, which is at odds with its information processing, conserved COG type. We revisit this in the next section.
 ```{r plot_long_v_vert_COG_enrich, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6, dev = 'png'}
-plot_long_v_vert_COGenrich	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("long", "vert"), "long", "vert")
-plot(plot_long_v_vert_COGenrich)
+# / Repeat as above, but lHGT vs Vertical set enrinchment. / #
+LongVsVert_COG_enrich	<- FunctionalEnrichmentBetweenSets("long", "vert")
+LongVsVert_plot			<- PlotRelativeEnrichmentBoxes(LongVsVert_COG_enrich, "long", "vert")
+
+plot(LongVsVert_plot)
 ```
 
+
+### NEEDS TO BE REARRANGED
 ```{r change_in_prot_groups_nums, message = FALSE, warning = FALSE, cache = TRUE}
-# Number of proteins & groups in: all, vertical, long, short
+
+# / Calculate the number of proteins & groups in: "all", "vertical", "long", "short" sets
 all_penalties_stats	<- lapply(penalty_l, function(penalty) {
+	# / Define penalty name / #
 	penalty_name	<- paste0("T", penalty)
 	stats_list	<- lapply(c("all", "vert", "long", "short"), function(set) {
-		prot_number	<- length(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Full_protID)
-		grp_number	<- length(unique(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Group))
+		# / Number of proteins / #
+		prot_number	<- length(per_penalty_combined_xsets[[penalty_name]][[set]]$cross_set_data$Full_protID)
+		# / Number of groups / #
+		grp_number	<- length(unique(per_penalty_combined_xsets[[penalty_name]][[set]]$cross_set_data$Group))
+		# / Return as a data frame / #
 		return(data.frame(Penalty = penalty_name, Set = set, NumProteins = prot_number, NumGroups = grp_number))
 	})
+	# / Bind per set data together into per-penalty data frames / #
 	per_penalty_l <- bind_rows(stats_list)
 })
-
+# / Bind per-penalty data frames together into a single structure / #
 across_penalty_df <- bind_rows(all_penalties_stats)
+# / Order based on the set (e.g. "all") / #
 across_penalty_df <- across_penalty_df[order(across_penalty_df$Set),]
 print(across_penalty_df)
 ```
 
-### 2. Mobile elements
-```{r plot_mobile_elems_COG, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 4, fig.height = 4, dev = 'png'}
-# What COGs do mobile elements belong to?
-mobile_element_COGs	<- as.data.frame(table(unlist(per_penalty_combined_xsets$T3$all$cross_set_data$COG[per_penalty_combined_xsets$T3$all$cross_set_data$Mobile_element == TRUE])))
-mobile_element_COGs$Fraction	<- mobile_element_COGs$Freq / sum(mobile_element_COGs$Freq)
-names(mobile_element_COGs) <- c("COG", "Frequency", "Fraction")
-mobile_element_COG_plot	<-	ggplot(mobile_element_COGs, aes(x = COG, y = Fraction, fill = COG)) +
+## Mobile elements
+### Mobile elements: Which COGs?
+#### We can determine that mobile elements across the whole dataset ("all" set) belong predominantly to the 'L' COG group
+```{r plot_mobile_elems_COG, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 6, dev = 'png'}
+
+# / Define the data in which we look for Mobile Element 
+# gene families. In this case it's "all" genes. This
+# set is identical across all penalties so T3 is fine. / #
+all_mobile_element_data	<- per_penalty_combined_xsets$T3$all$cross_set_data
+
+# / Dataframe of number of Mob. Elems. per COG / #
+mob_elem_COG_df			<- data.frame(table(unlist(all_mobile_element_data$COG[which(all_mobile_element_data$Mobile_element == TRUE)])))
+
+# / As a fraction of total Mob. Elems. / #
+mob_elem_COG_df$Fract	<- mob_elem_COG_df$Freq / sum(mob_elem_COG_df$Freq)
+
+# / Rename columns / #
+names(mob_elem_COG_df)	<- c("COG", "Frequency", "Fraction")
+
+# / Bar plot / #
+mob_elem_COG_plot		<-	ggplot(mob_elem_COG_df, aes(x = COG, y = Fraction, fill = COG)) +
 							geom_bar(stat = "identity") +
-							scale_y_continuous("Fraction of Mobile elements in COG") +
-							ggtitle("Mobile elements per COG") +
+							scale_y_continuous("Fraction of Mobile Elements in COG") +
+							ggtitle("Mobile Elements per COG") +
 							theme_bw() +
-							theme(axis.text = element_text(size = 12), axis.title = element_text(size = 14,face = "bold"), plot.title = element_text(size = 20, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_text(size = 18), legend.key.size = unit(1, "cm"))
+							theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
+plot(mobile_element_COG_plot)
 ```
 
-```{r mobile_elems_change_with_other_sets, message = FALSE, warning = FALSE, cache = TRUE}
-# Number of mobile elements in all the sets across different penalties #
+### Mobile Elements: Change with penalty
+#### In this section we check determine how many mobile elements belong to each set, and how their prediction changes with penalty
+```{r calc_mobile_element_xpen, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 8, dev = 'png'}
+# / Number of mobile elements in all the sets across different penalties / #
 across_pen_mobile_l <- lapply(c("all", "vert", "long", "short"), function(set) {
 
 	set_mobile <- lapply(penalty_l, function(penalty) {
@@ -1467,98 +1541,265 @@ across_pen_mobile_l <- lapply(c("all", "vert", "long", "short"), function(set) {
 })
 across_pen_mobile_df	<- bind_rows(across_pen_mobile_l)
 across_pen_mobile_df	<- across_pen_mobile_df[order(across_pen_mobile_df$Set),]
-print(across_pen_mobile_df)
 
+# / We combine the data so we can correlated the number of
+# mobile elements predicted within each set with the number
+# of genes predicted for each set. The correlations (pearson)
+# are v. high / #
 total_num_stats_df	<- merge(across_penalty_df, across_pen_mobile_df, by = c("Penalty", "Set"))
 total_num_stats_df	<- total_num_stats_df[order(total_num_stats_df$Set),]
 
-# Correlation of number of Mob. Elements with number of long/vert proteins
-print(cor(total_num_stats_df$NumProteins[total_num_stats_df$Set == "long"], total_num_stats_df$Mobile_elements[total_num_stats_df$Set == "long"]))
+# / Correlation of number of Mob. Elements with number of long/vert proteins / #
+temp <- cor(total_num_stats_df$NumProteins[total_num_stats_df$Set == "long"], total_num_stats_df$Mobile_elements[total_num_stats_df$Set == "long"])
 # [1] 0.980108
-print(cor(total_num_stats_df$NumProteins[total_num_stats_df$Set == "vert"], total_num_stats_df$Mobile_elements[total_num_stats_df$Set == "vert"]))
+temp <- cor(total_num_stats_df$NumProteins[total_num_stats_df$Set == "vert"], total_num_stats_df$Mobile_elements[total_num_stats_df$Set == "vert"])
 # [1] 0.9558743
-```
 
-```{r plot_mobile_elems_xpen_xset, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 4, fig.height = 4, dev = 'png'}
-xpenalty_mobile_elem_num	<- across_pen_mobile_df[across_pen_mobile_df$Set %in% c("long", "vert", "short"), ]
-xpenalty_mob_elem_num_plot	<-	ggplot(xpenalty_mobile_elem_num, aes(x=Penalty, y = Mobile_elements, fill = Set)) +
+# / Select for which sets we want to plot Mob. Elem. data / #
+xpenalty_mob_elem_num		<- across_pen_mobile_df[across_pen_mobile_df$Set %in% c("long", "vert", "short"), ]
+
+# / Bar plot of Mob. Elem. predicted across penalties / #
+xpenalty_mob_elem_num_plot	<- ggplot(xpenalty_mobile_elem_num, aes(x=Penalty, y = Mobile_elements, fill = Set)) +
 								geom_bar(stat = "identity") +
 								facet_wrap(~Set) +
 								scale_y_continuous("Number of mobile elements") +
 								ggtitle("Mobile element prediction across penalties/sets") +
 								theme_bw() +
-								theme(axis.text = element_text(size = 12), axis.title = element_text(size = 14,face = "bold"), plot.title = element_text(size = 20, hjust = 0.5), legend.text = element_text(size = 16), legend.title = element_text(size = 18), legend.key.size = unit(1, "cm"), strip.text.x = element_text(size = 12))
+								theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
 
 plot(xpenalty_mob_elem_num_plot)
 ```
 
+### Mobile Elements: Change with penalty (2)
+#### Large increase in mobile elements in Vertical set between T4 and T5 (and decrease in long set) due to 3 gene families switching from long (T4) to vert (T5). These 3 groups are highly populated (62 total genes), leading to the jump we see in the graph above
 ```{r T4_T5_mob_elem_jump, message = FALSE, warning = FALSE, cache = TRUE}
 
-# large increase in mobile elements in Vertical set between T4 and T5 (and decrease in long set) due to 3 genes being predicted 
+# / Vertical groups at T5 and lHGT groups at T4 / #
 vert_T5 <- unique(per_penalty_combined_xsets$T5$vert$cross_set_data$Group[per_penalty_combined_xsets$T5$vert$cross_set_data$Mobile_element == TRUE])
 long_T4	<- unique(per_penalty_combined_xsets$T4$long$cross_set_data$Group[per_penalty_combined_xsets$T4$long$cross_set_data$Mobile_element == TRUE])
+
+# / Intersect: groups that change from long (T4) to vert (T5)
+# This doesn't consider groups not defined as long @ T4 that may 
+# be predicted as T5 vert / #
 long_to_vert	<- intersect(vert_T5, long_T4)
 
-# 3 groups intersect both sets
-cat(paste0("Groups that intersect between T4_long and T5 vert: ", paste(long_to_vert, collapse = " ")))
+# / 3 groups intersect both sets/ #
+cat(paste0("Groups that intersect between T4 (long) and T5 (vert): ", paste(long_to_vert, collapse = " ")))
 
-# However > 60 proteins belong to these 3 groups
-number_of_proteins	<- nrow(per_penalty_combined_xsets$T5$all$cross_set_data[per_penalty_combined_xsets$T5$all$cross_set_data$Group %in% long_to_vert, ])
+# / However > 60 proteins belong to these 3 groups / #
+number_of_proteins	<- length(per_penalty_combined_xsets$T5$all$cross_set_data$Full_protID[which(per_penalty_combined_xsets$T5$all$cross_set_data$Group %in% long_to_vert)])
 cat(paste0("Total number of proteins belonging to these groups: ", number_of_proteins))
 ```
 
+### COG Enrichment: Mobile elements
 ```{r plot_COG_enrich_mobile, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6, dev = 'png'}
-long_v_vert_mob_remove	<- PlotRelativeEnrichmentBoxes(FunctionalEnrichmentBetweenSets("long", "vert", mobile_exclude = TRUE), "long", "vert")
+# / Seperate mobile elements into a seperate category - W / #
+long_v_vert_COG_enrich_tab	<- FunctionalEnrichmentBetweenSets("long", "vert", mobile_seperate = TRUE)
+long_v_vert_mob_remove	<- PlotRelativeEnrichmentBoxes(long_v_vert_COG_enrich_tab, "long", "vert")
 plot(long_v_vert_mob_remove)
 ```
 
-par(mfrow = c(2,2))
+### Gene Dispersion: Calculation
+#### Calculate per penalty & per set dispersion distances. I.e. measure the relative distribution of genes within each group - the aim, to see whether mobile elements (transposases) show similar or different dispersion to other HGT-derived genes. Expectation = higher mobility
+```{r calc_dispersion_dists, message = FALSE, warning = FALSE, cache = TRUE}
+
 per_penalty_distances	<- lapply(penalty_l, function(penalty) {
+
+	# / Define penalty and names of sets / #
 	penalty_name	<- paste0("T", penalty)
 	working_sets	<- c("all", "vert", "long", "short")
+
+	# / For each group within each set, get the average dispersion distance / #
 	per_set_distances	<- lapply(working_sets, function(set) {
 
-		message(paste0(penalty_name, " : ", set))
+		# / Extract all unique group names from the dataset / #
+		set_groups	<- unique(per_penalty_combined_xsets[[penalty_name]][[set]]$cross_set_data$Group)
 
-		set_groups	<- unique(per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Group)
+		# / Keep track / #
+		message(paste0(penalty_name, " : ", set))
+		message(paste0("\tWorking on " ,length(set_groups), " groups..."))
+
+		# / Using which to subset is 2-fold faster than subsetting by logical or using subset / #
 		per_group_distances	<- lapply(set_groups, function(group) {
-			per_group_df	<- per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data[per_penalty_combined_xsets[[as.character(penalty_name)]][[as.character(set)]]$cross_set_data$Group == group,]
+
+			# / Extract just the part of the df matching the group number / #
+			per_group_df	<- per_penalty_combined_xsets[[penalty_name]][[set]]$cross_set_data[which(per_penalty_combined_xsets[[penalty_name]][[set]]$cross_set_data$Group == group),]
+			# / Mobile element or not? / #	
 			mob_el_state	<- all(per_group_df$Mobile_element)
 
-			if (nrow(per_group_df) > 2) {
-				group_av_dist	<- (mean(dist.circular(circular(per_group_df$Circular_start), method = "geodesic")))/(2*pi)
-				return(data.frame(Group = group, Av_dist = as.numeric(group_av_dist), Mobile_element = mob_el_state, stringsAsFactors = FALSE))
+			# / Only take the dispersion distance measurement if there is more than one gene / #
+			if (nrow(per_group_df) > 1) {
+				num_genes		<- nrow(per_group_df)
+				group_disp_dist	<- mean(dist.circular(per_group_df$Circular_start, method = "geodesic")) / (2 * pi)
+				return(data.frame(Group = group, Disp.Dist = group_disp_dist, Num.Genes = num_genes, Mobile.Element = mob_el_state, stringsAsFactors = FALSE))
 			} else {
 				return(NA)
 			}
 		})
-		per_group_distances		<- per_group_distances[!is.na(per_group_distances)]
-		per_group_distances_df	<- bind_rows(per_group_distances)
-		per_group_distances_df	<- per_group_distances_df[order(per_group_distances_df$Av_dist),]
+		# / Remove any NA values - groups < 2 genes. Bind into DF; order by dispersion distance / #
+		per_group_dists_no_na	<- per_group_distances[!is.na(per_group_distances)]
+		per_group_distances_df	<- bind_rows(per_group_dists_no_na)
+		per_group_distances_df	<- per_group_distances_df[order(per_group_distances_df$Disp.Dist),]
+		# / Add a new column to properly scale the number of genes, with anything > 10 set as 10 / #
+		per_group_distances_df$Gene.Scale	<- apply(per_group_distances_df, 1, function(row) ifelse(row[3] >= 10, 10, row[3]))
+		# / Add a new column with a negative value for all mobile elements / #
+		per_group_distances_df$Mobile.Value	<- apply(per_group_distances_df, 1, function(row) ifelse(row[4] == TRUE, -0.05, NA))
+		return(per_group_distances_df)
 	})
+	# / Rename list based on set names / #
 	names(per_set_distances)	<- working_sets
-	per_set_distances$long_mob	<- per_set_distances$long[per_set_distances$long$Mobile_element == TRUE,]
-	df_list <- lapply(names(per_set_distances),function(set_name) as.data.frame(cbind(Set = set_name, per_set_distances[[set_name]])))
-	df <- bind_rows(df_list)
-	ggplot(df, aes(x = Set, y = Av_dist)) + geom_boxplot()
-	return(0)
+	return(per_set_distances)
+})
+# / Rename list based on penalty names / #
+names(per_penalty_distances) <- lapply(penalty_l, function(pen) paste0("T", pen))
+```
+
+
+### Gene dispersion: Plotting
+#### For each set calculate a plot combining all the dispersion data. Colored by the number of genes composing the group, and with the position of mobile elements indicated underneath
+```{r plot_dispersion_dists, message = FALSE, warning = FALSE, cache = TRUE}
+sets	<- c("all", "vert", "long", "short")
+gene_dispersion_plots	<- lapply(sets, function(set) {
+	penalty	<- "T4"
+	plot_df	<- per_penalty_distances[[penalty]][[set]]
+
+	plot_df$Group	<- factor(plot_df$Group, levels = plot_df$Group)
+
+	plot	<- ggplot(plot_df, aes(x = Group, y = Disp.Dist, fill = Gene.Scale)) +
+		geom_col(width = 1) +
+	    scale_fill_distiller(palette="YlOrRd") +
+		geom_point(aes(x = Group, y = Mobile.Value), size = 8, shape = 73, color = "black") +
+	    theme(
+	        panel.background = element_blank(),
+	        panel.grid.major = element_blank(),
+	        panel.grid.minor = element_blank(),
+	        axis.text.x = element_blank(),
+	        axis.ticks.x = element_blank())
+
+	return(plot)
+})
+names(gene_dispersion_plots)	<- sets
+```
+
+#### Dispersion distance plot for the "all" set
+```{r plot_disp_dists1, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 4, dev = 'png'}
+# / Plot the all gene distribution / #
+gene_dispersion_plots$all
+```
+
+#### Dispersion distance plot for the "long" set
+```{r plot_disp_dists2, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 4, dev = 'png'}
+# / Plot the HGT (T4) gene distribution / #
+gene_dispersion_plots$long
+```
+
+
+
+### Gene Dispersion: Testing
+#### The gene dispersion amongst lHGT gene families is significantly different to gene dispersion in all genes. This is likely due to differences in the distribution of the numbers of genes in gene families - the "all" dataset contains the -core- vertical genes that typically have orthologs in every genome and are dispersed through Ori-Ter inversions given a particular dispersion profile. On the other hand, lHGT genes may have been acquired at any stage in lineage evolution (or multiple times independently) giving rise to pronounced extremes in dispersion as families containing 2 genes can have very large or low dispersion distances.
+
+```{r dispersion_ttests1, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 6, dev = 'png'}
+# / Tests of average gene dispersion of mobile elements in all and HGT sets / #
+# / Results are consistent across T4 and T5 / #
+# / Here: at T5 / #
+
+penalty <- "T5"
+
+# / The gene dispersion profiles between the "all" and "long" sets
+#  are different. / # 
+all_disp		<- per_penalty_distances[[penalty]]$all$Disp.Dist
+long_disp		<- per_penalty_distances[[penalty]]$long$Disp.Dist
+
+CumulFractPlot(all_disp, long_disp, names = c("All genes", "lHGT"), x_label = "Gene dispersion in gene family", plot_title = "Dispersion of genes in lHGT vs \"all\" gene families")
+print(ks.test(all_disp, long_disp))
+
+# / However, this is likely affected by the number of genes
+# contained in the gene families. There is a clear difference
+# in the gene content / family between "all" and "long" sets. / #
+all_geneNum		<- per_penalty_distances[[penalty]]$all$Num.Genes
+long_geneNum	<- per_penalty_distances[[penalty]]$long$Num.Genes
+
+CumulFractPlot(all_geneNum, long_geneNum, names = c("All genes", "lHGT"), x_label = "Number of genes in gene family", plot_title = "Gene number in lHGT vs \"all\" gene families")
+print(ks.test(all_geneNum, long_geneNum))
+```
+
+#### On the other hand, when comparing the distributions of gene number per family between lHGT genes and lHGT genes that are mobile elements, we find no difference. However, we still find a difference in the dispersion patterns of lHGT genes and lHGT mobile genes.
+```{r dispersion_ttests2, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 6, dev = 'png'}
+# / As might be expected, in terms of gene number, mobile elements
+# are representative of the lHGT set. / #
+long_mob_geneNum	<- per_penalty_distances[[penalty]]$long$Num.Genes[which(per_penalty_distances[[penalty]]$long$Mobile.Element == TRUE)]
+
+CumulFractPlot(long_geneNum, long_mob_geneNum, names = c("lHGT (All)", "lHGT (Mobile)"), x_label = "Number of genes in gene family", plot_title = "Gene number in lHGT (non-mobile) vs lHGT (mobile) gene families")
+print(ks.test(long_geneNum, long_mob_geneNum))
+
+# / However, the dispersion profile is still significantly different. / #
+long_mob_disp	<- per_penalty_distances[[penalty]]$long$Disp.Dist[which(per_penalty_distances[[penalty]]$long$Mobile.Element == TRUE)]
+
+CumulFractPlot(long_disp, long_mob_disp, names = c("lHGT (All)", "lHGT (Mobile)"), x_label = "Gene dispersion in gene family", plot_title = "Gene dispersion in lHGT (non-mobile) vs lHGT (mobile) gene families")
+print(ks.test(long_disp, long_mob_disp))
+```
+
+
+### Gene Dispersion: Sample mobile element (1643)
+```{r plot_sample_transposase, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 4, fig.height = 4, out.width = '50%', out.height = '50%', dev = c('jpeg','png')}
+# / Plot the positions of genes in a sample transposase gene family:
+# Group = 1643 / #
+group_1643		<- per_penalty_combined_xsets$T5$all$cross_set_data[which(per_penalty_combined_xsets$T5$all$cross_set_data$Group == 1643),]
+collated_data	<- collate_across_species_norm(set = "long", group_list = list(1643), species_l = assembled_species_l)
+pairwise_data	<- circos_pairwise_data_list(collated_data, solo_plot = TRUE)
+link_df			<- circos_pairwise_link(pairwise_data)
+circos_link_plot(link_df, title = paste0("Mobile elements: 1643"), linewidth = 1)
+```
+
+
+### Mobile Element: Overall Picture
+#### The movement of mobile elements in the T4 and T5 lHGT sets
+```{r circos_mobile_lHGT_T4_T5, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 4, dev = c('jpeg', 'png')}
+
+# / List of Mobile Element groups between T3 (most permissive) and T6 (conservative) - lHGT.
+# Positional data is collated and linked ready for Circos plotting / #
+lHGT_mobile_link_data	<- lapply(penalty_l, function(penalty) {
+	# / Define the penalty name / #
+	penalty_name	<- paste0("T", penalty)
+	# / Shortcut to the dataset / #
+	penalty_data	<- per_penalty_combined_xsets[[penalty_name]]$long$cross_set_data
+	# / Unique groups in that penalty lHGT dataset that are identified as Mobile Elements / #
+	unique_groups	<- unique(penalty_data$Group[which(penalty_data$Mobile_element == TRUE)])
+
+	# / Prepare link data / #
+	collated_data	<- collate_across_species_norm(set = "long", group_list = unique_groups, species_l = assembled_species_l)
+	pairwise_data	<- circos_pairwise_data_list(collated_data, solo_plot = TRUE)
+	link_df			<- circos_pairwise_link(pairwise_data)
+
+	return(link_df)
 })
 
-par(mfrow = c(2,2))
-lapply(per_penalty_distances, function(plot) replayPlot(plot))
+# / Rename list based on penalty names / #
+names(lHGT_mobile_link_data)	<- lapply(penalty_l, function(pen) paste0("T", pen))
+
+# / Plot the T3 (most permissive) and T5 (semi conservative) link  plots / #
+par(mfrow = c(1,2))
+circos_link_plot(lHGT_mobile_link_data$T3, title = paste0("Mobile lHGT gene families at T3"), title_cex = 0.8, linewidth = 0.6)
+circos_link_plot(lHGT_mobile_link_data$T5, title = paste0("Mobile lHGT gene families at T5"), title_cex = 0.8, linewidth = 0.6)
+```
 
 
 
-long_T4_dists	<- lapply(unique(per_penalty_combined_xsets$T4$long$cross_set_data$Group), function(group) {
-	per_group_df	<- per_penalty_combined_xsets$T4$long$cross_set_data[per_penalty_combined_xsets$T4$long$cross_set_data$Group == group,]
-	mob_el_state	<- all(per_group_df$Mobile_element)
-	if (nrow(per_group_df) > 1) {
-		group_av_dist	<- (mean(dist.circular(circular(per_group_df$Circular_start), method = "geodesic")))/(2*pi)
-		return(data.frame(Group = group, Av_dist = as.numeric(group_av_dist), Mobile_element = mob_el_state, stringsAsFactors = FALSE))
-	} else {
-		return(NA)
-	}
-})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
