@@ -286,28 +286,6 @@ combined_species_data	<- function(species = species, penalty = penalty, bandwith
 
 	# Add functional annotation to each protein entry #
 	cog_dfs	<- lapply(all_dfs, function(set) {
-
-		# ptm <- proc.time()
-		# with_cog_l	<- apply(set, 1, function(row) {
-
-		# 	cog_tbl_row	<- cog_data[.(row[2]), nomatch = 0L]
-
-		# 	if (nrow(cog_tbl_row) == 0) {
-		# 		new_cols	<- data.frame(COG = I(list("-")), NOG = I(list("-")), Prot_name = "-", Mobile_element = FALSE, stringsAsFactors = FALSE)
-		# 	} else {
-		# 		COGs		<- list(str_trim(unlist(str_split(cog_tbl_row$COG.cat, ","))))
-		# 		NOGs		<- list(grep("@NOG", unlist(str_split(cog_tbl_row$OGs, ",")), value = TRUE))
-				
-		# 		prot_name	<- cog_tbl_row$eggNOG.annot
-		# 		mob_element	<- cog_tbl_row$mob_element
-
-		# 		new_cols	<- data.frame(COG = I(COGs), NOG = I(NOGs), Prot_name = prot_name, Mobile_element = mob_element, stringsAsFactors = FALSE)
-		# 	}
-		# 	return(new_cols)
-		# })
-		# proc.time() - ptm
-
-		# ptm <- proc.time()
 		# Assume cog_data[1] is named "Full_protID"
 		set_cog_df <- merge(set, cog_data[,c(1,9,11,12,14)], by = "Full_protID", all.x = TRUE, sort = FALSE)
 		names(set_cog_df)[(ncol(set_cog_df)-3):ncol(set_cog_df)]	<- c("NOG", "COG", "Prot_name", "Mobile_element")
@@ -318,10 +296,6 @@ combined_species_data	<- function(species = species, penalty = penalty, bandwith
 		set_cog_df$NOG	<- lapply(str_split(set_cog_df$NOG, ","), function(OGs) grep("@NOG", unlist(OGs), value = TRUE))
 
 		return(set_cog_df)
-
-
-		# cog_cols <- bind_rows(with_cog_l)
-		# return(data.frame(cbind(set, cog_cols)))
 	})
 	names(cog_dfs) <- names(all_dfs)
 
@@ -664,7 +638,7 @@ collate_across_species_norm	<- function(set, species_l, group_list) {
 
 	per_group_positions		<- lapply(group_list, function(group) {
 		group_species_pos	<- lapply(species_l, function(species) {
-			ref_tbl	<- combined_norm_pos_data[[as.character(species)]]$norm_dfs[[as.character(set)]]
+			ref_tbl	<- combined_norm_pos_data[[species]]$norm_dfs[[set]]
 			# If the table doesn't exist, e.g. for this species there is no "long_subgroup" division, return empty DF
 			if (is.null(ref_tbl)) {
 				return(data.frame(START = numeric(), END = numeric()))
@@ -673,35 +647,52 @@ collate_across_species_norm	<- function(set, species_l, group_list) {
 			names(df)[2:3] <- c("START", "END")
 			return(df[,2:3])
 		})
-		names(group_species_pos)	<- assembled_species_l
+		names(group_species_pos)	<- species_l
 		present_group_species_pos	<- group_species_pos[lapply(group_species_pos, nrow) > 0]
 
 		keystone_spe	<- names(present_group_species_pos[1])
-		keystone_pos	<- cbind(Species = keystone_spe, present_group_species_pos[[as.character(keystone_spe)]][1,])
+		keystone_pos	<- cbind(Species = keystone_spe, present_group_species_pos[[keystone_spe]][1,])
 
 		return(list(keystone = keystone_pos, pos_data = present_group_species_pos))
 	})
 	names(per_group_positions) <- group_list
 	return(per_group_positions)
 }
+# / Updated to only plot faraway events / #
+circos_pairwise_data_list	<- function(group_pos_collated, solo_plot = FALSE, near_plot = TRUE, dist_cutoff = 50000) {
 
-circos_pairwise_data_list	<- function(group_pos_list, solo_plot = FALSE) {
+	output_list	<- lapply(group_pos_collated, function(group) {
 
-	output_list	<- lapply(group_pos_list, function(group) {
 		# If there's only one species (tip) involved in the transfer, we skip it as no connecting link can be made #
 		if(length(group$pos_data) == 1 && solo_plot == FALSE) {return()}
 
 		key_position <- group$keystone
 		pairwise_per_group	<- lapply(seq_along(group$pos_data), function(pos_tbl_index) {
-			# If this is the first set of coords in this group, we remove them because it would be identical to the key position #
+			# / If this is the first set of coords in this group and we don't want to solo plot,
+			# we remove them because it would be identical to the key position. If we solo plot,
+			# we link the key to itself to see the position of individual genes / #
 			if (pos_tbl_index == 1 && solo_plot == FALSE) {
 				pos_tbl	<- group$pos_data[[pos_tbl_index]][-1,]
 			} else {
 				pos_tbl	<- group$pos_data[[pos_tbl_index]]
 			}
+
 			if(nrow(pos_tbl) > 0) {
 				pairwise_per_spec	<- lapply(1:nrow(pos_tbl), function(row_index) {
-					return(data.frame(Chromosome = 1, chromStart = key_position$START, chromEND = key_position$END, Chromosome.1 = 1, chromStart.1 = pos_tbl[row_index, 1], chromEnd.1 = pos_tbl[row_index, 2]))
+					# / If we want to plot the links between all genes (near_plot = T), then return
+					# the relevant rows. If we want to plot links between faraway genes, then check
+					# the distance between the key gene and other genes to decide inclusion / #
+					if (near_plot == TRUE) {
+						return(data.frame(Chromosome = 1, chromStart = key_position$START, chromEND = key_position$END, Chromosome.1 = 1, chromStart.1 = pos_tbl[row_index, 1], chromEnd.1 = pos_tbl[row_index, 2]))
+					} else {
+						key_start	<- key_position$START
+						other_start	<- pos_tbl[row_index, 1]
+						if (abs(key_start - other_start) > dist_cutoff) {
+							return(data.frame(Chromosome = 1, chromStart = key_position$START, chromEND = key_position$END, Chromosome.1 = 1, chromStart.1 = pos_tbl[row_index, 1], chromEnd.1 = pos_tbl[row_index, 2]))
+						} else {
+							return(NULL)
+						}
+					}
 				})
 				return(do.call(rbind.data.frame, pairwise_per_spec))
 			} else {
@@ -1083,12 +1074,12 @@ temp	<- lapply(main_plot_sets, function(set) {
 })
 
 
-temp <- combined_plot(
-		hgt_penalty	<- "5",
-		ver_penalty	<- "3",
-		set			<- "long",
-		)
-replayPlot(temp)
+# temp <- combined_plot(
+# 		hgt_penalty	<- "5",
+# 		ver_penalty	<- "3",
+# 		set			<- "long",
+# 		)
+# replayPlot(temp)
 
 
 ```
@@ -1133,25 +1124,35 @@ replayPlot(temp)
 Take only those vertical groups that have 12 gene entries (one per fully assembled genome). Calculate the range of the genes in each gene family - a large range indicates that orthologues have moved around the genome. We work with the most conservative prediction of vertical genes - consistent transfers from T3 (i.e. consistent over penalties 6, 5, 4 & 3 with 3 being the least permissive).
 ```{r vertical_one_per_genome, message = FALSE, warning = FALSE, cache = TRUE}
 
-unique_vert_groups	<- unique(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group)
+unique_vert_groups	<- unique(per_penalty_combined_xsets[[ver_name]]$vert$cross_set_data$Group)
 
 vert_groups_all_assembled	<- lapply(unique_vert_groups, function(group) {
 	one2one_orth <- unlist(lapply(assembled_species_l, function(species) {
 		# Check group is present in the vertical gene set of the species #
-		presence <- per_penalty_data_list[[as.character(ver_name)]][[as.character(species)]]$all_dfs$vert$Group %in% group
+		presence <- per_penalty_data_list[[ver_name]][[species]]$all_dfs$vert$Group %in% group
 		# If present, and only once, return TRUE, else FALE #
 		if (sum(presence, na.rm = TRUE) == 1) {return(TRUE)} else {return(FALSE)}
 	}))
 	return(data.frame(Group = group, One2one_Ortholog =  all(one2one_orth)))
 })
-vert_groups_all_assembled	<- do.call(rbind.data.frame, vert_groups_all_assembled)
+vert_groups_all_assembled	<- bind_rows(vert_groups_all_assembled)
 vert_groups_one2one_orth	<- vert_groups_all_assembled$Group[vert_groups_all_assembled$One2one_Ortholog == TRUE]
 
 print(paste0("Out of ", length(unique_vert_groups), " vertical groups ", length(vert_groups_one2one_orth), " groups are made up of 1:1 orthologs."))
 
-distance_ranges		<- lapply(vert_groups_one2one_orth, function(group) c(group, circular_range(per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Rel_start[per_penalty_combined_xsets[[as.character(ver_name)]]$vert$cross_set_data$Group == group])))
-distance_ranges_df	<- do.call(rbind.data.frame, distance_ranges)
-names(distance_ranges_df) <- c("Group", "Range")
+distance_ranges		<- lapply(vert_groups_one2one_orth, function(group) {
+	circ_range	<- circular_range(per_penalty_combined_xsets[[ver_name]]$vert$cross_set_data$Rel_start[per_penalty_combined_xsets[[ver_name]]$vert$cross_set_data$Group == group])
+	return(data.frame(Group = group, Range = circ_range))
+})
+distance_ranges_df	<- bind_rows(distance_ranges)
+
+
+## / Plot all the vertical gene family links over 100kbp / ##
+# collated	<- collate_across_species_norm(set = "vert", species_l = assembled_species_l, group_list = vert_groups_one2one_orth)
+# pairwise	<- circos_pairwise_data_list(collated, solo_plot = FALSE, near_plot = FALSE, dist_cutoff = 100000)
+# link		<- circos_pairwise_link(pairwise)
+
+# circos_plot	<- circos_link_plot(link)
 
 # Distance of ranges #
 plot(logspline(distance_ranges_df$Range), xlab = "Maximum distance between genes within a vertical gene family", ylab = "Density", main = "Density of gene distribution ranges")
@@ -1784,11 +1785,31 @@ circos_link_plot(lHGT_mobile_link_data$T5, title = paste0("Mobile lHGT gene fami
 ```
 
 
+long_test_set	<- per_penalty_combined_xsets$T5$long$cross_set_data[which(per_penalty_combined_xsets$T5$long$cross_set_data$Group == 295),]
 
+x <-	lapply(1:nrow(long_test_set), function(index) {
+	row	<- long_test_set[index,]
 
+	start_pos	<- row$Rel_start
+	species		<- row$Species
 
+	species_genes	<- per_penalty_data_list$T5[[species]]$all_dfs$all
+	nearest_down	<- species_genes[which(species_genes$Rel_start == max(species_genes$Rel_start[species_genes$Rel_start < start_pos])),]
+	nearest_up		<- species_genes[which(species_genes$Rel_start == min(species_genes$Rel_start[species_genes$Rel_start > start_pos])),]
 
+	up_and_down	<- bind_rows(nearest_up, nearest_down)
 
+	return(up_and_down)
+
+})
+
+y <- bind_rows(x)
+
+group_1643		<- per_penalty_combined_xsets$T5$all$cross_set_data[which(per_penalty_combined_xsets$T5$all$cross_set_data$Group == 295),]
+collated_data	<- collate_across_species_norm(set = "long", group_list = list(295), species_l = assembled_species_l)
+pairwise_data	<- circos_pairwise_data_list(collated_data, solo_plot = TRUE)
+link_df			<- circos_pairwise_link(pairwise_data)
+circos_link_plot(link_df, title = paste0("Mobile elements: 295"), linewidth = 1)
 
 
 
