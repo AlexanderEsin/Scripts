@@ -21,7 +21,7 @@ set output_dir		$groups_dir/RAxML_tree
 file mkdir			$output_dir
 
 ## Check the output folder is empty, as RAxML throws errors
-if {[llength [glob $output_dir/*]] > 0} {
+if {[llength [glob -nocomplain $output_dir/*]] > 0} {
 	set tree_files		[glob -type f $output_dir/*]
 	foreach file $tree_files {
 		file delete $file

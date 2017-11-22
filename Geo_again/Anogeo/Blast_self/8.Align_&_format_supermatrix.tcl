@@ -108,5 +108,3 @@ puts "Formatting done! Output is in $groups_dir/Supermatrix_phylip.phy"
 
 
 
-
-
