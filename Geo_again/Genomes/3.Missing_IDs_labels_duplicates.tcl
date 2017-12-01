@@ -68,13 +68,13 @@ foreach raw_proteome $raw_proteomes {
 			## We will use this to populate gene families after MCL
 			if {[lsearch $processed_ID $protID] > 0} {
 				set new_protID		"$protID\.$taxid\_$start"
-				set new_protein		[string map "$protID $new_protID" $protein]
+				set new_protein		[string map [list $protID $new_protID] $protein]
 				lappend duplicate_prots $new_protein
 				continue
 			}
 
 			set new_protID		"$protID\.$taxid\_$start"
-			set new_protein		[string map "$protID $new_protID" $protein]
+			set new_protein		[string map [list $protID $new_protID] $protein]
 		
 			lappend clean_prots $new_protein
 			lappend processed_ID $protID

@@ -1,7 +1,7 @@
 source ~/Documents/Scripts/General_utils.tcl
 package require sqlite3
 
-set evalue			1e-100
+set evalue			1e-50
 #set evalue			[lindex $argv 0]
 set trunc_eval		[string range $evalue 2 end]
 

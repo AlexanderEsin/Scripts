@@ -6,8 +6,8 @@
 ## Using: RAxML v8.2.10
 source ~/Documents/Scripts/General_utils.tcl
 
-set threads			20
-# set evalue			1e-150
+set threads			12
+# set evalue		1e-150
 set evalue			[lindex $argv 0]
 set trunc_eval		[string range $evalue 2 end]
 

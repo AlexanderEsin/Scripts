@@ -20,13 +20,13 @@ GetTerminalTip	<- function(node, tree) {
 penalty_list	<- c(3, 4, 5, 6)
 include_AG2AG	<- TRUE
 
-master_dir <- "/Users/aesin/Desktop/Mowgli/Mowgli_outputs"
+master_dir <- "/Users/aesin/Desktop/FastTree/RAxML_outputs"
 if (include_AG2AG == TRUE) {
-	output_dir <- file.path(master_dir, "/Per_penalty_tips/AG2AG_incl/")	
+	output_dir <- file.path(master_dir, "Per_penalty_tips", "AG2AG_incl")	
 } else {
-	output_dir <- file.path(master_dir, "/Per_penalty_tips/AG2AG_excl/")	
+	output_dir <- file.path(master_dir, "Per_penalty_tips", "AG2AG_excl")	
 }
-dir.create(output_dir, showWarnings = FALSE)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
 ##
 
@@ -34,15 +34,15 @@ NodeLabPattern = "[0-9]+$"
 tip_number_tbl	<- data.frame(Penalty = numeric(), Number.Of.Tips = numeric())
 
 for (penalty in penalty_list) {
-	directories <- mixedsort(dir(paste0(master_dir, "/Mow_test_out_t", penalty)))
+	directories <- mixedsort(dir(file.path(master_dir, paste0("Output_", penalty))))
 	  
 	## WARNINGS ABOUT NODES NOT FOUND REFER TO INABILITY TO FIND NODES WHICH ARE IN FACT TIPS (SOLO TRANSFER TO ONE SPECIES) ##
 	per_group_HGT_tips	<- lapply(directories, function(directory) {
-		message(paste0("Penalty: ", penalty, " == Directory: ", directory))
-		dir <- paste0(master_dir, "/Mow_test_out_t", penalty, "/", directory)
+		# message(paste0("Penalty: ", penalty, " == Directory: ", directory))
+		dir <- file.path(master_dir, paste0("Output_", penalty), directory)
 
 		# Read in transfer data from the Parsed_events.tsv file #
-		transfer_data	<- read.table(paste0(dir, "/Parsed_events.tsv"), header = TRUE, sep = "\t")
+		transfer_data	<- read.table(file.path(dir, "Parsed_events.tsv"), header = TRUE, sep = "\t")
 		external_trans	<- transfer_data[transfer_data$HGT.Type == "OutAG", ]
 		internal_trans	<- transfer_data[transfer_data$HGT.Type == "AG2AG", ]
 
@@ -55,7 +55,7 @@ for (penalty in penalty_list) {
 		}
 
 		# Read in the reconciled gene tree #
-		full_gt4 <- phylo4(read.tree(paste0(dir, "/FullGeneTree.mpr")))
+		full_gt4 <- phylo4(read.tree(file.path(dir, "FullGeneTree.mpr")))
 
 		HGT_transfer_tips	<- lapply(1:nrow(external_trans), function(OutAG_index) {
 			OutAG			<- external_trans[OutAG_index, ]
@@ -113,11 +113,20 @@ for (penalty in penalty_list) {
 			}
 			all_tips	<- c(core_tips, extra_tips_list)
 
-			toMatch <- c("Geobacillus", "Anoxybacillus")
-			anoxygeo_tips	<- grep(all_tips, pattern = paste(toMatch, collapse = "|"), value = TRUE)
+			toMatch				<- c("Geobacillus", "Anoxybacillus")
+			anoxygeo_tips		<- grep(all_tips, pattern = paste(toMatch, collapse = "|"), value = TRUE)
 			anoxygeo_tips_trim	<- str_replace(anoxygeo_tips, pattern = "(_[0-9]+$)", replacement = "")
 
-			return(data.frame(Directory = directory, Donor_edge = OutAG$Donor.Edge, Receiver_edge = OutAG$Receiver.Edge, GeneT_child_node = genet_receiver, Tip_number = length(anoxygeo_tips_trim), Species = paste(anoxygeo_tips_trim, collapse = " "), Nested_T = nested_transfers))
+			## A hack: nesting can be extensive. E.g. check 1262 (19-set) @ T5. We have an OutAG -> AG2AG -> AG2AG
+			## but the second AG2AG is nested within first, leading to double naming. Instead of trying to deal with
+			## every eventuality, just take the unique names.
+			anoxygeo_tips_trim_unique	<- unique(anoxygeo_tips_trim)
+			if (length(anoxygeo_tips_trim_unique) != length(anoxygeo_tips_trim)) {
+				message(paste0("Penalty: ", penalty, " == Directory: ", directory))
+			}
+
+
+			return(data.frame(Directory = directory, Donor_edge = OutAG$Donor.Edge, Receiver_edge = OutAG$Receiver.Edge, GeneT_child_node = genet_receiver, Tip_number = length(anoxygeo_tips_trim_unique), Species = paste(anoxygeo_tips_trim_unique, collapse = " "), Nested_T = nested_transfers))
 
 		})
 
@@ -154,7 +163,7 @@ for (penalty in penalty_list) {
 	total_num_tips		<- sum(per_penalty_df$Tip_number)
 	tip_number_tbl[nrow(tip_number_tbl)+1,]	<- c(penalty, total_num_tips)
 
-	write.table(per_penalty_df, file = paste0(output_dir, "Per_penalty_tips_t", penalty, ".tsv"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+	write.table(per_penalty_df, file = file.path(output_dir, paste0("Per_penalty_tips_t", penalty, ".tsv")), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 }
 
-write.table(tip_number_tbl, file = paste0(output_dir, "Stats.tsv"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+write.table(tip_number_tbl, file = file.path(output_dir, "Stats.tsv"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
