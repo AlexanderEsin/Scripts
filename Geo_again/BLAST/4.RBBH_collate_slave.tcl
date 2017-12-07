@@ -1,13 +1,14 @@
 #!/usr/bin/tclsh
 
-source ~/Documents/Scripts/General_utils.tcl
+source /home/ade110/Scripts/General_utils.tcl
 
 set eval_cutoff	[lindex $argv 0]
 set eval_num	[string range $eval_cutoff 2 end]
 
-set direct			/users/aesin/Desktop/Geo_again/Anogeo_analysis/RBBH
+set direct			/scratch/ade110/Geo_again/RBBH
 set RBBH_dir		$direct/RBBH_$eval_num
-## The inparalog directory should exist from 2.Find_true_paralogs.tcl
+
+## The inparalog directory should exist from 3.Find_true_paralogs.tcl
 set para_RBBH_dir	$direct/InParalogs_RBBH
 
 ## Define ortholog and master RBBH dirs: then make them
@@ -16,14 +17,18 @@ set master_RBBH_dir	$direct/Master_RBBH
 file mkdir $orth_RBBH_dir $master_RBBH_dir
 
 
-## If the master file already exists: delete
+## If the ortholog (because we append) file already exists: delete
 if {[file exists $orth_RBBH_dir/Orthologs_RBBH_$eval_num\.txt] == 1} {
 	file delete	$orth_RBBH_dir/Orthologs_RBBH_$eval_num\.txt
 }
 
 ## Get a list of all the RBBH files
 cd $RBBH_dir
-set RBBH_file_list [glob *.txt]
+set RBBH_file_list	[glob *.txt]
+set num_RBBH_files	[llength $RBBH_file_list]
+
+## Prepare a log file to track progress
+set logchan			[open $master_RBBH_dir/Master_progress_$eval_num\.log a]
 
 ## Add the data body of each RBBH file to an Ortholog file
 set counter 1
@@ -36,12 +41,12 @@ foreach RBBH_file $RBBH_file_list {
 	puts $out		$no_header
 	close $out
 
-	puts "Added $counter/[llength $RBBH_file_list] of RBBH files to Orthologs_RBBH"
+	puts $logchan	"Added $counter / $num_RBBH_files RBBH files to Orthologs_RBBH"
 	incr counter
 }
 
 
-puts "Adding Ortholog and InParalog RBBHs into Master ..."
+puts $logchan	"Adding Ortholog and InParalog RBBHs into Master ..."
 ## Add the ortholog and inParalog RBBHs into master
 if {[file exists $para_RBBH_dir/InParalogs_RBBH_$eval_num\.txt] == 1} {
 
@@ -62,4 +67,5 @@ if {[file exists $para_RBBH_dir/InParalogs_RBBH_$eval_num\.txt] == 1} {
 	error "Cannot find correct InParalog RBBH file ..."
 }
 
-puts "Master RBBH file created"
+puts $logchan	"Master RBBH file created"
+close $logchan
