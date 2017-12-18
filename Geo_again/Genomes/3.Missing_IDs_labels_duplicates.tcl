@@ -86,8 +86,8 @@ foreach raw_proteome $raw_proteomes {
 	## Count "clean" proteins
 	set num_clean_p		[llength $clean_prots]
 	set num_dup_p		[llength $duplicate_prots]
-	set clean_proteome	[join $clean_prots ""]
-	set dupl_proteome	[join $duplicate_prots ""]
+	set clean_proteome	[join $clean_prots \n]
+	set dupl_proteome	[join $duplicate_prots \n]
 
 	## Write out the clean proteome - all proteins should have proper IDs
 	set out [open $clean_out/$file_name w]

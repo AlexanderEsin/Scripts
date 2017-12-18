@@ -20,11 +20,11 @@ for input_fasta in $in_files
 do
 	db_name=$(basename $(echo $input_fasta | sed 's/_proteome.fasta//g'))
 
-	if [ -e $direct/All_DB/$db_name\.phr ]; then
+	if [ -e $direct/DB_all/$db_name\.phr ]; then
 		echo "DB exists..."
 		continue
 	else
-		makeblastdb -in $input_fasta -dbtype prot -out $direct/All_DB/$db_name 
+		makeblastdb -in $input_fasta -dbtype prot -out $direct/DB_all/$db_name 
 	fi
 	
 done

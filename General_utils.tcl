@@ -68,9 +68,7 @@ proc string_reverse {some_string} {
 
 # This does the same as above but x15 faster #
 proc split_genes {fasta} {
-  global genes
-
-  set temp [split [string range [string trim $fasta] 1 end] >]
+  set temp [wsplit [string range [string trim $fasta] 1 end] "\n>"]
   set genes {}
   foreach seq $temp {
     lappend genes ">$seq"

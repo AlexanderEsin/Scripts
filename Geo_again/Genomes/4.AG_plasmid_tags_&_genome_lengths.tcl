@@ -15,31 +15,42 @@ file mkdir		$plasmid_out
 
 ## List of AG acc_ass
 set AG_acc_asses	[split [string trim [openfile $direct/Genome_lists/AG_acc_Ass_names.txt]] \n]
-## Get the input gbk files
-set AG_gbff_files	{}
-foreach AG $AG_acc_ass {
-	set file		[lindex [glob $gbff_dir/$AG*gz] 0]
-	lappend AG_gbff_files $file
+
+## Get the input gbff files
+set input_zipped		[glob $gbff_dir/*gz]
+if {[llength $input_zipped] != 0} {
+	puts stdout "Unzipping gbff files ..."
+	catch {exec unpigz -r $gbff_dir}
+	puts stdout "Unzipping gbff files ... DONE"
 }
+set input_gbffs		[glob $gbff_dir/*gbff]
+set num_input_gbffs	[llength $input_gbffs]
 
 ## Pattern to split the gbk file into partitions 
 ## (e.g. either contigs or chromosome/plasmid)
 set partition_pat {\n+(//)+\n+}
 
 ## Set output lists
-set genome_len_tbl	{"Genome\tGenome_length_ex_plasmid"}
-set global_plasmids	{}
+set genome_len_tbl		{"Genome\tGenome_length_ex_plasmid"}
+set AG_global_plasmids	{}
+set counter				0
 
-foreach gbff_file_zip $AG_gbff_files {
-
-	## Unzip the file
-	exec gunzip		$gbff_file_zip
-	set gbff_file	[string range $gbff_file_zip 0 end-3]
+foreach gbff_file $input_gbffs {
 
 	## Get the Acc_Ass from the file name
 	## The _genomic.gbff suffix is 13 character
 	set file_name	[file tail $gbff_file]
 	set acc_ass		[string range $file_name 0 end-13]
+
+	puts stdout "Processing $acc_ass - $counter // $num_input_gbffs"
+
+	## See whether this genome is an AG genome - only AG plasmid-based genes
+	## need to be found
+	if {[lsearch $AG_acc_asses $acc_ass] != -1} {
+		set ag_genome	1
+	} else {
+		set ag_genome	0
+	}
 
 	## Get the gbff genome data and divide by partition (chromosome)
 	## We can't split directly by the partition pattern, 
@@ -102,7 +113,9 @@ foreach gbff_file_zip $AG_gbff_files {
 			## Remove any duplicates - though we don't expect any
 			set clean_partition_tags	[lsort -unique $clean_partition_tags]
 			set plasmid_stats_file		[concat $plasmid_stats_file	$clean_partition_tags]
-			set total_clean_tags		[concat $total_clean_tags $clean_partition_tags]
+			if {$ag_genome == 1} {
+				set total_clean_tags		[concat $total_clean_tags $clean_partition_tags]
+			}	
 		} else {
 			set total_length [expr $total_length + [lindex [split $LOCUS_line \t] 2]]
 		}
@@ -111,7 +124,7 @@ foreach gbff_file_zip $AG_gbff_files {
 	## Add the total length of the genome to the global table
 	## Also add the plasmid locus tags to a global list
 	lappend genome_len_tbl "$acc_ass\t$total_length"
-	set global_plasmids	[concat $global_plasmids $clean_partition_tags]
+	set AG_global_plasmids	[concat $AG_global_plasmids $clean_partition_tags]
 
 	## Write out the plasmid tags
 	if {[llength $total_clean_tags] > 0} {
@@ -123,9 +136,7 @@ foreach gbff_file_zip $AG_gbff_files {
 		puts $out [string trim [join $plasmid_stats_file \n]]
 		close $out
 	}
-
-	## Rezip file
-	exec pigz $gbff_file
+	incr counter
 }
 
 ## Write out the genome lengths 

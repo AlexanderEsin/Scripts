@@ -1,5 +1,5 @@
 #!/bin/sh
-#PBS -l walltime=3:00:00
+#PBS -l walltime=20:00:00
 #PBS -l select=1:ncpus=1:mem=4gb
 #PBS -J 1-1691
 

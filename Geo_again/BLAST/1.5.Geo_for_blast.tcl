@@ -15,6 +15,8 @@ set all_db_dir	$direct/BLAST/DB_all
 set geo_in_dir	$direct/BLAST/IN_geo
 set geo_db_dir	$direct/BLAST/DB_geo
 
+file mkdir $geo_in_dir $geo_db_dir
+
 ## List of AG acc_ass
 set AG_acc_asses	[split [string trim [openfile $direct/Genomes/Genome_lists/AG_acc_Ass_names.txt]] \n]
 
