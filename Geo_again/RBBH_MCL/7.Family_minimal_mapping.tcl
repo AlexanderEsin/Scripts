@@ -1,38 +1,42 @@
 #!/usr/local/bin/tclsh
-###########################################################################
+###################################
 ## Changelog ##
 # 23 November 2015 - changed "Error 2" to "Exit 2" so that the script actually breaks at those points #
 # 14 January 2016 - added an option to pick the most stringent evalue at which all the Geobacillus sequences are present #
 
 
-###########################################################################
+###################################
 source  /Users/aesin/Documents/Scripts/General_utils.tcl
 package require sqlite3
+package require struct::set
 
 set ival			2.0
 set evalue_list		[list "-10" "-50" "-100" "-150"]
 
 set direct 			/Users/aesin/Desktop/Geo_again
+
+set all_db_file		$direct/All_prot_db
+set geo_taxid_file	$direct/Genomes/Genome_lists/AG_taxids.txt
+
 set group_dir		$direct/Family_groups
 set fmap_dir		$direct/Family_mapping
 
 set fmap_db_dir		$fmap_dir/MCL_groups_DBs
 set fmap_fmap_dir	$fmap_dir/Fmaps
-set output_file		$fmap_dir/Reduced_gene_families
 
-file mkdir $fmap_db_dir $fmap_fmap_dir
+set out_fasta_dir	$fmap_dir/Reduced_groups_fasta
+set out_list		$fmap_dir/Reduced_groups.tsv
 
+## Make necessary directories
+file mkdir $fmap_db_dir $fmap_fmap_dir $out_fasta_dir
 
-# set make_db_switch 0
-# set make_fmap_switch 0
-# set final_groups_switch 1
-# ###
-# set minimum_gene_context 50
-# set minimum_geo_number "all"; # Acceptable values: integer >= 1 or "all" #
-# ###
+sqlite3 all_prot_db $all_db_file
+
+set min_gene_context 200
 
 
-#########################
+###################################
+### Make DBs of MCL groupings at different evalues
 
 foreach evalue $evalue_list {
 	set mcl_group_file	$group_dir/$evalue/Final_groups.tsv
@@ -73,592 +77,339 @@ foreach evalue $evalue_list {
 
 	puts stdout "Making index on DB -- evalue : $evalue"
 	db1 eval {CREATE INDEX gene_index ON t1 (orthologs)}
+	db1 eval {CREATE INDEX grp_index ON t1 (group_num)}
 
 	puts stdout "DB at evalue : $evalue ... DONE\n"
 	db1 close
 }
 
-# #########################
+###################################
+### Link clusters across different evalues
 
+set master_counter	0
+set rev_eval_list	[lreverse $evalue_list]
+set starting_eval	[lindex $rev_eval_list 0]
+set geo_taxids		[split [string trim [openfile $geo_taxid_file]] \n]
 
-# set master_counter	0
-# set rev_eval_list	[lreverse $evalue_list]
-# set starting_eval	[lindex $evalue_list 0]
+while {[llength $rev_eval_list] >= 2} {
+	if {$master_counter != 0} {
+		set starting_eval	[lindex $rev_eval_list 1]
+	}
 
-
-# while {[llength $rev_eval_list] >= 2} {
-# 	if {$master_counter != 0} {
-# 		set starting_eval	[lindex $rev_eval_list 1]
-# 	}
-
-# 	## At every iteration, remove the highest stringency cut-off and construct
-# 	while {[lindex $rev_eval_list 0] != $starting_eval} {
-# 		set rev_eval_list [lrange $rev_eval_list 1 end]
-# 	}
-# 	set eval_number	[llength $rev_eval_list]
+	## At every iteration, remove the highest stringency cut-off and construct
+	while {[lindex $rev_eval_list 0] != $starting_eval} {
+		set rev_eval_list [lrange $rev_eval_list 1 end]
+	}
+	set eval_number	[llength $rev_eval_list]
 	
 
-# 	set dir_counter	0
-# 	set conserved_families	{}
-# 	set error_nos	{}
-# 	set family_map	{}
+	set dir_counter	0
+	set conserved_families	{}
+	set error_nos	{}
+	set family_map	{}
 
 
-# 	if {$eval_number >=2} {
-# 		puts "\n\nE-value cutoffs being tested: $rev_eval_list"
-# 	} else {
-# 		puts "\n\nLowest_stringency reference file being written..."
-# 	}
+	if {$eval_number >=2} {
+		puts "\n\nE-value cutoffs being tested: $rev_eval_list"
+	} else {
+		puts "\n\nLowest_stringency reference file being written..."
+	}
+
+	### When the e-value cutoff can be compared to lower stringencies create a fmaily map ###
+	while {$dir_counter <= [expr $eval_number - 2]} {
+
+		set dir_0	[lindex $rev_eval_list $dir_counter]
+		set dir_1	[lindex $rev_eval_list [expr $dir_counter + 1]]
+
+		# set counter 0
+
+		## Open the high e-val (e.g. -100) clustering as a database
+		sqlite3 lower_db $fmap_db_dir/MCL_group_2.0_$dir_1\_DB
+
+		## Open the lower e-val (e.g. -150) clustering as the query, and split by gene family
+		set groups_file			$group_dir/$dir_0/Final_groups.tsv
+		set gene_families_0		[split [string trim [openfile $groups_file]] \n]
+
+		# # If this is the first comparison ... #
+		if {$dir_counter == 0} {
+			set this_round	$gene_families_0
+
+		} else {
+			set this_round			{}		
+			foreach group_num $conserved_families {
+				set family [lsearch -inline -glob $gene_families_0 "$group_num\t*"]
+				lappend this_round $family
+			}
+		}
+
+		## Set the temporary conserved families for this iteration of the comparison
+		set conserved_families	{}
+		set conserved_temp		{}
+		set family_map_temp		{}
 
 
-# 	### When the e-value cutoff can be compared to lower stringencies create a fmaily map ###
-# 	while {$dir_counter <= [expr $eval_number - 2]} {
+		puts "\tNow scanning @ $dir_1"
+		foreach family $this_round {
 
-# 		set dir_0	[lindex $rev_eval_list $dir_counter]
-# 		set dir_1	[lindex $rev_eval_list [expr $dir_counter + 1]]
+			# At the higher stringency level (e.g. -150) for each group, get all the protIDs #
+			set group_num	[lindex [split [string trim $family] \t] 0]
+			set prot_IDs	[lrange [split [string trim $family] \t] 1 end]
 
-# 		# set counter 0
-
-# 		## Open the high e-val (e.g. -100) clustering as a database
-# 		sqlite3 db1 $fmap_db_dir/MCL_group_2.0_$dir_1\_DB
-
-# 		## Open the lower e-val (e.g. -150) clustering as the query, and split by gene family
-# 		cd $direct/$ival/$dir_0
-# 		openfile Group_list_$ival\.tsv
-# 		set gene_families_0 [split [string trim $data] \n]
-
-# 		### Set the temporary conserved families for this iteration of the comparison ###
-# 		set conserved_temp {}
-# 		set error_temp {}
-# 		set family_map_temp {}
-
-# 		# If this is the first comparison ... #
-# 		if {$dir_counter == 0} {
-# 			puts "\tNow scanning $dir_1"
-# 			foreach family $gene_families_0 {
-# 				set map_entry {}
-# 				# At the higher stringency level (e.g. -150) for each gene family, get all the gene ids #
-# 				set genes [lrange [split [string trim $family] \t] 1 end]
-# 				# Within those find all the geobacillus genes #
-# 				set geo_genes [lsearch -all -glob -inline $genes *\(Geobac\)]
-# 				# If there are no geobacillus genes, skip to the next gene family #
-# 				if {[llength $geo_genes] == 0} {
-# 					continue
-# 				}
-
-# 				set group_number [string trim [string range $family 0 [string first \t $family]]]
-
-# 				set index_find {}
-# 				# Foreach geobacillus gene, identify the corresponding gene family in the lower stringency level (e.g. -100) #
-# 				foreach gene $geo_genes {
-# 					set index ""
-# 					# Query the lower stringency directory #
-# 					db1 eval {SELECT group_no FROM t1 WHERE genes = $gene} {
-# 						set index "$group_no"
-# 					}
-# 					if {$index == ""} {
-# 						puts "Group number not found ...."
-# 						exit 2
-# 					}
-# 					# List of all the corresponding group nos from the lower stringency level for each geobacillus gene #
-# 					lappend index_find $index
-# 				}
-
-# 				# Identify the corresponding group nos without repeats #
-# 				set unique_indices [lsort -unique $index_find]
-				
-# 				# If all of the group nos map to a single gene family (i.e. the geobacilli have not split into two groups at the lower stringency level), we add the index (lower stringency group no) to the conserved temp list. A map is also constructed (original higher stringency -> new index lower stringency), and added to the family_map_temp variable which is global for two stringency comparisons #
-# 				if {[llength $unique_indices] == 1} {
-# 					lappend conserved_temp $unique_indices
-
-# 					lappend map_entry $group_number $unique_indices
-# 					set map_entry [join $map_entry \t]
-# 					lappend family_map_temp $map_entry
-# 				}
-# 			}
-
-# 			# Once all the indices for the conserved gene families have been collected - we search for duplicates. Duplicates (e.g. two -150 families mapped exclusively to one -100 family) suggest coalescence #
-# 			# Any entries that have coalesced into one group at the lower stringency are removed from the lists #
-# 			set coalescent_families [dups $conserved_temp]
-# 			foreach family $conserved_temp {
-# 				if {[lsearch $coalescent_families $family] == -1} {
-# 					lappend conserved_families $family
-# 				}
-# 			}
-# 			foreach family $family_map_temp {
-# 				set destination_family [lindex $family 1]
-# 				if {[lsearch $coalescent_families $destination_family] == -1} {
-# 					lappend family_map $family
-# 				}
-# 			}
-# 		} else {
-# 			puts "\tNow scanning $dir_1"
-# 			set next_round {}
-# 			set new_family_map {}
-# 			foreach id $conserved_families {
-# 				set family [lsearch -all -inline -glob $gene_families_0 "$id\t*"]
-# 				lappend next_round $family
-# 			}
-
-# 			set conserved_families {}
-# 			foreach family $next_round {
-# 				set family [join $family]
-# 				set map_entry {}
-# 				set genes [lrange [split [string trim $family] \t] 1 end]
-# 				set geo_genes [lsearch -all -glob -inline $genes *\(Geobac\)]
-
-# 				if {[llength $geo_genes] == 0} {
-# 					continue
-# 				}
-
-# 				set group_number [string trim [string range $family 0 [string first \t $family]]]
-
-# 				set index_find {}
-# 				foreach gene $geo_genes {
-# 					set index ""
-# 					db1 eval {SELECT group_no FROM t1 WHERE genes = $gene} {
-# 						set index "$group_no"
-# 					}
-# 					if {$index == ""} {
-# 						puts "Group number not found ...."
-# 						exit 2
-# 					}
-
-# 					lappend index_find $index
-# 				}
-
-# 				set unique_indices [lsort -unique $index_find]
-# 				if {[llength $unique_indices] == 1} {
-# 					lappend conserved_temp $unique_indices
-
-# 					lappend map_entry $group_number $unique_indices
-# 					set map_entry [join $map_entry \t]
-# 					lappend family_map_temp $map_entry
-# 				}
-# 			}
-# 			set coalescent_families [dups $conserved_temp]
-# 			foreach family $conserved_temp {
-# 				if {[lsearch $coalescent_families $family] == -1} {
-# 					lappend conserved_families $family
-# 				}
-# 			}
-# 			foreach family $family_map_temp {
-# 				set present_family [lindex $family 0]
-# 				set destination_family [lindex $family 1]
-# 				if {[lsearch $coalescent_families $destination_family] == -1} {
-# 					set existing_entry [lsearch -all -inline -glob $family_map "*\t$present_family"]
-# 					set existing_entry [join $existing_entry \t]
-# 					set new_entry "$existing_entry\t$destination_family"
-# 					lappend new_family_map $new_entry
-# 				}
-# 			}
-# 			set family_map $new_family_map
-# 		}
-# 		#puts $dir_counter
-# 		incr dir_counter
-# 	}
-
-# 	### Output the family maps at every e-value cutoff except the lowest one ###
-# 	if {$eval_number >= 2} {
-# 		set fam_map_str [join $family_map \n]
-# 		set out [open $fmap_path/Fmaps/Fmap_$starting_eval\.tsv w]
-# 		puts $out $fam_map_str
-# 		close $out
-
-# 		puts "Master counter: [expr $master_counter + 1]"
-# 		incr master_counter
-# 	}
-
-# 	### Make the reference list at the lowest e-value stringency ###
-# 	if {$eval_number == 1} {
-
-# 		set family_map {}
-
-# 		set dir_0 [lindex $eval_dirs 0]
-# 		cd $direct/$ival/$dir_0
-# 		openfile Group_list_$ival\.tsv
-# 		set gene_families_0 [split [string trim $data] \n]
-
-# 		foreach family $gene_families_0 {
-
-# 			set genes [lrange [split [string trim $family] \t] 1 end]
-# 			set geo_genes [lsearch -all -glob -inline $genes *\(Geobac\)]
-# 			if {[llength $geo_genes] == 0} {
-# 				continue
-# 			}
-
-# 			set group_number [string trim [string range $family 0 [string first \t $family]]]
-# 			lappend family_map $group_number
-# 		}
-
-# 		set fam_map_str [join $family_map \n]
-# 		set out [open $fmap_path/Fmaps/Fmap_$starting_eval\.tsv w]
-# 		puts $out $fam_map_str
-# 		close $out
-
-# 		puts "Master counter: [expr $master_counter + 1]"
-# 		incr master_counter
-# 	}
-
+			# Within those find all the geobacillus protIDs #
+			set geo_IDs		{}
+			foreach prot_ID $prot_IDs {
+				set taxid	[string range $prot_ID [string last \. $prot_ID]+1 [string last \_ $prot_ID]-1]
+				if {[lsearch $geo_taxids $taxid] != -1} {
+					lappend geo_IDs $prot_ID
+				}
+			}
 			
-# }
-
-
-
-# # if {$make_fmap_switch == 1} {
-# # 	file mkdir $fmap_path/Fmaps
-
-# # 	set master_counter 0
-# # 	set starting_eval [lindex $eval_dirs 0]
-# # 	while {[llength $eval_dirs] >= 2} {
-# # 		if {$master_counter != 0} {
-# # 			set starting_eval [lindex $eval_dirs 1]
-# # 		}
+			if {[llength $geo_IDs] == 0} {
+				error "We expect to find some Geo_IDs at lower stringency. Cannot find AnoGeo prot IDs @ $dir_0 in group: $group_num"
+			}
 		
-# # 		### At every iteration, remove the highest stringency cut-off and construct ###
-# # 		while {[lindex $eval_dirs 0] != $starting_eval} {
-# # 			set eval_dirs [lrange $eval_dirs 1 end]
-# # 		}
-# # 		set eval_number [llength $eval_dirs]
+			# Foreach geobacillus protID, identify the corresponding group in the lower stringency level (e.g. -100)
+			set index_find [list]
+			foreach geo_ID $geo_IDs {
+				# Query the lower stringency
+				set lower_index	[lower_db eval {select group_num from t1 where orthologs = $geo_ID}]
+
+				# A GeoID might not be found at a lower stringency because it was part of
+				# misclustered InParalog groups that have been masked out. Alternatively,
+				# it could be clustered in a stub group (<4 protIDs) that was filtered out.
+				if {[string length $lower_index] == 0} {
+					# puts stdout "GeoID $geo_ID @ $dir_0 in group: $group_num not found in any group @ $dir_1"
+					continue
+				}
+
+				# List of all the corresponding group numss from the lower stringency level for each geobacillus protID 
+				lappend index_find $lower_index
+			}
+
+			# Unique group numbers to which these Geo_IDs belong at a lower stringency level
+			set unique_indices	[lsort -unique $index_find]
+			
+			# If all of the group nos map to a single group (i.e. the geobacilli have not split into two groups at the lower stringency level), we add the index (lower stringency group no) to the conserved temp list. A map is also constructed (original higher stringency -> new index lower stringency), and added to the family_map_temp variable which is global for two stringency comparisons
+			if {[llength $unique_indices] == 1} {
+				lappend conserved_temp	$unique_indices
+				lappend family_map_temp	[join [list $group_num $unique_indices] \t]
+			}
+		}
+
+		# Once all the indices for the conserved groups have been collected - we search for duplicates. Duplicates (e.g. two -150 families mapped exclusively to one -100 family) suggest coalescence #
+		# Any entries that have coalesced into one group at the lower stringency are removed from the lists #
+		set coalescent_families [dups $conserved_temp]
+		foreach family $conserved_temp {
+			if {[lsearch $coalescent_families $family] == -1} {
+				lappend conserved_families $family
+			}
+		}
+
+		if {$dir_counter == 0} {
+			foreach family $family_map_temp {
+				set destination_family [lindex [split $family \t] 1]
+				if {[lsearch $coalescent_families $destination_family] == -1} {
+					lappend family_map $family
+				}
+			}
+		} else {
+			set new_family_map		{}
+			foreach family $family_map_temp {
+				set present_family		[lindex $family 0]
+				set destination_family	[lindex $family 1]
+				## If the destination family is NOT coalescent then add to new family map
+				if {[lsearch $coalescent_families $destination_family] == -1} {
+					set existing_entry	[split [lsearch -inline -glob $family_map "*\t$present_family"] \t]
+					set new_entry		[join [concat $existing_entry $destination_family] \t]
+					lappend new_family_map $new_entry
+				}
+			}
+			set family_map $new_family_map
+		}
+	
+		lower_db close
+		incr dir_counter
+	}
+
+	## Output the family maps at every e-value cutoff except the lowest one
+	if {$eval_number >= 2} {
+		set fam_map_out	[join $family_map \n]
+		set out			[open $fmap_fmap_dir/Fmap_$starting_eval\.tsv w]
+		puts $out 		$fam_map_out
+		close $out
+
+		incr master_counter
+	}
+
+	### Make the reference list at the lowest e-value stringency ###
+	if {$eval_number == 1} {
+
+		set reference_index {}
+
+		set lowest_dir [lindex $evalue_list 0]
+		set groups_file			$group_dir/$lowest_dir/Final_groups.tsv
+		set gene_families_low	[split [string trim [openfile $groups_file]] \n]
+
+		foreach family $gene_families_low {
+
+			set group_num	[lindex [split [string trim $family] \t] 0]
+			set prot_IDs	[lrange [split [string trim $family] \t] 1 end]
+
+			set geo_IDs		{}
+			foreach prot_ID $prot_IDs {
+				set taxid	[string range $prot_ID [string last \. $prot_ID]+1 [string last \_ $prot_ID]-1]
+				if {[lsearch $geo_taxids $taxid] != -1} {
+					lappend geo_IDs $prot_ID
+				}
+			}
+			
+			if {[llength $geo_IDs] == 0} {
+				error "We expect to find some Geo_IDs in each family. Cannot find AnoGeo prot IDs @ $dir_0 in group: $group_num"
+			}
+
+			lappend family_map $group_num
+		}
+
+		set fam_map_out	[join $family_map \n]
+		set out			[open $fmap_fmap_dir/Fmap_$starting_eval\.tsv w]
+		puts $out 		$fam_map_out
+		close $out
+
+		incr master_counter
+	}		
+}
+
+
+
+###################################
+### Pick best cluster for each basal group
+
+set rev_eval_list	[lreverse $evalue_list]
+
+set base_evalue		[lindex $rev_eval_list end]
+set base_AG_content	[split [string trim [openfile $group_dir/$base_evalue/AG_content.tsv]] \n]
+set base_group_list	[split [string trim [openfile $group_dir/$base_evalue/Final_groups.tsv]] \n]
+set base_group_tot	[llength $base_group_list]
+
+set base_fams_done		{}
+set done_counter		1
+set family_group_table	[list [join [list "Base group" "Base protID num" "Evalue sampled" "At evalue group" "At evalue protID num"] \t]]
+
+foreach eval $rev_eval_list {
+	
+	set fmap_data		[split [string trim [openfile $fmap_fmap_dir/Fmap_$eval\.tsv]] \n]
+	set test_fmap_len	[split [lindex $fmap_data 0] \t]
+	set fmap_index		[expr [llength $rev_eval_list] - [llength $test_fmap_len]]
+	set test_evals		[lrange $rev_eval_list $fmap_index end]
 		
+	foreach fmap $fmap_data {
 
-# # 		set dir_counter 0
-# # 		set conserved_families {}
-# # 		set error_nos {}
+		set group_clusters	[split $fmap \t]
+		## The families are eventually named based on the group number at the most basal (e.g. -10) level ##
+		set base_group_num	[lindex $group_clusters end]
 
-# # 		set family_map {}
+		## If the base group has already been done (e.g. at a higher fmap)
+		## skip and continue
+		if {[lsearch -exact $base_fams_done $base_group_num] != -1} {
+			continue
+		} else {
 
-# # 		if {$eval_number >=2} {
-# # 			puts "\n\nE-value cutoffs being tested: $eval_dirs"
-# # 		} else {
-# # 			puts "\n\nLowest_stringency reference file being written..."
-# # 		}
+			## A cluster picked at non-basal evalue must contain all the basal AnoGeo sequences
+			## Count how many AnoGeo sequences are represented at basal evalue
+			set min_AG_required	[lindex [split [lsearch -inline -glob $base_AG_content "$base_group_num\t*"] \t] 1]
 
-# # 		### When the e-value cutoff can be compared to lower stringencies create a fmaily map ###
-# # 		while {$dir_counter <= [expr $eval_number - 2]} {
+			set cluster_counter 0
+			## The fmaps run lowest evalue up (e.g. -150 -100 -50 -10). We query each starting from the most stringent
+			foreach cluster $group_clusters {
 
-# # 			set dir_0 [lindex $eval_dirs $dir_counter]
-# # 			set dir_1 [lindex $eval_dirs [expr $dir_counter + 1]]
+				set test_evalue		[lindex $test_evals $cluster_counter]
 
-# # 			# set counter 0
+				## If this is the basal evalue (e.g. -10) we take the family as is
+				## with no further checks
+				if {$test_evalue == $base_evalue} {
+					## Get the base number of proteins
+					set base_group		[lsearch -inline -glob $base_group_list "$base_group_num\t*"]
+					set base_protIDs	[lrange [split $base_group \t] 1 end]
+					set base_prot_num	[llength $base_protIDs]
 
-# # 			### Open the high e-val (e.g. -100) clustering as a database ###
-# # 			cd $direct/$ival/$dir_1
-# # 			sqlite3 db1 Groups_$dir_1\_db
-# # 			### Open the lower e-val (e.g. -150) clustering as the query, and split by gene family ###
-# # 			cd $direct/$ival/$dir_0
-# # 			openfile Group_list_$ival\.tsv
-# # 			set gene_families_0 [split [string trim $data] \n]
+					## Find and collate the fasta sequences for the picked group
+					set group_fasta		{}
+					foreach base_protID $base_protIDs {
+						set prot_data	[all_prot_db eval {select protID, sequence from t1 where protID = $base_protID}]
+						set fasta_prot	">[join $prot_data \n]"
+						lappend group_fasta $fasta_prot
+					}
 
-# # 			### Set the temporary conserved families for this iteration of the comparison ###
-# # 			set conserved_temp {}
-# # 			set error_temp {}
-# # 			set family_map_temp {}
+					## Write out the final group fasta
+					set out		[open $out_fasta_dir/$base_group_num\.fasta w]
+					puts $out	[join $group_fasta \n]
+					close $out
 
-# # 			# If this is the first comparison ... #
-# # 			if {$dir_counter == 0} {
-# # 				puts "\tNow scanning $dir_1"
-# # 				foreach family $gene_families_0 {
-# # 					set map_entry {}
-# # 					# At the higher stringency level (e.g. -150) for each gene family, get all the gene ids #
-# # 					set genes [lrange [split [string trim $family] \t] 1 end]
-# # 					# Within those find all the geobacillus genes #
-# # 					set geo_genes [lsearch -all -glob -inline $genes *\(Geobac\)]
-# # 					# If there are no geobacillus genes, skip to the next gene family #
-# # 					if {[llength $geo_genes] == 0} {
-# # 						continue
-# # 					}
+					## Append global lists
+					lappend base_fams_done		$base_group_num
+					lappend family_group_table	[join [list $base_group_num $base_prot_num $test_evalue $cluster $base_prot_num] \t]
 
-# # 					set group_number [string trim [string range $family 0 [string first \t $family]]]
+					puts stdout	"DONE: $done_counter /// $base_group_tot\t[join [list $base_group_num $base_prot_num $test_evalue $cluster $base_prot_num $min_AG_required] \t]"
+					incr done_counter
+					break
+				}
 
-# # 					set index_find {}
-# # 					# Foreach geobacillus gene, identify the corresponding gene family in the lower stringency level (e.g. -100) #
-# # 					foreach gene $geo_genes {
-# # 						set index ""
-# # 						# Query the lower stringency directory #
-# # 						db1 eval {SELECT group_no FROM t1 WHERE genes = $gene} {
-# # 							set index "$group_no"
-# # 						}
-# # 						if {$index == ""} {
-# # 							puts "Group number not found ...."
-# # 							exit 2
-# # 						}
-# # 						# List of all the corresponding group nos from the lower stringency level for each geobacillus gene #
-# # 						lappend index_find $index
-# # 					}
 
-# # 					# Identify the corresponding group nos without repeats #
-# # 					set unique_indices [lsort -unique $index_find]
-					
-# # 					# If all of the group nos map to a single gene family (i.e. the geobacilli have not split into two groups at the lower stringency level), we add the index (lower stringency group no) to the conserved temp list. A map is also constructed (original higher stringency -> new index lower stringency), and added to the family_map_temp variable which is global for two stringency comparisons #
-# # 					if {[llength $unique_indices] == 1} {
-# # 						lappend conserved_temp $unique_indices
+				## How many AG in this cluster
+				set test_AG_content	[split [string trim [openfile $group_dir/$test_evalue/AG_content.tsv]] \n]
+				set clust_AG_cont	[lindex [split [lsearch -inline -glob $test_AG_content "$cluster\t*"] \t] 1]
 
-# # 						lappend map_entry $group_number $unique_indices
-# # 						set map_entry [join $map_entry \t]
-# # 						lappend family_map_temp $map_entry
-# # 					}
-# # 				}
+				## If there are not enough AG genes in the mapped cluster at this evalue, continue to the next one
+				if {$clust_AG_cont < $min_AG_required} {
+					incr cluster_counter
+					continue
+				}
 
-# # 				# Once all the indices for the conserved gene families have been collected - we search for duplicates. Duplicates (e.g. two -150 families mapped exclusively to one -100 family) suggest coalescence #
-# # 				# Any entries that have coalesced into one group at the lower stringency are removed from the lists #
-# # 				set coalescent_families [dups $conserved_temp]
-# # 				foreach family $conserved_temp {
-# # 					if {[lsearch $coalescent_families $family] == -1} {
-# # 						lappend conserved_families $family
-# # 					}
-# # 				}
-# # 				foreach family $family_map_temp {
-# # 					set destination_family [lindex $family 1]
-# # 					if {[lsearch $coalescent_families $destination_family] == -1} {
-# # 						lappend family_map $family
-# # 					}
-# # 				}
-# # 			} else {
-# # 				puts "\tNow scanning $dir_1"
-# # 				set next_round {}
-# # 				set new_family_map {}
-# # 				foreach id $conserved_families {
-# # 					set family [lsearch -all -inline -glob $gene_families_0 "$id\t*"]
-# # 					lappend next_round $family
-# # 				}
+				## Otherwise check how many genes there are in this cluster
+				sqlite3 test_db $fmap_db_dir/MCL_group_$ival\_$test_evalue\_DB
+				set clust_prot_IDs	[test_db eval {select orthologs from t1 where group_num = $cluster}]
+				test_db close
 
-# # 				set conserved_families {}
-# # 				foreach family $next_round {
-# # 					set family [join $family]
-# # 					set map_entry {}
-# # 					set genes [lrange [split [string trim $family] \t] 1 end]
-# # 					set geo_genes [lsearch -all -glob -inline $genes *\(Geobac\)]
+				set clust_prot_num	[llength $clust_prot_IDs]
 
-# # 					if {[llength $geo_genes] == 0} {
-# # 						continue
-# # 					}
+				## Continue if the number of genes is less than the minimum wanted context
+				if {$clust_prot_num < $min_gene_context} {
+					incr cluster_counter
+					continue
+				}
 
-# # 					set group_number [string trim [string range $family 0 [string first \t $family]]]
+				set base_protIDs	[lsearch -inline -glob $base_group_list "$base_group_num\t*"]
+				set base_prot_num	[llength [lrange [split $base_protIDs \t] 1 end]]
 
-# # 					set index_find {}
-# # 					foreach gene $geo_genes {
-# # 						set index ""
-# # 						db1 eval {SELECT group_no FROM t1 WHERE genes = $gene} {
-# # 							set index "$group_no"
-# # 						}
-# # 						if {$index == ""} {
-# # 							puts "Group number not found ...."
-# # 							exit 2
-# # 						}
+				## Find and collate the fasta sequences for the picked group
+				set group_fasta		{}
+				foreach clust_protID $clust_prot_IDs {
+					set prot_data	[all_prot_db eval {select protID, sequence from t1 where protID = $clust_protID}]
+					set fasta_prot	">[join $prot_data \n]"
+					lappend group_fasta $fasta_prot
+				}
 
-# # 						lappend index_find $index
-# # 					}
+				## Write out the final group fasta
+				set out		[open $out_fasta_dir/$base_group_num\.fasta w]
+				puts $out	[join $group_fasta \n]
+				close $out
 
-# # 					set unique_indices [lsort -unique $index_find]
-# # 					if {[llength $unique_indices] == 1} {
-# # 						lappend conserved_temp $unique_indices
+				lappend base_fams_done		$base_group_num
+				lappend family_group_table	[join [list $base_group_num $base_prot_num $test_evalue $cluster $clust_prot_num] \t]
+				puts stdout	"DONE: $done_counter /// $base_group_tot\t[join [list $base_group_num $base_prot_num $test_evalue $cluster $clust_prot_num $clust_AG_cont] \t]"
+				incr done_counter
+				break
+			}
+		}
+	}
+}
 
-# # 						lappend map_entry $group_number $unique_indices
-# # 						set map_entry [join $map_entry \t]
-# # 						lappend family_map_temp $map_entry
-# # 					}
-# # 				}
-# # 				set coalescent_families [dups $conserved_temp]
-# # 				foreach family $conserved_temp {
-# # 					if {[lsearch $coalescent_families $family] == -1} {
-# # 						lappend conserved_families $family
-# # 					}
-# # 				}
-# # 				foreach family $family_map_temp {
-# # 					set present_family [lindex $family 0]
-# # 					set destination_family [lindex $family 1]
-# # 					if {[lsearch $coalescent_families $destination_family] == -1} {
-# # 						set existing_entry [lsearch -all -inline -glob $family_map "*\t$present_family"]
-# # 						set existing_entry [join $existing_entry \t]
-# # 						set new_entry "$existing_entry\t$destination_family"
-# # 						lappend new_family_map $new_entry
-# # 					}
-# # 				}
-# # 				set family_map $new_family_map
-# # 			}
-# # 			#puts $dir_counter
-# # 			incr dir_counter
-# # 		}
+set out		[open $out_list w]
+puts $out	[join $family_group_table \n]
+close $out
 
-# # 		### Output the family maps at every e-value cutoff except the lowest one ###
-# # 		if {$eval_number >= 2} {
-# # 			set fam_map_str [join $family_map \n]
-# # 			set out [open $fmap_path/Fmaps/Fmap_$starting_eval\.tsv w]
-# # 			puts $out $fam_map_str
-# # 			close $out
+all_prot_db close
 
-# # 			puts "Master counter: [expr $master_counter + 1]"
-# # 			incr master_counter
-# # 		}
+# ###########################################################################
 
-# # 		### Make the reference list at the lowest e-value stringency ###
-# # 		if {$eval_number == 1} {
-
-# # 			set family_map {}
-
-# # 			set dir_0 [lindex $eval_dirs 0]
-# # 			cd $direct/$ival/$dir_0
-# # 			openfile Group_list_$ival\.tsv
-# # 			set gene_families_0 [split [string trim $data] \n]
-
-# # 			foreach family $gene_families_0 {
-
-# # 				set genes [lrange [split [string trim $family] \t] 1 end]
-# # 				set geo_genes [lsearch -all -glob -inline $genes *\(Geobac\)]
-# # 				if {[llength $geo_genes] == 0} {
-# # 					continue
-# # 				}
-
-# # 				set group_number [string trim [string range $family 0 [string first \t $family]]]
-# # 				lappend family_map $group_number
-# # 			}
-
-# # 			set fam_map_str [join $family_map \n]
-# # 			set out [open $fmap_path/Fmaps/Fmap_$starting_eval\.tsv w]
-# # 			puts $out $fam_map_str
-# # 			close $out
-
-# # 			puts "Master counter: [expr $master_counter + 1]"
-# # 			incr master_counter
-# # 		}
-		
-# # 	}
-# # 	db1 close
-# # }
-
-# # ###########################################################################
-
-# # ###
-# # set runt_output 1
-# # ###
-# # if {$final_groups_switch == 1} {
-
-# # 	cd $direct/$ival
-# # 	set eval_dirs [reverse_dict [glob -type d -- -*]]
-# # 	set bottom_evalue [lindex $eval_dirs end]
-# # 	openfile $fmap_path/Fmaps/Fmap_$bottom_evalue\.tsv
-# # 	set base_families [split [string trim $data] \n]
-
-# # 	set fmap_dirs [lrange $eval_dirs 0 end-1]
-# # 	set base_fams_done {}
-# # 	set runt_fams {}
-# # 	set family_group_table "Final number\tE-value\tOriginal number\tSequence number\n"
-# # 	file mkdir $output_path/$output_dir_name
-
-# # 	foreach dir $fmap_dirs {
-# # 		openfile $fmap_path/Fmaps/Fmap_$dir\.tsv
-# # 		set fmaps [split [string trim $data] \n]
-
-# # 		## Depending on which family map file we are looking at, we need to make sure we probe the correct evalue group fasta file. Here we set the correct range of evalue folders to look into depending on the type of fmap ##
-# # 		set test_fmap_len [split [lindex $fmaps 0] \t]
-# # 		set fmap_index [expr [llength $eval_dirs] - [llength $test_fmap_len]]
-# # 		set group_fastas_dirs [lrange $eval_dirs $fmap_index end]
-		
-
-# # 		set i 0
-# # 		foreach fmap $fmaps {
-# # 			set fam_numbers [split $fmap \t]
-# # 			## The families are eventually named based on the group number at the most basal (e.g. -10) level ##
-# # 			set final_group_number [lindex $fam_numbers end]
-
-# # 			## If we want to pick the best group that still contains all the Geobacillus sequences that are in the basal group, do the following... ##
-# # 			if {[string tolower $minimum_geo_number] == "all"} {
-# # 				set minimum_geo_seqs [regexp -all {\(Geobac\)} [openfile $direct/$ival/$bottom_evalue/Group_fastas_$ival/$final_group_number\.faa]]
-# # 			} else {
-# # 				set minimum_geo_seqs $minimum_geo_number
-# # 			}
-
-# # 			## Ensure we have not processed this group yet ##
-# # 			if {[lsearch -exact $base_fams_done $final_group_number] == -1} {
-# # 				set group_fasta_dir_counter 0
-
-# # 				foreach group $fam_numbers {
-# # 					## Make sure we are looking in the right evalue for the group number ##
-# # 					set sample_evalue [lindex $group_fastas_dirs $group_fasta_dir_counter]
-# # 					openfile $direct/$ival/$sample_evalue/Group_fastas_$ival/$group\.faa
-# # 					set gene_no [regexp -all {>} $data]
-# # 					set geobac_no [regexp -all {\(Geobac\)} $data]
-
-# # 					# If this is not the bottom evalue stringency, and the context is greater than the desired value, and the Geobac no. is greater than the desired value, then use the family at this level, if not - continue #
-# # 					if {$group_fasta_dir_counter < [expr [llength $group_fastas_dirs] - 1] && $gene_no >= $minimum_gene_context && $geobac_no >= $minimum_geo_seqs} {
-
-# # 						file copy -force $direct/$ival/$sample_evalue/Group_fastas_$ival/$group\.faa $direct/$ival
-# # 						file rename -force $direct/$ival/$group\.faa $output_path/$output_dir_name/$final_group_number\.faa
-
-# # 						lappend base_fams_done $final_group_number
-# # 						append family_group_table "$final_group_number\t$sample_evalue\t$group\t$gene_no\n"
-# # 						incr i
-# # 						puts "$i === $final_group_number"
-# # 						break
-# # 					# If this IS the bottom evalue go here #
-# # 					} elseif {$group_fasta_dir_counter == [expr [llength $group_fastas_dirs] - 1]} {
-# # 						# If the gene number is >= 4, a tree can be reconstructed - so we will use this family #
-# # 						if {$gene_no >= 4} {
-
-# # 							file copy -force $direct/$ival/$sample_evalue/Group_fastas_$ival/$group\.faa $direct/$ival
-# # 							file rename -force $direct/$ival/$group\.faa $output_path/$output_dir_name/$final_group_number\.faa
-
-# # 							lappend base_fams_done $final_group_number
-# # 							append family_group_table "$final_group_number\t$sample_evalue\t$group\t$gene_no\n"
-# # 							incr i
-# # 							puts "$i === $final_group_number"
-# # 							break
-# # 						# If the are fewer than 4 genes in the group (even at the lowest evalue stringency e.g. -10); set the family as a runt #
-# # 						} else {
-# # 							lappend base_fams_done $final_group_number
-# # 							lappend runt_fams "$final_group_number\t$dir"
-# # 							append family_group_table "$final_group_number\t$sample_evalue\t$group\tN/A\n"
-# # 							incr i
-# # 							puts "$i === $final_group_number"
-# # 							break
-# # 						}
-# # 					} else {
-# # 						incr group_fasta_dir_counter
-# # 					}
-# # 				}
-# # 			} else {
-# # 				incr i
-# # 				puts "$i === SKIPPED"
-# # 				continue
-# # 			}
-# # 		}
-# # 		puts "\n\nFINAL: $i / [llength $fmaps]"
-# # 		incr fmap_dir_counter
-# # 	}
-
-# # 	#######
-
-# # 	foreach group $base_families {
-# # 		if {[lsearch -exact $base_fams_done $group] == -1} {
-# # 			openfile $direct/$ival/$bottom_evalue/Group_fastas_$ival/$group\.faa
-# # 			set gene_no [regexp -all {>} $data]
-# # 			if {$gene_no >= 4} {
-# # 				file copy -force $direct/$ival/$bottom_evalue/Group_fastas_$ival/$group\.faa $output_path/$output_dir_name/
-# # 				lappend base_fams_done $group
-# # 				append family_group_table "$group\t$bottom_evalue\t$group\t$gene_no\n"
-# # 			} else {
-# # 				lappend base_fams_done $group
-# # 				lappend runt_fams "$group\t$bottom_evalue"
-# # 				append family_group_table "$group\t$bottom_evalue\t$group\tN/A\n"
-# # 			}
-# # 		} else {
-# # 			continue
-# # 		}
-# # 	}
-
-# # 	if {$runt_output == 1} {
-# # 		set out [open $output_path/Final_runt_groups.tsv w]
-# # 		set runt_fams_str [join $runt_fams \n]
-# # 		puts $out [string trim $runt_fams_str]
-# # 		close $out
-# # 	}
-
-# # 	set out [open $output_path/Final_family_group_list.tsv w]
-# # 	puts $out [string trim $family_group_table]
-# # 	close $out
-# # }
-
-# # ###########################################################################
-
-# # puts "ALL DONE!"
+# puts "ALL DONE!"

@@ -10,7 +10,7 @@ package require sqlite3
 
 set ival			2.0
 # set evalue		[lindex $argv 0]
-set evalue			"1e-10"
+set evalue			"1e-150"
 set trunc_eval		[string range $evalue 2 end]
 
 ## Define the directories and create new output folder
@@ -18,6 +18,7 @@ set direct			/users/aesin/Desktop/Geo_again
 set prot_db_file	$direct/All_prot_db
 set mcl_group_dir	$direct/RBBH/MCL_groups
 set paralogs_dir	$direct/AGeo_inparalogs
+set geo_taxid_file	$direct/Genomes/Genome_lists/AG_taxids.txt
 
 set group_output	$direct/Family_groups/$trunc_eval
 file mkdir			$group_output
@@ -31,6 +32,7 @@ if {[file exists $mcl_groups_file] != 1} {
 	error "MCL groups file does not exist!"
 }
 set mcl_group_list	[split [string trim [openfile $mcl_groups_file]] \n]
+set geo_taxids		[split [string trim [openfile $geo_taxid_file]] \n]
 
 
 ## // ##
@@ -40,7 +42,9 @@ set mcl_group_list	[split [string trim [openfile $mcl_groups_file]] \n]
 set after_dupl_groups	{}
 set duplicates_add		{"Group\tAcc_ass\tDuplicated_IDs"}
 
+set group_AG_content	{}
 set total_orths			0
+set total_AG_content	0
 set total_dups_readd	0
 set missing_loc			{}
 set bad_group			{}
@@ -51,6 +55,7 @@ foreach group $mcl_group_list {
 	## Prepare variable to hold new group (with duplicates)
 	## and count how many orthologs were in the original group
 	set group_dup_incl	{}
+	set group_AG_prot	0
 	set protID_orths	[split $group \t]
 	set total_orths		[expr $total_orths + [llength $protID_orths]]
 
@@ -58,10 +63,10 @@ foreach group $mcl_group_list {
 
 	## Check each protID for duplicates and add to the group if necessary
 	foreach protID $protID_orths {
+		
 		## Remove the position from the protID to search
 		## for duplicates. Embed * into the variable to help
 		## sqlite search.
-
 		if {[string length [string range $protID [string first \_ $protID] [string last \_ $protID]]] < 4} {
 			lappend missing_loc $protID
 			lappend bad_group	$group_index
@@ -75,6 +80,10 @@ foreach group $mcl_group_list {
 		## add the protIDs into the family - a new list
 		foreach duplicate $all_duplicates {
 			lappend group_dup_incl	$duplicate
+			set taxid	[string range $duplicate [string last \. $duplicate]+1 [string last \_ $duplicate]-1]
+			if {[lsearch $geo_taxids $taxid] != -1} {
+				incr group_AG_prot
+			}
 		}
 
 		## If the length of protIDs is > 1, we have duplicates
@@ -92,6 +101,11 @@ foreach group $mcl_group_list {
 	## We also add the row/group index - this will now be
 	## the gene family / group number
 	lappend after_dupl_groups	[join [concat $group_index $group_dup_incl] \t]
+	
+	## Write the number of AG proteins in each group to a global list
+	lappend group_AG_content	[join [concat $group_index $group_AG_prot] \t]
+	set total_AG_content		[expr $total_AG_content + $group_AG_prot]
+
 	incr group_index
 }
 
@@ -111,6 +125,10 @@ set out		[open $group_output/Readded_duplicates.tsv w]
 puts $out	[join $duplicates_add \n]
 close $out
 
+## Write out the AG content per group at each evalue
+set out		[open $group_output/AG_content.tsv w]
+puts $out	[join $group_AG_content \n]
+close $out
 
 ## // ##
 
@@ -252,6 +270,7 @@ set log		[open $group_output/Log.txt w]
 
 multiputs stdout $log "Genes before duplicate addition:\t$total_orths"
 multiputs stdout $log "Duplicate genes readded:\t$total_dups_readd"
+multiputs stdout $log "Total number of AnoGeo prots:\t$total_AG_content"
 
 multiputs stdout $log "\nBefore removing misclustered groups: [llength $after_dupl_groups] groups"
 multiputs stdout $log "After removing groups with bad protIDs: [llength $pruned_groups] groups"
