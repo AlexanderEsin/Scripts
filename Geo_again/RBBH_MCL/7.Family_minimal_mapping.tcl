@@ -1,11 +1,5 @@
 #!/usr/local/bin/tclsh
 ###################################
-## Changelog ##
-# 23 November 2015 - changed "Error 2" to "Exit 2" so that the script actually breaks at those points #
-# 14 January 2016 - added an option to pick the most stringent evalue at which all the Geobacillus sequences are present #
-
-
-###################################
 source  /Users/aesin/Documents/Scripts/General_utils.tcl
 package require sqlite3
 package require struct::set

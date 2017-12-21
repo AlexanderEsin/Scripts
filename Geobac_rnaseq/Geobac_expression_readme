@@ -1,0 +1,35 @@
+## Geobacillus expression ##
+
+Expression and genome taken from Matteo Ferla's GitHub: https://github.com/matteoferla/Geobacillus
+Genbank file converted to proteome with http://rocaplab.ocean.washington.edu/tools/genbank_to_fasta
+
+1. Perform cross-blast of my G. thermoglucosidans proteome (Geobacillus_thermoglucosidasius_C56_YS93) vs the proteome used by M. Ferla (Geobacillus thermoglucosidasius TM242)
+
+cd /Users/aesin/Desktop/Geo_analysis/GeoTh_rnaseq/Cross_blast
+makeblastdb -in Gthg_TM242_proteome.fasta -dbtype prot -out ./DB/Gthg_TM242
+blastp -query ./Query/Gthg_C56_YS93_proteome.fasta -db ./DB/Gthg_TM242 -max_target_seqs 1 -outfmt 6 -out ./Blast_out/Cross_blast.tsv -num_threads 10
+
+# Take all the hits that are above 98% query cover - text edit manual #
+R: make sure all the query and subject sequences are unique
+setwd("/Users/aesin/Desktop/Geo_analysis/GeoTh_rnaseq/Cross_blast/Blast_out/")
+gth_cross_blast <- read.table(file = "Sorted_blast_98cutoff.txt", header = FALSE, sep = "\t")
+length(gth_cross_blast$V1); # There are 3102 total blast hits
+length(unique(gth_cross_blast$V1)); # There are two query sequences that repeat
+length(unique(gth_cross_blast$V2)); # There are 52 subject sequences that repeat
+
+# For simplicity we'll take only unambiguous 1-to-1 blast hits
+query_duplicates <- as.character(gth_cross_blast$V1[duplicated(gth_cross_blast$V1)])
+subject_duplicates <- gth_cross_blast$V2[duplicated(gth_cross_blast$V2)]
+
+gth_no_duplicates <- gth_cross_blast[-which(gth_cross_blast$V1 %in% query_duplicates),]
+gth_no_duplicates <- gth_cross_blast[-which(gth_cross_blast$V2 %in% subject_duplicates),]
+
+length(gth_no_duplicates$V1); # There are 3029 1-to-1 relationships found
+
+# Write out the 1-to-1 orthologs between the two G. thermoglucosidasius proteomes
+gth_loci <- gth_no_duplicates[,1:2]
+names(gth_loci)	<- c("C56-YS93", "TM242")
+write.table(gth_loci, file = "../One2one_GeoTh_orths.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+### //// ABANDONED //// ###
+# The excel shows that the vast majority of reads were unmapped - there is no publication on this data. Possibly not useful at all. Not worth further effort #
