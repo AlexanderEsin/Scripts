@@ -8,9 +8,9 @@ set eval_trunc	[string range $evalue 2 end]
 
 
 ## Set relevant directories and sqlite DB name
-set direct			/users/aesin/Desktop/Geo_again/Anogeo_analysis
+set direct			/users/aesin/Desktop/Geo_again
 set para_comp_dir	$direct/RBBH/Paralog_comparison
-set para_poss_dir	$direct/Find_inparalogs
+set para_poss_dir	$direct/AGeo_inparalogs
 set para_RBBH_dir	$direct/RBBH/InParalogs_RBBH
 
 file mkdir			$para_RBBH_dir
@@ -82,6 +82,7 @@ set poss_paralog_files	[glob $para_poss_dir/Poss_paralogs/*tsv]
 set true_paralog_list	{"Paralog_A\tParalog_B"}
 set paralog_for_RBBH	{}
 set paralog_counter		0
+set process_counter		0
 
 puts "Identifying true paralogs ..."
 
@@ -90,6 +91,10 @@ foreach paralog_file $poss_paralog_files {
 
 	## Read in the possible paralogs data
 	set poss_para_data	[split [string trim [openfile $paralog_file]] \n]
+
+	puts -nonewline stdout "Processing paralog file: $process_counter // [llength $poss_paralog_files]\r"
+	flush stdout
+	incr process_counter
 
 	foreach possible_paralogs $poss_para_data {
 
@@ -113,7 +118,7 @@ foreach paralog_file $poss_paralog_files {
 			set orth_bits 0
 		}
 
-		## If the paralog bitscore is the same or highest as the
+		## If the paralog bitscore is the same or higher than the
 		## top bitscore against any ortholog and the evalue between
 		## the paralogs is below the treshold, we add this paralogy
 		## to a list of true paralogs.
@@ -127,7 +132,7 @@ foreach paralog_file $poss_paralog_files {
 
 	}
 }
-puts "Identifying true paralogs: DONE"
+puts "\nIdentifying true paralogs: DONE"
 puts "Identified $paralog_counter true paralogs"
 
 ## Write out the list of true paralogs

@@ -109,7 +109,7 @@ cd $direct/Poss_paralogs
 set paralog_files	[glob *tsv]
 
 ## For each per-genome paralog file, open and
-## combine into a globa file
+## combine into a global file
 set anogeo_paralog_tbl	{}
 foreach paralog_file $paralog_files {
 	set paralog_data [string trim [openfile $paralog_file]]
