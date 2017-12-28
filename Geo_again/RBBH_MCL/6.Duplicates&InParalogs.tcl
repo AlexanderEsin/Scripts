@@ -9,8 +9,8 @@ source ~/Documents/Scripts/General_utils.tcl
 package require sqlite3
 
 set ival			2.0
-# set evalue		[lindex $argv 0]
-set evalue			"1e-150"
+set evalue		[lindex $argv 0]
+# set evalue			"1e-150"
 set trunc_eval		[string range $evalue 2 end]
 
 ## Define the directories and create new output folder
