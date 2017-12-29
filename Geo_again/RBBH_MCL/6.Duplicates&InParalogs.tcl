@@ -73,7 +73,7 @@ foreach group $mcl_group_list {
 			continue
 		}
 
-		set trim_position	"[string range $protID 0 [expr [string last \_ $protID] - 1]]*"
+		set trim_position	"[string range $protID 0 [expr [string last \_ $protID] - 1]]_*"
 		set all_duplicates	[db1 eval {select protID from t1 where protID glob $trim_position}]
 
 		## If we find multiple entries - i.e. duplicated proteins
