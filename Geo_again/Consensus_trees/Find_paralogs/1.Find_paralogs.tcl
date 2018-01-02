@@ -2,6 +2,7 @@
 
 source ~/Documents/Scripts/General_utils.tcl
 set group_name	[lindex $argv 0]
+set script_path	[file dirname [file normalize [info script]]]
 
 set direct /users/aesin/Desktop/Geo_again/Consensus_groups/$group_name
 
@@ -54,8 +55,8 @@ puts stdout		"\nSelf-BLAST... Done"
 puts stdout		"Trimming away BLAST hits against self and identifying possible in-paralogs..."
 ## Take the Blast output files and trim away blast hits 
 ## against the query protein (self hits)
-file mkdir $direct/Self_trimmed
-file mkdir $direct/Poss_paralogs
+file mkdir $inpara_path/Self_trimmed
+file mkdir $inpara_path/Poss_paralogs
 
 set paralog_stats	{"Proteome\tNum.Possible.Paralogs"}
 
@@ -70,12 +71,11 @@ foreach blast_output $blast_out_files {
 	flush stdout
 
 	## Trim away self hits by running R-script from the same directory
-	set script_path	[file dirname [file normalize [info script]]]
-	catch {exec $script_path/1.Trim_selfhits.R $out_path/$blast_output $direct/Self_trimmed}
+	catch {exec $script_path/1.Trim_selfhits.R $out_path/$blast_output $inpara_path/Self_trimmed}
 
 	## File name remains the same in the new directory
 	## Do a trivial RBBH - keeping bitscores
-	set hits	[split [string trim [openfile $direct/Self_trimmed/$blast_output]] \n]
+	set hits	[split [string trim [openfile $inpara_path/Self_trimmed/$blast_output]] \n]
 
 	set paralog_counter 0
 	set paralog_list	{}
