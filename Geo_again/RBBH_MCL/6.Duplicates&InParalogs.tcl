@@ -78,11 +78,17 @@ foreach group $mcl_group_list {
 
 		## If we find multiple entries - i.e. duplicated proteins
 		## add the protIDs into the family - a new list
+		
+		## 1.1.18 - for some reasons some groups still have duplicates - something to do
+		## with dup identification during proteome processing (e.g. 702 @ -10 contained both duplicates)
+		## so, we check that we don't readd the same protein twice
 		foreach duplicate $all_duplicates {
-			lappend group_dup_incl	$duplicate
-			set taxid	[string range $duplicate [string last \. $duplicate]+1 [string last \_ $duplicate]-1]
-			if {[lsearch $geo_taxids $taxid] != -1} {
-				incr group_AG_prot
+			if {[lsearch $group_dup_incl $duplicate] == -1} {
+				lappend group_dup_incl	$duplicate
+				set taxid	[string range $duplicate [string last \. $duplicate]+1 [string last \_ $duplicate]-1]
+				if {[lsearch $geo_taxids $taxid] != -1} {
+					incr group_AG_prot
+				}
 			}
 		}
 
@@ -94,7 +100,6 @@ foreach group $mcl_group_list {
 			lappend duplicates_add	$group_index\t$acc_ass\t[join $all_duplicates " "]
 			set total_dups_readd	[expr $total_dups_readd + [expr [llength $all_duplicates] - 1]]
 		}
-		incr prot_index
 	}
 
 	## Add the new group (with duplicates) to the global group list

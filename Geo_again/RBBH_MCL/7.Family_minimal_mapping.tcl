@@ -56,7 +56,8 @@ foreach evalue $evalue_list {
 
 	set group_counter 1
 	foreach group $mcl_groups {
-		puts stdout "Adding orthologs to DB -- evalue : $evalue -- group: $group_counter // $num_mcl_groups"
+		puts -nonewline stdout "Adding orthologs to DB -- evalue : $evalue -- group: $group_counter // $num_mcl_groups\r"
+		flush stdout
 		set group_split	[split [string trim $group] \t]
 		
 		## The first element is the group number, the rest orthologs
