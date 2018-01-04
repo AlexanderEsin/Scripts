@@ -37,7 +37,7 @@ foreach proteome $proteome_l {
 		set f_db_base 	[string range $f_db_file 0 end-4]
 
 		if {$f_query_base != $f_db_base} {
-			catch {exec blastp -query $proteome -db "$all_db_dir/$f_db_base" -out "$out_sub/$f_query_base\&$f_db_base\.tsv" -evalue 1e-10 -outfmt 6 -max_target_seqs 1 -max_hsps_per_subject 1 -seg "yes" -soft_masking true -num_threads 4}
+			catch {exec blastp -query $proteome -db "$all_db_dir/$f_db_base" -out "$out_sub/$f_query_base\&$f_db_base\.tsv" -evalue 1e-10 -outfmt 6 -max_target_seqs 1 -max_hsps_per_subject 1 -seg "yes" -soft_masking true -num_threads 2}
 		}
 	}
 }

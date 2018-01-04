@@ -25,8 +25,14 @@ set group_num	[string range $file_name 0 end-6]
 set group_out_dir	$align_bin_dir/$group_num
 file mkdir			$group_out_dir
 
-catch {exec clustalo --auto -i $group_fasta_file -o $group_out_dir/$group_num\_aligned.fas --outfmt=fasta -v --force -l $group_out_dir/$group_num\_MSA_log.txt --threads=2}
+## If the output alignment already exists in the final directory, exit
+if {[file exists $align_fin_dir/$group_num\_aligned.fas] == 1} {
+	exit
+}
 
+## Otherwise run clustalo alignment and write the final alignment to
+## the final directory
+catch {exec clustalo --auto -i $group_fasta_file -o $group_out_dir/$group_num\_aligned.fas --outfmt=fasta -v --force -l $group_out_dir/$group_num\_MSA_log.txt --threads=4}
 if {[file exists $group_out_dir/$group_num\_aligned.fas] == 1} {
 	file copy -force $group_out_dir/$group_num\_aligned.fas $align_fin_dir/$group_num\_aligned.fas
 }
