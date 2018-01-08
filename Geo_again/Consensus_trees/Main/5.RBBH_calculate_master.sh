@@ -6,6 +6,6 @@
 chmod +x /home/ade110/Scripts/Geo_again/Consensus_trees/Main/5.RBBH_calculate_slave.tcl
 
 group_name=$GROUP
-evalue=1e-10
+evalue=1e-150
 
 /home/ade110/Scripts/Geo_again/Consensus_trees/Main/5.RBBH_calculate_slave.tcl $group_name $evalue $PBS_ARRAY_INDEX

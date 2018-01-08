@@ -24,7 +24,7 @@ file mkdir $out_split $temp_hold
 ## Copy all the blast outputs into a global temp folder
 set input_out_dirs	[glob -type d $blast_out/*]
 foreach input_dir $input_out_dirs {
-	set blast_out_files	[glob $blast_out/$input_dir/*tsv]
+	set blast_out_files	[glob $input_dir/*tsv]
 	foreach blast_file $blast_out_files {
 		file copy -force $blast_file $temp_hold
 	}

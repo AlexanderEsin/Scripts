@@ -59,10 +59,11 @@ if {[file exists $comparison_db] != 1} {
 			}
 		}
 
-		puts "Adding files to DB: $counter / $num_comp_files ..."
+		puts -nonewline stdout "Adding files to DB: $counter / $num_comp_files ...\r"
+		flush stdout
 		incr counter
 	}
-	puts "Adding files to DB: DONE"
+	puts "\nAdding files to DB: DONE"
 	puts "Making database indexes ..."
 	## Create indexes on both the gene columns
 	db1 eval {CREATE INDEX old_id_index ON t1 (GeneA)}
@@ -83,7 +84,7 @@ set poss_paralog_files	[glob $para_poss_dir/Poss_paralogs/*tsv]
 set true_paralog_list	{"Paralog_A\tParalog_B"}
 set paralog_for_RBBH	{}
 set paralog_counter		0
-set process_counter		0
+set process_counter		1
 
 puts "Identifying true paralogs ..."
 

@@ -42,12 +42,13 @@ foreach RBBH_file $RBBH_file_list {
 	puts $out		$no_header
 	close $out
 
-	puts $logchan	"Added $counter / $num_RBBH_files RBBH files to Orthologs_RBBH"
+	puts -nonewline $logchan	"Added $counter / $num_RBBH_files RBBH files to Orthologs_RBBH\r"
+	flush $logchan
 	incr counter
 }
 
 
-puts $logchan	"Adding Ortholog and InParalog RBBHs into Master ..."
+puts $logchan	"\nAdding Ortholog and InParalog RBBHs into Master ..."
 ## Add the ortholog and inParalog RBBHs into master
 if {[file exists $para_RBBH_dir/InParalogs_RBBH_$eval_num\.txt] == 1} {
 

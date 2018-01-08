@@ -153,7 +153,7 @@ while {$files_remaining > 0} {
 		}
 	}
 
-	## Preapre the output file name for the RBBH hits
+	## Prepare the output file name for the RBBH hits
 	set RBBH_out_name	[string range $file_A 0 end-4]
 
 	## Write out the RBBH hits
