@@ -172,7 +172,7 @@ foreach clean_proteome $clean_proteomes {
 puts "\nMaking index on the protID column ..."
 ## Make an index on the protID
 db1 eval {create index protID_index on t1 (protID)}
-
+db1 eval {create index taxid_index on t1 (taxid)}
 ## Close the database
 db1 close
 puts "\nAll database entry complete: see $anogeo_prot_db"
