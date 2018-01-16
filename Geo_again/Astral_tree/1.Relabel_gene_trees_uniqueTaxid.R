@@ -33,7 +33,7 @@ for (input_tree in input_tree_list) {
 	tree_data	<- read.tree(input_tree)
 	tree_tips	<- tree_data$tip.label
 
-	## In some circumastances, there are multiple entries for a particular protID in the database
+	## In some circumstances, there are multiple entries for a particular protID in the database
 	## This is because some genomes contain multiple plasmids each with an identical gene / protein at the same site
 	## We will filter those out downstream, for now - limit to just 1
 
@@ -85,5 +85,6 @@ message(paste0("Taxids missing from the noDup tree set: ", paste(missing_taxids,
 missing_taxid_data	<- dbGetQuery(conn, 'SELECT acc_ass, binomial FROM t1 WHERE taxid = :taxids LIMIT 1', params = list(taxids = missing_taxids))
 message(paste0("These correspond to: ", paste(missing_taxid_data$acc_ass, collapse = " | ")))
 message(paste0("These correspond to: ", paste(missing_taxid_data$binomial, collapse = " | ")))
+
 
 dbDisconnect(conn)
