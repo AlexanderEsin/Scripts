@@ -29,7 +29,8 @@ fastq_data_list <- lapply(fastq_file_list, function(fastq_file) {
 # Our file names have the format: "P[number]_merged2.fastq. Here we use a pattern search approach to just extract the P[number] part
 # The pattern: [\\D]{1}[\\d]+ can be broken down as: [\\D] = any character (not digit), {1} = match previous pattern once, [\\d] = any digit, + = match previous pattern as many times as possible
 # Many functions in R automatically apply over a vector: our vector here is three file names, so it automatically finds the pattern in all three elements of the vector
-names(fastq_data_list) <- str_extract(string = fastq_file_list, pattern = "([\\D]{1}[\\d]+)")
+PSet_name_list <- str_extract(string = fastq_file_list, pattern = "([\\D]{1}[\\d]+)")
+names(fastq_data_list) <- PSet_name_list
 
 
 ## From the fastq data list above, get just the DNA sequence and put this in a new list
@@ -320,145 +321,220 @@ finalUniqSeq_data_list <- lapply(finalFilter_data_list, function(p_set) {
 # }))
 
 #### Nucleotide-level analysis
+### GC-content differences between P-sets
+PSet_GC_content_list <- lapply(PSet_name_list, function(p_set_name) {
+	# Calculate the frequencies of G and C nucleotides seperately for each sequence
+	PSet_GC_sep_freq	<- alphabetFrequency(finalUniqSeq_data_list[[p_set_name]]$UniqSeqData, as.prob = TRUE)[,c("C", "G")]
+	# Combine these to get the GC combined frequency
+	PSet_GC_tot_freq	<- rowSums(PSet_GC_sep_freq)
+	# Return as dataframe with two columns: P-set name and GC frequency
+	PSet_GC_tot_df		<- data.frame(PSet = rep(p_set_name, length(PSet_GC_tot_freq)), GC.Content = PSet_GC_tot_freq)
+	return(PSet_GC_tot_df)
+})
+# Bind all the individual P-set results into a single dataframe
+PSet_GC_content_df	<- bind_rows(PSet_GC_content_list)
 
-### GC-content
+# A list of pairwise comparisons we'll want to do for stats 
+PairComp_list		<- list(c("P1", "P4"), c("P4", "P8"), c("P1", "P8"))
 
+# Boxplot distributions of GC content for each P-set
+PSet_GC_content_plot	<- ggplot(data = PSet_GC_content_df, aes(x = PSet, y = GC.Content, color = PSet)) +
+	geom_boxplot() +
+	theme(panel.background = element_blank(), axis.line = element_line(color = "black")) +
+	stat_compare_means(comparisons = PairComp_list, method = "wilcox.test", p.adjust = "bonferroni")
 
-# x <- rowSums(alphabetFrequency(finalUniqSeq_data_list$P1$uniq_seq_data, as.prob = TRUE)[,c("C", "G")])
-# y <- rowSums(alphabetFrequency(finalUniqSeq_data_list$P4$uniq_seq_data, as.prob = TRUE)[,c("C", "G")])
-# z <- rowSums(alphabetFrequency(finalUniqSeq_data_list$P8$uniq_seq_data, as.prob = TRUE)[,c("C", "G")])
 
 ### Codon usage bias
 
-## We calculate codon usage using the Codon Adaptability Index for E. coli. The codons used in each (unique) sequence are compared to an index (the CAI) of optimal codons derived from highly expressed genes in E. coli (I think). We compare how the distributions of codons in each sequence in each P-set differs to the others.
+# When translating and assinging codons, assume the bacterial code
+bacterial_code	<- 11
+BacGeneCode		<- getGeneticCode(as.character(bacterial_code))
 
-## The default function is slow. We can make it faster by calculating some constant variables outside the function (i.e. we don't need to recalculate the same value for each sequence processed)
+## We calculate codon usage using the Codon Adaptability Index for E. coli. The
+## codons used in each (unique) sequence are compared to an index (the CAI) of
+## optimal codons derived from highly expressed genes in E. coli (I think). We
+## compare how the distributions of codons in each sequence in each P-set
+## differs to the others.
+
+# Read in Genscript CAI data
+GS_cai_tbl	<- read.table(file.path(fastq_file_path, "GenScript_ecoli_caiTbl.txt"), sep = "\t", header = TRUE, colClasses = "character")
+GS_cai_tbl	<- GS_cai_tbl[order(GS_cai_tbl$Triplet),]
+gs_cai_indx <- as.numeric(GS_cai_tbl$Fraction)
+
+# The default function for calculating CAI is slow. We can make it faster by
+# calculating some constant variables outside the function (i.e. we don't need
+# to recalculate the same value for each sequence processed)
 cai.faster  <- function (seq, w, exclude) {
 	nncod <- uco(seq)
 	nncod <- nncod[-exclude]
 	sigma <- nncod %*% log(w)
 	exp(sigma/sum(nncod))
 }
-## The vectorize function allows us to provide a vector or list as an argument, rather than looping
+# The vectorize function allows us to provide a vector or list as an argument,
+# rather than looping over each sequence
 cai.faster_vf <- Vectorize(cai.faster, vectorize.args = "seq", SIMPLIFY = TRUE)
 
-
-## The R-package that contains the function we use here comes with its own CAI - but this is different to Genscript one
-## We'll run the analysis using both
-
-# Import the default CAI index data
-data("caitab")
-cai_index <- caitab$ec
-
-# Read in Genscript CAI data
-GS_cai_tbl <- read.table(file.path(fastq_file_path, "GenScript_ecoli_caiTbl.txt"), sep = "\t", header = TRUE, colClasses = "character")
-GS_cai_tbl <- GS_cai_tbl[order(GS_cai_tbl$Triplet),]
-gs_cai_index <- as.numeric(GS_cai_tbl$Fraction)
-
-
-## Pre-run some cai calculations (speed up)
-bacterial_code <- 11
-stops       <- which("Stp" == aaa(translate(s2c(c2s(words())), numcode = bacterial_code)))
+# Pre-run some cai calculations that were part of the old cai() function
+stops		<- which("Stp" == aaa(translate(s2c(c2s(words())), numcode = bacterial_code)))
 singulets   <- which(sapply(syncodons(words(), numcode = bacterial_code), length) == 1)
-exclude     <- c(stops, singulets)
+exclude		<- c(stops, singulets)
+gs_cai_adj	<- gs_cai_indx[-exclude]
+gs_cai_adj[gs_cai_adj < 1e-04] <- 0.01
 
-
-## For the default index ...
-cai_adj   <- cai_index[-exclude]
-cai_adj[cai_adj < 1e-04] <- 0.01
-PsetCAI_default_list <- lapply(1:length(finalUniqSeq_data_list), function(p_set_index) {
-	p_set_name <- names(finalUniqSeq_data_list)[p_set_index]
-
-	message(paste0("Working on CAI for P-set: ", p_set_name))
-
-	charSplit_seqs <- str_split(string = tolower(as.character(finalUniqSeq_data_list[[p_set_index]]$UniqSeqData)), pattern = "")
-	cai_result <- cai.faster_vf(charSplit_seqs, w = cai_adj, exclude = exclude)
-
-	cai_df <- data.frame(PSet = rep(p_set_name, length(cai_result)), CAI_value = cai_result, stringsAsFactors = FALSE)
-	print(head(cai_df))
+# For each sequence in each P-set, calculate the CAI
+message("WARNING: CAI calculation takes a while - about 1-2 minutes per P-set")
+PSetCAI_genscr_list <- lapply(PSet_name_list, function(p_set_name) {
+	message(paste0("Calculating CAI for P-set: ", p_set_name))
+	
+	# The cai() function takes character vectors split by each individual base (lower case)
+	charSplit_seqs <- str_split(string = tolower(as.character(finalUniqSeq_data_list[[p_set_name]]$UniqSeqData)), pattern = "")
+	cai_result <- cai.faster_vf(charSplit_seqs, w = gs_cai_adj, exclude = exclude)
+	
+	# Convert result to a dataframe structure
+	cai_df <- data.frame(PSet = rep(p_set_name, length(cai_result)), CAI.Value = cai_result)
 	return(cai_df)
 })
-PsetCAI_default_all <- bind_rows(PsetCAI_default_list)
-PsetCAI_default_plot <- ggplot(data = PsetCAI_default_all, aes(x = PSet, y = CAI_value, fill = PSet)) + geom_boxplot()
 
-## For the GS index...
-cai_adj   <- gs_cai_index[-exclude]
-cai_adj[cai_adj < 1e-04] <- 0.01
-PsetCAI_genscr_list <- lapply(1:length(finalUniqSeq_data_list), function(p_set_index) {
-	p_set_name <- names(finalUniqSeq_data_list)[p_set_index]
-
-	message(paste0("Working on CAI for P-set: ", p_set_name))
-
-	charSplit_seqs <- str_split(string = tolower(as.character(finalUniqSeq_data_list[[p_set_index]]$UniqSeqData)), pattern = "")
-	cai_result <- cai.faster_vf(charSplit_seqs, w = cai_adj, exclude = exclude)
-
-	cai_df <- data.frame(PSet = rep(p_set_name, length(cai_result)), CAI_value = cai_result, stringsAsFactors = FALSE)
-	print(head(cai_df))
-	return(cai_df)
-})
-PsetCAI_genscr_all <- bind_rows(PsetCAI_genscr_list)
-PsetCAI_genscr_plot <- ggplot(data = PsetCAI_genscr_all, aes(x = PSet, y = CAI_value, fill = PSet)) + geom_boxplot()
-
-p1_2 <- t.test(PsetCAI_genscr_list[[1]]$CAI_value, PsetCAI_genscr_list[[2]]$CAI_value)$p.value
-p1_3 <- t.test(PsetCAI_genscr_list[[1]]$CAI_value, PsetCAI_genscr_list[[3]]$CAI_value)$p.value
-p2_3 <- t.test(PsetCAI_genscr_list[[2]]$CAI_value, PsetCAI_genscr_list[[3]]$CAI_value)$p.value
+# Bind all the individual P-set results into a single dataframe
+PSetCAI_genscr_df	<- bind_rows(PSetCAI_genscr_list)
+# Plot a boxplot of the CAI scores distributions and test difference
+PSetCAI_genscr_plot	<- ggplot(data = PSetCAI_genscr_df, aes(x = PSet, y = CAI.Value, color = PSet)) +
+	geom_boxplot() +
+	theme(panel.background = element_blank(), axis.line = element_line(color = "black")) +
+	stat_compare_means(comparisons = PairComp_list, method = "t.test", p.adjust = "bonferroni")
 
 
-BacGeneCode	<- getGeneticCode(as.character(bacterial_code))
-P_set_list	<- names(fastq_data_list)
+
+
+
+### Look at positions of STOP codons within the sequences
+# Define the stop codon
 stop_AA		<- "*"
-x <- lapply(P_set_list, function(p_set_name) {
+
+# For all the unique P-set sequences: translate, check for stop codons, get their locations
+stop_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
+	# Get the (unique) nucloetide sequences for each P-set and r
 	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
 	transl_seqs		<- Biostrings::translate(nucleot_seqs, genetic.code = BacGeneCode)
-
+	
+	# Get all sequences that contain at least 1 stop codon
 	stop_AllSeqs	<- transl_seqs[which(vcountPattern(stop_AA, transl_seqs) > 0),]
-	stop_RawNum		<- sum(vcountPattern(stop_AA, transl_seqs))
-	stop_InSeqNum	<- length(all_stop_posit)
-
-	stop_AllPosits	<- vmatchPattern(stop_AA, stop_AllSeqs)
-	stop_AllStart	<- unlist(stop_AllPosits)@start
-
-	stop_AllStart.df <- data.frame(PSet = rep(p_set_name, length(stop_AllStart)), StopPosition = stop_AllStart, stringsAsFactors = FALSE)
-	return(stop_AllStart.df)
+	# Count how many stop codons are in the dataset, and the number of sequences containing the stop codons
+	stop_RawNum		<- sum(vcountPattern(stop_AA, transl_seqs)) / (length(transl_seqs) * mean(width(transl_seqs)))
+	stop_InSeqNum	<- length(stop_AllSeqs) / length(transl_seqs)
+	
+	# For sequences with stop codons, calculate their position in the sequence
+	stop_PositsFull	<- vmatchPattern(stop_AA, stop_AllSeqs)
+	stop_Posits		<- unlist(stop_PositsFull)@start
+	
+	# Return a dataframe with two columns: the P-set name and the STOP positions
+	stop_data_list	<- list(
+		stop_posits_df = data.frame(PSet = rep(p_set_name, length(stop_Posits)), StopPosition = stop_Posits, stringsAsFactors = FALSE),
+		stop_nums_df = data.frame(PSet = p_set_name, Raw.Num = stop_RawNum, InSeq.Num = stop_InSeqNum, stringsAsFactors = FALSE))
+	return(stop_data_list)
 })
-y <- bind_rows(x)
-ggplot(data = y, aes(x = PSet, y = StopPosition, fill = PSet)) + geom_boxplot() + geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 51, ymax = 58), fill = "grey50", alpha = 0.01) + ggtitle("Positions of stop codons in sequences containing stop codons") + theme(plot.title = element_text(hjust = 0.5))
 
-aes(xmin=100, xmax=200, ymin=0,ymax=Inf), alpha=0.2, fill="red"
+# Bind all the individual P-set STOP count results into a single dataframe
+stop_AllNums_df		<- bind_rows(lapply(stop_AllPosits_list, function(pset) return(pset$stop_nums_df)))
+# Normalise the numbers to 1 - where 1 is the highest scoring P-set in each category
+normal_to_1			<- function(x){((x)/(max(x)))}
+stop_AllNums_norm	<- data.frame(PSet = stop_AllNums_df[,1], apply(stop_AllNums_df[,-1], 2, normal_to_1))
+# Melt dataframe for ggplot
+stop_AllNums_melt	<- melt(stop_AllNums_norm, id.vars = "PSet", variable.name = "Count.Type", value.name = "Counts")
 
-
-stop_AA <- "*"
-
-stop_codon	<- vmatchPattern(stop_AA, P8_translate)
-with_stop_prot	<- P8_translate[which(elementNROWS(stop_codon) > 0),]
-all_stop_posit	<- vmatchPattern(stop_AA, with_stop_prot)
-stop_loc_P1		<- unlist(all_stop_posit)@start
-stop_loc_P8		<- unlist(all_stop_posit)@start
-
-with_stop_nucl
-met_codon	<- vmatchPattern(start_AA, P1_translate)
-
-
-
-
-
-RBS_occur <- vmatchPattern(shinedalg_seq, P1_nucleots)
-RBS_occur_index <- elementNROWS(RBS_occur)
-RBS_count <- sum(RBS_occur_index) / length(RBS_occur)
-
-stop_occur <- vmatchPattern(stop_AA, P1_translate)
-stop_occur_index <- elementNROWS(stop_occur)
-stop_count <- sum(stop_occur_index)
+# Barplot to compare how many stop codons are present in the Pset as a
+# proportion of all codons and how many sequences contains stop codons as a
+# proportion of all sequences. In both cases these fractions are normalised to
+# the largest Pset for each type of count
+stop_AllNums_plot	<- ggplot(data = stop_AllNums_melt, aes(x = PSet, y = Counts, fill = Count.Type)) +
+	geom_bar(stat = "identity", position = "dodge") +
+	labs(y = "Normalised fraction ofall seqs in PSet") +
+	scale_fill_discrete(
+		name="Type of count",
+		breaks=c("Raw.Num", "InSeq.Num"),
+		labels=c("Total Stop codons", "Num. seqs with Stops")) +
+	theme(legend.title.align = 0.5)
 
 
-RBS_stop_overlap <- as.data.frame(cbind(hasRBS = RBS_occur_index, hasStop = stop_occur_index))
-RBS_stop_overlap$cooccur <- rowSums(RBS_stop_overlap)
-
-
-
-
+# Bind all the individual P-set STOP position results into a single dataframe
+stop_AllPosits_df	<- bind_rows(lapply(stop_AllPosits_list, function(pset) return(pset$stop_posits_df)))
+# Boxplot of the STOP position distribution across P-sets with pairwise significance tests
+stop_AllPositis_plot	<- ggplot(data = stop_AllPosits_df, aes(x = PSet, y = StopPosition, color = PSet)) +
+	geom_boxplot() +
+	ylim(0, 140) +
+	geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 51, ymax = 58), color = "black", linetype = "solid", size = 0.5, fill = NA) +
+	geom_hline(yintercept = 108, color = "red", linetype = "dashed") +
+	ggtitle("Positions of stop codons in sequences containing stop codons") +
+	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
+	stat_compare_means(comparisons = PairComp_list, method = "wilcox.test", p.adjust = "bonferroni")
 
 
 
 
+### Look at positions of Shine-Dalgarno sequence in P-sets
+SD_seq		<- DNAString("AGGAGGT")
+
+SD_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
+	# Get the (unique) nucloetide sequences for each P-set and r
+	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+	
+	# Get all sequences that contain at an SD sequence with max 0 nucleotide mismatch
+	SD_AllSeqs		<- nucleot_seqs[which(vcountPattern(SD_seq, nucleot_seqs, max.mismatch = 0) > 0),]
+	# Count how many SD sequences are in the dataset, and the number of sequences containing SD sequences
+	SD_RawNum		<- sum(vcountPattern(SD_seq, nucleot_seqs, max.mismatch = 0))
+	SD_InSeqNum		<- length(SD_AllSeqs) / length(nucleot_seqs)
+	
+	# For sequences with stop codons, calculate their position in the sequence
+	SD_PositsFull	<- vmatchPattern(SD_seq, SD_AllSeqs, max.mismatch = 0)
+	SD_Posits		<- unlist(SD_PositsFull)@start
+	
+	# Return a dataframe with two columns: the P-set name and the SD positions
+	SD_data_list	<- list(
+		SD_contain_seqs = SD_AllSeqs,
+		SD_posits_df = data.frame(PSet = rep(p_set_name, length(SD_Posits)), SDPosition = SD_Posits, stringsAsFactors = FALSE),
+		SD_nums_df = data.frame(PSet = p_set_name, Raw.Num = SD_RawNum, InSeq.Num = SD_InSeqNum, stringsAsFactors = FALSE))
+	return(SD_data_list)
+})
+SD_AllNums_df	<- bind_rows(lapply(SD_AllPosits_list, function(pset) return(pset$SD_nums_df)))
+
+SD_AllPosits_df	<- bind_rows(lapply(SD_AllPosits_list, function(pset) return(pset$SD_posits_df)))
+# Boxplot of the SD position distribution across P-sets with pairwise significance tests
+SD_AllPosits_plot	<- ggplot(data = SD_AllPosits_df, aes(x = PSet, y = SDPosition, color = PSet)) +
+	geom_boxplot() +
+	ylim(0, 450) +
+	geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 151, ymax = 174), color = "black", linetype = "solid", size = 0.5, fill = NA) +
+	geom_hline(yintercept = 324, color = "red", linetype = "dashed") +
+	ggtitle("Positions of SD seqs in sequences containing SD seqs") +
+	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
+	stat_compare_means(comparisons = PairComp_list, method = "wilcox.test", p.adjust = "bonferroni")
+
+
+a <- lapply(PSet_name_list, function(p_set_name) {
+	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+	nucleo_chars	<- as.character(nucleot_seqs)
+	
+	splitVector		<- split(1:324, ceiling(seq_along(1:324)/36))
+	splitNucleoCassette <- lapply(splitVector, function(cassette) {
+		cassette_range	<- c(min(cassette), max(cassette))
+		sequence_split 	<- lapply(nucleo_chars, function(char_seq) {
+			str_sub(char_seq, cassette_range[1], cassette_range[2])
+		})
+		return(unlist(sequence_split))
+	})
+})
+
+ggseqlogo(data = a[[1]][3:5], method = "probability", ncol = 1, nrow = 3)
+
+
+char_seqs <- as.character(seqs)
+x	<- split(1:324, ceiling(seq_along(1:324)/36))
+y	<- lapply(x, function(set) {return(data.frame(min(set), max(set)))})
+b	<- lapply(y, function(set) {
+	a <- lapply(char_seqs, function(seq) {
+		str_sub(seq, set[1], set[2])
+	})
+	return(unlist(a))
+})
+c1 <- b[3:5]
+ggseqlogo(data = c1, method = "probability", facet = "wrap", ncol = 1, nrow = 3)
 
