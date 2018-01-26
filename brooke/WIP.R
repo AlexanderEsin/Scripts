@@ -1,6 +1,7 @@
 ## Load packages
 ## If you don't have these packages, install them from the console using: install.packages("stringr") etc...
 ## For Biostrings & ShortRead see: http://bioconductor.org/packages/release/bioc/html/Biostrings.html and http://bioconductor.org/packages/release/bioc/html/ShortRead.html
+## For ggseqlogo: devtools::install_github("omarwagih/ggseqlogo")
 library(Biostrings)
 library(ShortRead)
 library(stringr)
@@ -9,6 +10,12 @@ library(ggplot2)
 library(gplots)
 library(reshape2)
 library(seqinr)
+library(ggpubr)
+library(devtools)
+if("ggseqlogo" %in% rownames(installed.packages()) == FALSE) {
+	devtools::install_github("omarwagih/ggseqlogo")
+}
+library(ggseqlogo)
 
 ## AE: look into DNAShapeR
 
@@ -405,8 +412,6 @@ PSetCAI_genscr_plot	<- ggplot(data = PSetCAI_genscr_df, aes(x = PSet, y = CAI.Va
 
 
 
-
-
 ### Look at positions of STOP codons within the sequences
 # Define the stop codon
 stop_AA		<- "*"
@@ -472,8 +477,11 @@ stop_AllPositis_plot	<- ggplot(data = stop_AllPosits_df, aes(x = PSet, y = StopP
 
 
 ### Look at positions of Shine-Dalgarno sequence in P-sets
+
+# Define the strictest SD consensus sequence
 SD_seq		<- DNAString("AGGAGGT")
 
+# For each P-set calculate how many SD sequences are present, how many sequences contain SD sites, and get a list of these SD sequences
 SD_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
 	# Get the (unique) nucloetide sequences for each P-set and r
 	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
@@ -495,11 +503,15 @@ SD_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
 		SD_nums_df = data.frame(PSet = p_set_name, Raw.Num = SD_RawNum, InSeq.Num = SD_InSeqNum, stringsAsFactors = FALSE))
 	return(SD_data_list)
 })
+# Rename list and get the numberical SD stats (number and number of sequences containing SD)
+names(SD_AllPosits_list)	<- PSet_name_list
 SD_AllNums_df	<- bind_rows(lapply(SD_AllPosits_list, function(pset) return(pset$SD_nums_df)))
 
+## Combine SD position list into single dataframe 
 SD_AllPosits_df	<- bind_rows(lapply(SD_AllPosits_list, function(pset) return(pset$SD_posits_df)))
+
 # Boxplot of the SD position distribution across P-sets with pairwise significance tests
-SD_AllPosits_plot	<- ggplot(data = SD_AllPosits_df, aes(x = PSet, y = SDPosition, color = PSet)) +
+SD_AllPos_boxplot	<- ggplot(data = SD_AllPosits_df, aes(x = PSet, y = SDPosition, color = PSet)) +
 	geom_boxplot() +
 	ylim(0, 450) +
 	geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 151, ymax = 174), color = "black", linetype = "solid", size = 0.5, fill = NA) +
@@ -508,9 +520,13 @@ SD_AllPosits_plot	<- ggplot(data = SD_AllPosits_df, aes(x = PSet, y = SDPosition
 	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
 	stat_compare_means(comparisons = PairComp_list, method = "wilcox.test", p.adjust = "bonferroni")
 
+# Density plot of SD positions in all P-sets
+SD_AllPos_densplot	<- ggplot(data = SD_AllPosits_df, aes(SDPosition, color = PSet)) +
+	geom_density()
 
-a <- lapply(PSet_name_list, function(p_set_name) {
-	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+# Break the 324-bp sequences containing SD into 9 x 36 bp chunks so we can plot seqlogos
+SD_SeqBreaks_list <- lapply(PSet_name_list, function(p_set_name) {
+	nucleot_seqs	<- SD_AllPosits_list[[p_set_name]]$SD_contain_seqs
 	nucleo_chars	<- as.character(nucleot_seqs)
 	
 	splitVector		<- split(1:324, ceiling(seq_along(1:324)/36))
@@ -522,19 +538,12 @@ a <- lapply(PSet_name_list, function(p_set_name) {
 		return(unlist(sequence_split))
 	})
 })
+names(SD_SeqBreaks_list) <- PSet_name_list
 
-ggseqlogo(data = a[[1]][3:5], method = "probability", ncol = 1, nrow = 3)
+# Only worth plotting seqLogos for P-values and chunks we think might be of interest - e.g. at the density spike in P1
+# In P1 - the spike is between 100-150 bps from start, so we plot bins 3,4,5 to cover that area
+P1_SD_spike_logo <- ggseqlogo(data = SD_SeqBreaks_list$P1[3:5], method = "probability", ncol = 1, nrow = 3)
 
 
-char_seqs <- as.character(seqs)
-x	<- split(1:324, ceiling(seq_along(1:324)/36))
-y	<- lapply(x, function(set) {return(data.frame(min(set), max(set)))})
-b	<- lapply(y, function(set) {
-	a <- lapply(char_seqs, function(seq) {
-		str_sub(seq, set[1], set[2])
-	})
-	return(unlist(a))
-})
-c1 <- b[3:5]
-ggseqlogo(data = c1, method = "probability", facet = "wrap", ncol = 1, nrow = 3)
+
 
