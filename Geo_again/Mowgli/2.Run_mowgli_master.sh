@@ -1,6 +1,6 @@
 #!/bin/sh
 #PBS -l walltime=72:00:00
-#PBS -l select=1:ncpus=1:mem=50gb
+#PBS -l select=1:ncpus=1:mem=100gb
 #PBS -J 1-6712
 
 ## +1:ncpus=0:mem=1mb

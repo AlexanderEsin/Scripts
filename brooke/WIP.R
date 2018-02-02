@@ -2,22 +2,11 @@
 ## If you don't have these packages, install them from the console using: install.packages("stringr") etc...
 ## For Biostrings & ShortRead see: http://bioconductor.org/packages/release/bioc/html/Biostrings.html and http://bioconductor.org/packages/release/bioc/html/ShortRead.html
 ## For ggseqlogo: devtools::install_github("omarwagih/ggseqlogo")
-library(Biostrings)
-library(ShortRead)
-library(stringr)
-library(dplyr)
-library(ggplot2)
-library(gplots)
-library(reshape2)
-library(seqinr)
-library(ggpubr)
-library(devtools)
-if("ggseqlogo" %in% rownames(installed.packages()) == FALSE) {
-	devtools::install_github("omarwagih/ggseqlogo")
-}
-library(ggseqlogo)
 
-## AE: look into DNAShapeR
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("devtools", "stringr", "dplyr", "ggplot2", "gplots", "reshape2", "seqinr", "ggpubr", "Biostrings", "ShortRead", "motifRG", "ggseqlogo", "wesanderson")
+
+source("/Users/aesin/Documents/Scripts/brooke/seqAnalysis_functions.R")
 
 ### READ IN DATA ###
 ## Change the working directory to where you have your fastq files
@@ -37,6 +26,7 @@ fastq_data_list <- lapply(fastq_file_list, function(fastq_file) {
 # The pattern: [\\D]{1}[\\d]+ can be broken down as: [\\D] = any character (not digit), {1} = match previous pattern once, [\\d] = any digit, + = match previous pattern as many times as possible
 # Many functions in R automatically apply over a vector: our vector here is three file names, so it automatically finds the pattern in all three elements of the vector
 PSet_name_list <- str_extract(string = fastq_file_list, pattern = "([\\D]{1}[\\d]+)")
+numPSets		<- length(PSet_name_list)
 names(fastq_data_list) <- PSet_name_list
 
 
@@ -64,29 +54,36 @@ print(seq_data_list$P4$num_raw_reads)
 # 3. Reads with Ns are removed
 
 # Define the consensus DNA sequence we expect each read to contain
-consensus.seq <- DNAString(x = "GGAGATAGTACCTCGTCTACACCT")
+midConsensus	<- "GGAGATAGTACCTCGTCTACACCT"
+consensus.seq	<- DNAString(midConsensus)
 
 ## Again, apply the operations over the data list
-filtSeq_data_list <- lapply(seq_data_list, function(p_set) {
+filtSeq_data_list <- lapply(PSet_name_list, function(p_set_name) {
+
+	message(paste0("Filtering ", p_set_name, " ... "))
 	# Use the $ operator to select the sequence data
-	reads_seq <- p_set$seq_data
-	
+	PSet_reads		<- seq_data_list[[p_set_name]]$seq_data
+	PSet_num_raw	<- seq_data_list[[p_set_name]]$num_raw_reads
+		
 	# Filter by length. The square brackets are a way of indexing the entire set
-	# of reads, e.g. reads_seq[1] will give us the first read, reads_seq[1:10]
+	# of reads, e.g. PSet_reads[1] will give us the first read, PSet_reads[1:10]
 	# will give us the first 10 reads. The which function asks the question which
 	# indices of this object agree with the following statement. In this case:
 	# which reads have 324 bases (width is the nucleotide length)
-	len_filter <- reads_seq[which(width(reads_seq) == 324)]
+	len_filter <- PSet_reads[which(width(PSet_reads) == 324)]
 	
 	# Same concept as above, but the index is a little more complex.
 	# vcountPattern(pattern = consensus.seq, subject = len_filter) asks whether a
 	# read contains a particular sequence. If it contains it (which is what we
 	# want) the function gives us a 1 - so we select for all "1"s
 	cons_seq_filter <- len_filter[which(vcountPattern(pattern = consensus.seq, subject = len_filter) == 1)]
+
+	# Extra step to make sure the consensus sequence appears exactly at positions 151-174
+	cons_pos_seq_filter	<-  cons_seq_filter[which(unlist(startIndex(vmatchPattern(consensus.seq, cons_seq_filter))) == 151)]
 	
 	# Almost identical to above, but here if a read contains an "N", we get a "1",
 	# so we select for all "0"s
-	N_filter <- cons_seq_filter[which(vcountPattern(pattern = DNAString(x = "N"), subject = cons_seq_filter) == 0)]
+	N_filter <- cons_pos_seq_filter[which(vcountPattern(pattern = DNAString(x = "N"), subject = cons_pos_seq_filter) == 0)]
 	
 	# Finally, we want to see how our filtering affects the number of reads at
 	# each step. length(reads) gives us the number of reads. The data.frame()
@@ -94,15 +91,16 @@ filtSeq_data_list <- lapply(seq_data_list, function(p_set) {
 	# column name, and give each columns a value - the number of reads. The
 	# stringsAsFactors statement at the end tells R to just treat the raw values
 	# as raw values. The details are not too important.
-	filter_df <- data.frame(RawReads = p_set$num_raw_reads, LenFiltReads = length(len_filter), ConsFiltReads = length(cons_seq_filter), NFiltReads = length(N_filter), stringsAsFactors = FALSE)
+	filter_df <- data.frame(RawReads = PSet_num_raw, LenFiltReads = length(len_filter), ConsFiltReads = length(cons_pos_seq_filter), NFiltReads = length(N_filter), stringsAsFactors = FALSE)
 	
 	# As above - for each P-set return the final filtered read set and a table of
 	# the read numbers at each filter step
 	return(list(filt_seq_data = N_filter, filter_nums = filter_df))
 })
+names(filtSeq_data_list)	<- PSet_name_list
 
 # We can confirm that no Ns remain in these sequence sets by running e.g.:
-alphabetFrequency(filtSeq_data_list$P1$filt_seq_data, collapse = TRUE)
+# alphabetFrequency(filtSeq_data_list$P1$filt_seq_data, collapse = TRUE)
 
 ## We want to combine the data frames from individual P-sets into an overall table which we can then plot
 # Extract the dataframes from the list, one by one - and add a column to the 
@@ -145,13 +143,13 @@ uniqSeq_data_list <- lapply(filtSeq_data_list, function(p_set) {
 })
 
 ## As above - create a data frame row with the P-set name and number of unique reads
-uniqNums_list <- lapply(1:length(uniqSeq_data_list), function(p_set_index) {
+uniqNums_list	<- lapply(1:length(uniqSeq_data_list), function(p_set_index) {
 	p_set_name <- names(uniqSeq_data_list)[p_set_index]
 	num_uniq_reads <- uniqSeq_data_list[[p_set_index]]$UniqRead
 	data_with_name <- data.frame(PSet = p_set_name, UniqReads = num_uniq_reads, stringsAsFactors = FALSE)
 	return(data_with_name)
 })
-uniqNums_df <- bind_rows(uniqNums_list)
+uniqNums_df		<- bind_rows(uniqNums_list)
 
 ## Create a dataframe containing the number of filtered reads and unique reads for each P-set
 # We merge the two data frames together by the PSet column - but we only want
@@ -327,35 +325,50 @@ finalUniqSeq_data_list <- lapply(finalFilter_data_list, function(p_set) {
 #   }
 # }))
 
-#### Nucleotide-level analysis
-### GC-content differences between P-sets
-PSet_GC_content_list <- lapply(PSet_name_list, function(p_set_name) {
-	# Calculate the frequencies of G and C nucleotides seperately for each sequence
-	PSet_GC_sep_freq	<- alphabetFrequency(finalUniqSeq_data_list[[p_set_name]]$UniqSeqData, as.prob = TRUE)[,c("C", "G")]
-	# Combine these to get the GC combined frequency
-	PSet_GC_tot_freq	<- rowSums(PSet_GC_sep_freq)
-	# Return as dataframe with two columns: P-set name and GC frequency
-	PSet_GC_tot_df		<- data.frame(PSet = rep(p_set_name, length(PSet_GC_tot_freq)), GC.Content = PSet_GC_tot_freq)
-	return(PSet_GC_tot_df)
-})
-# Bind all the individual P-set results into a single dataframe
-PSet_GC_content_df	<- bind_rows(PSet_GC_content_list)
 
-# A list of pairwise comparisons we'll want to do for stats 
-PairComp_list		<- list(c("P1", "P4"), c("P4", "P8"), c("P1", "P8"))
-
-# Boxplot distributions of GC content for each P-set
-PSet_GC_content_plot	<- ggplot(data = PSet_GC_content_df, aes(x = PSet, y = GC.Content, color = PSet)) +
-	geom_boxplot() +
-	theme(panel.background = element_blank(), axis.line = element_line(color = "black")) +
-	stat_compare_means(comparisons = PairComp_list, method = "wilcox.test", p.adjust = "bonferroni")
-
-
-### Codon usage bias
 
 # When translating and assinging codons, assume the bacterial code
 bacterial_code	<- 11
 BacGeneCode		<- getGeneticCode(as.character(bacterial_code))
+
+## Prepare a "random" background proteome using the library assembly rules
+
+## Approximately 200s for 100,000 random sequences
+randomDNA_bg	<- makeRandSeqs(seqNumber = 100000)
+randomAA_bg		<- Biostrings::translate(randomDNA_bg, genetic.code = BacGeneCode)
+
+
+
+#### Nucleotide-level analysis
+### GC-content differences between P-sets
+## The expected GC-content per base in 324-long library prep
+randGC_perPos		<- rowSums(t(consensusMatrix(randomDNA_bg, as.prob = T)[2:3,]))
+## The actual GC-content per base between the P-sets
+PSet_GCcont_list <- lapply(PSet_name_list, function(p_set_name) {
+	# Calculate the frequencies of G and C nucleotides seperately for each sequence
+	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+	GC_perPos		<- rowSums(t(consensusMatrix(nucleot_seqs, as.prob = T)[2:3,]))
+	# Normalise for the GC content based on the library prep
+	GC_perPosNorm	<- GC_perPos - randGC_perPos
+	# Make DF
+	GC_perPos_df	<- data.frame(Position = seq(1:324), fractGC = GC_perPosNorm, stringsAsFactors = FALSE)
+	names(GC_perPos_df)[2]	<- p_set_name
+	return(GC_perPos_df)
+})
+names(PSet_GCcont_list)	<- PSet_name_list
+PSet_GCcont_df		<- Reduce(function(df1, df2) merge(df1, df2, by = "Position"), PSet_GCcont_list)
+PSet_GCcont_melt	<- melt(PSet_GCcont_df, id.vars = "Position", variable.name = "PSet", value.name = "deltaGC_Content")
+
+PSet_GCcont_line	<- ggplot(data = PSet_GCcont_melt, aes(x = Position, y = deltaGC_Content, color = PSet)) +
+	geom_smooth(span = 0.08, se = FALSE, method = "loess")
+
+statComparisons		<- lapply(combn(unique(PSet_GCcont_melt$PSet), 2, simplify = FALSE), paste0)
+PSet_GCcont_viol	<- ggplot(data = PSet_GCcont_melt, aes(x = PSet, y = deltaGC_Content, color = PSet)) +
+	geom_violin() +
+	stat_compare_means(comparisons = statComparisons, paired = TRUE, method = "wilcox.test", p.adjust = "bonferroni")
+
+
+### Codon usage bias
 
 ## We calculate codon usage using the Codon Adaptability Index for E. coli. The
 ## codons used in each (unique) sequence are compared to an index (the CAI) of
@@ -368,25 +381,18 @@ GS_cai_tbl	<- read.table(file.path(fastq_file_path, "GenScript_ecoli_caiTbl.txt"
 GS_cai_tbl	<- GS_cai_tbl[order(GS_cai_tbl$Triplet),]
 gs_cai_indx <- as.numeric(GS_cai_tbl$Fraction)
 
-# The default function for calculating CAI is slow. We can make it faster by
-# calculating some constant variables outside the function (i.e. we don't need
-# to recalculate the same value for each sequence processed)
-cai.faster  <- function (seq, w, exclude) {
-	nncod <- uco(seq)
-	nncod <- nncod[-exclude]
-	sigma <- nncod %*% log(w)
-	exp(sigma/sum(nncod))
-}
-# The vectorize function allows us to provide a vector or list as an argument,
-# rather than looping over each sequence
-cai.faster_vf <- Vectorize(cai.faster, vectorize.args = "seq", SIMPLIFY = TRUE)
-
 # Pre-run some cai calculations that were part of the old cai() function
-stops		<- which("Stp" == aaa(translate(s2c(c2s(words())), numcode = bacterial_code)))
+stops		<- which("Stp" == aaa(seqinr::translate(s2c(c2s(words())), numcode = bacterial_code)))
 singulets   <- which(sapply(syncodons(words(), numcode = bacterial_code), length) == 1)
 exclude		<- c(stops, singulets)
 gs_cai_adj	<- gs_cai_indx[-exclude]
 gs_cai_adj[gs_cai_adj < 1e-04] <- 0.01
+
+## Calculate the CAI index for the random library
+message("Calculating CAI for the Random DNA set...")
+randomDNA_char		<- str_split(string = tolower(as.character(randomDNA_bg)), pattern = "")
+CAIRandom_result	<- cai.faster_vf(randomDNA_char, w = gs_cai_adj, exclude = exclude)
+CAIRandom_df		<- data.frame(PSet = rep("RAND", length(CAIRandom_result)), CAI.Value = CAIRandom_result, stringsAsFactors = FALSE)
 
 # For each sequence in each P-set, calculate the CAI
 message("WARNING: CAI calculation takes a while - about 1-2 minutes per P-set")
@@ -394,22 +400,30 @@ PSetCAI_genscr_list <- lapply(PSet_name_list, function(p_set_name) {
 	message(paste0("Calculating CAI for P-set: ", p_set_name))
 	
 	# The cai() function takes character vectors split by each individual base (lower case)
-	charSplit_seqs <- str_split(string = tolower(as.character(finalUniqSeq_data_list[[p_set_name]]$UniqSeqData)), pattern = "")
-	cai_result <- cai.faster_vf(charSplit_seqs, w = gs_cai_adj, exclude = exclude)
+	charSplit_seqs	<- str_split(string = tolower(as.character(finalUniqSeq_data_list[[p_set_name]]$UniqSeqData)), pattern = "")
+	cai_result		<- cai.faster_vf(charSplit_seqs, w = gs_cai_adj, exclude = exclude)
 	
 	# Convert result to a dataframe structure
-	cai_df <- data.frame(PSet = rep(p_set_name, length(cai_result)), CAI.Value = cai_result)
+	cai_df	<- data.frame(PSet = rep(p_set_name, length(cai_result)), CAI.Value = cai_result, stringsAsFactors = FALSE)
 	return(cai_df)
 })
 
 # Bind all the individual P-set results into a single dataframe
-PSetCAI_genscr_df	<- bind_rows(PSetCAI_genscr_list)
-# Plot a boxplot of the CAI scores distributions and test difference
-PSetCAI_genscr_plot	<- ggplot(data = PSetCAI_genscr_df, aes(x = PSet, y = CAI.Value, color = PSet)) +
-	geom_boxplot() +
-	theme(panel.background = element_blank(), axis.line = element_line(color = "black")) +
-	stat_compare_means(comparisons = PairComp_list, method = "t.test", p.adjust = "bonferroni")
+PSetCAI_genscr_df		<- bind_rows(c(list(CAIRandom_df), PSetCAI_genscr_list))
+PSet_factors			<- unique(PSetCAI_genscr_df$PSet)
+PSetCAI_genscr_df$PSet	<- factor(PSetCAI_genscr_df$PSet, levels =  c("RAND", sort(PSet_factors[PSet_factors != "RAND"])))
 
+# Find the maximum CAI value here so we can plot the p-values at the right level
+y_max		<- max(PSetCAI_genscr_df$CAI.Value)
+pval_level	<- ceiling(y_max / 0.02) * 0.02
+
+# Plot a boxplot of the CAI scores distributions and test difference
+statComparisons		<- lapply(combn(unique(PSetCAI_genscr_df$PSet), 2, simplify = FALSE), paste0)
+PSetCAI_genscr_plot	<- ggplot(data = PSetCAI_genscr_df, aes(x = PSet, y = CAI.Value, fill = PSet)) +
+	geom_violin() +
+	scale_fill_manual(values = rev(wes_palette("FantasticFox", n = numPSets + 1, type = "continuous"))) +
+	theme(panel.background = element_blank(), axis.line = element_line(color = "black")) +
+	stat_compare_means(ref.group = "RAND", method = "t.test", label.y = pval_level)
 
 
 ### Look at positions of STOP codons within the sequences
@@ -418,12 +432,13 @@ stop_AA		<- "*"
 
 # For all the unique P-set sequences: translate, check for stop codons, get their locations
 stop_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
-	# Get the (unique) nucloetide sequences for each P-set and r
+	# Get the (unique) nucloetide sequences for each P-set and translate
 	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
 	transl_seqs		<- Biostrings::translate(nucleot_seqs, genetic.code = BacGeneCode)
 	
 	# Get all sequences that contain at least 1 stop codon
 	stop_AllSeqs	<- transl_seqs[which(vcountPattern(stop_AA, transl_seqs) > 0),]
+
 	# Count how many stop codons are in the dataset, and the number of sequences containing the stop codons
 	stop_RawNum		<- sum(vcountPattern(stop_AA, transl_seqs)) / (length(transl_seqs) * mean(width(transl_seqs)))
 	stop_InSeqNum	<- length(stop_AllSeqs) / length(transl_seqs)
@@ -441,37 +456,32 @@ stop_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
 
 # Bind all the individual P-set STOP count results into a single dataframe
 stop_AllNums_df		<- bind_rows(lapply(stop_AllPosits_list, function(pset) return(pset$stop_nums_df)))
-# Normalise the numbers to 1 - where 1 is the highest scoring P-set in each category
-normal_to_1			<- function(x){((x)/(max(x)))}
-stop_AllNums_norm	<- data.frame(PSet = stop_AllNums_df[,1], apply(stop_AllNums_df[,-1], 2, normal_to_1))
-# Melt dataframe for ggplot
-stop_AllNums_melt	<- melt(stop_AllNums_norm, id.vars = "PSet", variable.name = "Count.Type", value.name = "Counts")
+stop_AllNums_melt	<- melt(stop_AllNums_df, id.vars = "PSet", variable.name = "Count.Type", value.name = "Counts")
 
 # Barplot to compare how many stop codons are present in the Pset as a
 # proportion of all codons and how many sequences contains stop codons as a
-# proportion of all sequences. In both cases these fractions are normalised to
-# the largest Pset for each type of count
-stop_AllNums_plot	<- ggplot(data = stop_AllNums_melt, aes(x = PSet, y = Counts, fill = Count.Type)) +
+# proportion of all sequences.
+facet_labels		<- c(`Raw.Num` = "Proportion of codons that are STOP", `InSeq.Num` = "Proportion of sequences with at least 1 STOP")
+stop_AllNums_plot	<- ggplot(data = stop_AllNums_melt, aes(x = PSet, y = Counts, fill = PSet)) +
 	geom_bar(stat = "identity", position = "dodge") +
-	labs(y = "Normalised fraction ofall seqs in PSet") +
-	scale_fill_discrete(
-		name="Type of count",
-		breaks=c("Raw.Num", "InSeq.Num"),
-		labels=c("Total Stop codons", "Num. seqs with Stops")) +
-	theme(legend.title.align = 0.5)
+	scale_fill_manual(values = wes_palette("Cavalcanti", n = numPSets, type = "continuous")) +
+	facet_wrap(~Count.Type, scales = "free", labeller = as_labeller(facet_labels)) + 
+	theme(panel.background = element_blank(), axis.line = element_line(color = "black"), strip.background = element_rect(fill = "white"), strip.text = element_text(colour = "black", size = 10))
 
 
 # Bind all the individual P-set STOP position results into a single dataframe
 stop_AllPosits_df	<- bind_rows(lapply(stop_AllPosits_list, function(pset) return(pset$stop_posits_df)))
+statComparisons		<- lapply(combn(unique(stop_AllPosits_df$PSet), 2, simplify = FALSE), paste0)
 # Boxplot of the STOP position distribution across P-sets with pairwise significance tests
-stop_AllPositis_plot	<- ggplot(data = stop_AllPosits_df, aes(x = PSet, y = StopPosition, color = PSet)) +
-	geom_boxplot() +
+stop_AllPosits_plot	<- ggplot(data = stop_AllPosits_df, aes(x = PSet, y = StopPosition, fill = PSet)) +
+	geom_violin(scale = "width") +
 	ylim(0, 140) +
-	geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 51, ymax = 58), color = "black", linetype = "solid", size = 0.5, fill = NA) +
-	geom_hline(yintercept = 108, color = "red", linetype = "dashed") +
+	scale_fill_manual(values = wes_palette("Darjeeling", n = numPSets, type = "continuous")) +
+	geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 51, ymax = 58), color = NA, size = 0.5, fill = "white") +
+	geom_hline(yintercept = 108, color = "black", linetype = "dashed") +
 	ggtitle("Positions of stop codons in sequences containing stop codons") +
 	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
-	stat_compare_means(comparisons = PairComp_list, method = "wilcox.test", p.adjust = "bonferroni")
+	stat_compare_means(comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni")
 
 
 
@@ -543,6 +553,115 @@ names(SD_SeqBreaks_list) <- PSet_name_list
 # Only worth plotting seqLogos for P-values and chunks we think might be of interest - e.g. at the density spike in P1
 # In P1 - the spike is between 100-150 bps from start, so we plot bins 3,4,5 to cover that area
 P1_SD_spike_logo <- ggseqlogo(data = SD_SeqBreaks_list$P1[3:5], method = "probability", ncol = 1, nrow = 3)
+
+
+### Peptide-level analysis
+
+
+
+## Translate our per-set unique sequences
+finalAA_data 	<- lapply(PSet_name_list, function(p_set_name) {
+	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+
+	transl_seqs		<- Biostrings::translate(nucleot_seqs, genetic.code = BacGeneCode)
+	noStp_seqs		<- transl_seqs[which(vcountPattern("*", transl_seqs) == 0)]
+
+	num_all			<- length(transl_seqs)
+	num_noStp		<- length(noStp_seqs)
+	print(c(num_all, num_noStp))
+	return(list(AllSeqs = transl_seqs, NoStpSeqs = noStp_seqs, allAASeqNum = num_all, NoStpSeqNum = num_noStp))
+})
+names(finalAA_data) <- PSet_name_list
+
+## Format the background proteome for the dagLogo function
+dagProteome_bg	<- prepareProteome(fasta = randomAA_bg)
+
+## Format the AA sequences for the dagLogo function
+dagAAdata_list	<- lapply(PSet_name_list, function(p_set_name, bgProteome = dagProteome_bg) {
+	noStopSeqs_char	<- as.character(finalAA_data[[p_set_name]]$NoStpSeqs)
+
+	message(paste0("Formatting sequences for the dagLogo function: ", p_set_name))
+	dagFormatSeqs	<- formatSequence_AE(seq = noStopSeqs_char, proteome = bgProteome)
+	return(dagFormatSeqs)
+})
+names(dagAAdata_list)	<- PSet_name_list
+
+## Perform the dagLogo test
+dagAAtest_list <- lapply(PSet_name_list, function(p_set_name, bgProteome = dagProteome_bg) {
+	dagPeptideData	<- dagAAdata_list[[p_set_name]]
+	
+	message(paste0("Peforming DAU enrichment test for: ", p_set_name))
+
+	built_bg_model	<- buildBackgroundModel(dagPeptideData, bg = "nonInputSet", proteome = bgProteome)
+	
+	byAAEnrich_test			<- testDAU(dagPeptideData, built_bg_model)
+	byTypeEnrich_test		<- testDAU(dagPeptideData, built_bg_model, group = "classic")
+	return(list(AAEnrich = byAAEnrich_test, typeEnrich = byTypeEnrich_test))
+})
+names(dagAAtest_list)	<- PSet_name_list
+
+
+## MotifRG
+
+
+
+
+
+
+
+x <- data.frame(AA = names(P1_t4@difference[3,]), P1 = P1_t4@difference[3,], P8 = P8_t4@difference[3,], row.names = NULL)
+x_melt <- melt(x, id.vars = "AA")
+runs.test(x$P8, threshold = 0, plot = TRUE)
+
+
+
+
+noStp_P8 <- finalUniqAA_data$P8[which(vcountPattern("*", finalUniqAA_data$P8) == 0)]
+noStp_P1 <- finalUniqAA_data$P1[which(vcountPattern("*", finalUniqAA_data$P1) == 0)]
+
+fHydro_rand	<- featureHydro(as.character(randomProteome), hydro.method = "kpm")
+fHydro_P8	<- featureHydro(as.character(noStp_P8), hydro.method = "kpm")
+fHydro_P1	<- featureHydro(as.character(noStp_P1), hydro.method = "kpm")
+
+
+fHydro_rand_df	<- as.data.frame(fHydro_rand[,59:108])
+fHydro_P8_df	<- as.data.frame(fHydro_P8[,59:108])
+fHydro_P1_df	<- as.data.frame(fHydro_P1[,59:108])
+
+
+rownames(fHydro_P8_df) <- NULL
+rownames(fHydro_P1_df) <- NULL
+
+fHydro_rand_melt	<- melt(fHydro_rand_df)
+fHydro_rand_melt	<- data.frame(Group = rep("Rand", nrow(fHydro_rand_melt)), fHydro_rand_melt)
+fHydro_P8_melt		<- melt(fHydro_P8_df)
+fHydro_P8_melt		<- data.frame(Group = rep("P8", nrow(fHydro_P8_melt)), fHydro_P8_melt)
+fHydro_P1_melt		<- melt(fHydro_P1_df)
+fHydro_P1_melt		<- data.frame(Group = rep("P1", nrow(fHydro_P1_melt)), fHydro_P1_melt)
+fHydro_rand_P8		<- rbind(fHydro_rand_melt, fHydro_P8_melt)
+fHydro_rand_P1		<- rbind(fHydro_rand_melt, fHydro_P1_melt)
+
+
+ggplot(fHydro_rand_P8, aes(x = variable, y = value, color = Group)) + geom_violin()
+ggplot(fHydro_rand_P1, aes(x = variable, y = value, color = Group)) + geom_violin()
+ggplot(fHydro_P8_melt, aes(x = variable, y = value)) + geom_violin()
+ggplot(fHydro_P1_melt, aes(x = variable, y = value)) + geom_violin()
+
+
+noStp_P8_trm <- str_sub(noStp_P8, 1, -2)
+noStp_P1_trm <- str_sub(noStp_P1, 1, -2)
+
+fACH_P8 <- featureACH(as.character(noStp_P8_trm))
+fACH_P1 <- featureACH(as.character(noStp_P1_trm))
+
+
+KF_P8 <- kideraFactors(as.character(noStp_P8))
+KF_P8 <- lapply(KF_P8, function(row) {
+	new_row <- data.frame(as.list(row))
+})
+KF_P8_df <- bind_rows(KF_P8)
+
+
 
 
 

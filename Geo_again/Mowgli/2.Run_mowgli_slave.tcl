@@ -35,13 +35,25 @@ puts stdout			"Testing tree: $tree_number"
 set output_dir		$success_dir/$tree_number
 file mkdir 			$output_dir
 
+if {[file exists $output_dir/Fullreconciliation.mpr] == 1} {
+	puts stdout "Reconciliation already attempted..."
+	if {[file size $output_dir/Fullreconciliation.mpr] > 0} {
+		puts stdout "\t... and was successful. Skipping"
+		exit
+	} else {
+		puts stdout "\.... and was unsuccessful. Attempting again."
+	}
+} else {
+	puts stdout "Reconciliation not yet attempted..."
+}
+
 # Model 1 (-M 1 is default)
 # m (number of MPRs computed - default = "1")
 # n (gene tree modification by NNI. 1 = "ON")
 # T (threshold for BS support for NNI modification)
 set success [catch {exec mowgli -s $species_tree -g $tree_file -v -n 1 -T 80 -o $output_dir -t $transfer_cost -d 2 -l 1} errvar]
-puts stdout $success
-puts stdout $errvar
+
+puts $errvar
 
 if {[file size $output_dir/Fullreconciliation.mpr] == 0} {
 	puts stderr "Reconciliation failed: $tree_number"
