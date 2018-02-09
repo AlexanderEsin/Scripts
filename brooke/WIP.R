@@ -4,7 +4,7 @@
 ## For ggseqlogo: devtools::install_github("omarwagih/ggseqlogo")
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("devtools", "stringr", "dplyr", "ggplot2", "gplots", "reshape2", "seqinr", "ggpubr", "Biostrings", "ShortRead", "motifRG", "ggseqlogo", "wesanderson")
+pacman::p_load("parallel", "devtools", "stringr", "dplyr", "ggplot2", "gplots", "reshape2", "seqinr", "ggpubr", "Biostrings", "ShortRead", "motifRG", "ggseqlogo", "wesanderson", "dagLogo", "BioSeqClass")
 
 source("/Users/aesin/Documents/Scripts/brooke/seqAnalysis_functions.R")
 
@@ -331,16 +331,32 @@ finalUniqSeq_data_list <- lapply(finalFilter_data_list, function(p_set) {
 bacterial_code	<- 11
 BacGeneCode		<- getGeneticCode(as.character(bacterial_code))
 
-## Prepare a "random" background proteome using the library assembly rules
+## Prepare a "random" background proteome using the library assembly rules, unless one already exists
+if (file.exists(file.path(fastq_file_path, "RandomDNA_sequences.rds"))) {
+	message("Random DNA sequence file found - reading in...", appendLF = FALSE)
+	randomDNA_bg	<- readRDS(file.path(fastq_file_path, "RandomDNA_sequences.rds"))
+	message("\rRandom DNA sequence file found - reading in... done")
+} else {
+	message(paste0("Random DNA sequence file not found - creating and saving to", fastq_file_path, "..."), appendLF = FALSE)
+	randomDNA_bg	<- makeRandSeqs(seqNumber = 500000)
+	saveRDS(randomDNA_bg, file = file.path(fastq_file_path, "RandomDNA_sequences.rds"), compress = "gzip")
+	message(paste0("Random DNA sequence file not found - creating and saving to", fastq_file_path, "... done"))
+}
 
-## Approximately 200s for 100,000 random sequences
-randomDNA_bg	<- makeRandSeqs(seqNumber = 100000)
-randomAA_bg		<- Biostrings::translate(randomDNA_bg, genetic.code = BacGeneCode)
+message("Translating random DNA background sequences...", appendLF = FALSE)
+randomAA_bg				<- Biostrings::translate(randomDNA_bg, genetic.code = BacGeneCode)
+message("\rTranslating random DNA background sequences... done")
+
+PSet_name_list_wRand	<- c("RAND", PSet_name_list)
+numPSets_wRand			<- length(PSet_name_list_wRand)
 
 
 
-#### Nucleotide-level analysis
-### GC-content differences between P-sets
+#### //// Nucleotide-level analysis //// ####
+
+
+### /// GC-content differences between P-sets /// ###
+
 ## The expected GC-content per base in 324-long library prep
 randGC_perPos		<- rowSums(t(consensusMatrix(randomDNA_bg, as.prob = T)[2:3,]))
 ## The actual GC-content per base between the P-sets
@@ -362,9 +378,12 @@ PSet_GCcont_melt	<- melt(PSet_GCcont_df, id.vars = "Position", variable.name = "
 PSet_GCcont_line	<- ggplot(data = PSet_GCcont_melt, aes(x = Position, y = deltaGC_Content, color = PSet)) +
 	geom_smooth(span = 0.08, se = FALSE, method = "loess")
 
+# http://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1001115
+
 statComparisons		<- lapply(combn(unique(PSet_GCcont_melt$PSet), 2, simplify = FALSE), paste0)
-PSet_GCcont_viol	<- ggplot(data = PSet_GCcont_melt, aes(x = PSet, y = deltaGC_Content, color = PSet)) +
+PSet_GCcont_viol	<- ggplot(data = PSet_GCcont_melt, aes(x = PSet, y = deltaGC_Content, fill = PSet)) +
 	geom_violin() +
+	scale_fill_manual(values = wes_palette("Darjeeling", n = numPSets, type = "continuous")) +
 	stat_compare_means(comparisons = statComparisons, paired = TRUE, method = "wilcox.test", p.adjust = "bonferroni")
 
 
@@ -389,7 +408,8 @@ gs_cai_adj	<- gs_cai_indx[-exclude]
 gs_cai_adj[gs_cai_adj < 1e-04] <- 0.01
 
 ## Calculate the CAI index for the random library
-message("Calculating CAI for the Random DNA set...")
+message("Calculating CAI for the Random DNA set (sampling 200,000 sequences) ... ")
+randomDNA_bg_samp	<- sample(randomDNA_bg, 200000)
 randomDNA_char		<- str_split(string = tolower(as.character(randomDNA_bg)), pattern = "")
 CAIRandom_result	<- cai.faster_vf(randomDNA_char, w = gs_cai_adj, exclude = exclude)
 CAIRandom_df		<- data.frame(PSet = rep("RAND", length(CAIRandom_result)), CAI.Value = CAIRandom_result, stringsAsFactors = FALSE)
@@ -421,12 +441,15 @@ pval_level	<- ceiling(y_max / 0.02) * 0.02
 statComparisons		<- lapply(combn(unique(PSetCAI_genscr_df$PSet), 2, simplify = FALSE), paste0)
 PSetCAI_genscr_plot	<- ggplot(data = PSetCAI_genscr_df, aes(x = PSet, y = CAI.Value, fill = PSet)) +
 	geom_violin() +
-	scale_fill_manual(values = rev(wes_palette("FantasticFox", n = numPSets + 1, type = "continuous"))) +
+	scale_fill_manual(values = rev(wes_palette("FantasticFox", n = numPSets_wRand, type = "continuous"))) +
 	theme(panel.background = element_blank(), axis.line = element_line(color = "black")) +
 	stat_compare_means(ref.group = "RAND", method = "t.test", label.y = pval_level)
 
 
-### Look at positions of STOP codons within the sequences
+
+
+### /// Positions of STOP codons within the sequences /// ###
+
 # Define the stop codon
 stop_AA		<- "*"
 
@@ -474,11 +497,13 @@ stop_AllPosits_df	<- bind_rows(lapply(stop_AllPosits_list, function(pset) return
 statComparisons		<- lapply(combn(unique(stop_AllPosits_df$PSet), 2, simplify = FALSE), paste0)
 # Boxplot of the STOP position distribution across P-sets with pairwise significance tests
 stop_AllPosits_plot	<- ggplot(data = stop_AllPosits_df, aes(x = PSet, y = StopPosition, fill = PSet)) +
-	geom_violin(scale = "width") +
+	geom_violin(scale = "area") +
 	ylim(0, 140) +
 	scale_fill_manual(values = wes_palette("Darjeeling", n = numPSets, type = "continuous")) +
 	geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 51, ymax = 58), color = NA, size = 0.5, fill = "white") +
-	geom_hline(yintercept = 108, color = "black", linetype = "dashed") +
+	geom_hline(yintercept = 108, color = "red", linetype = "dashed") +
+	geom_hline(yintercept = 51, color = "blue", linetype = "dashed") +
+	geom_hline(yintercept = 58, color = "blue", linetype = "dashed") +
 	ggtitle("Positions of stop codons in sequences containing stop codons") +
 	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
 	stat_compare_means(comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni")
@@ -486,15 +511,20 @@ stop_AllPosits_plot	<- ggplot(data = stop_AllPosits_df, aes(x = PSet, y = StopPo
 
 
 
-### Look at positions of Shine-Dalgarno sequence in P-sets
+### /// Positions of Shine-Dalgarno sequence in P-sets /// ###
 
 # Define the strictest SD consensus sequence
 SD_seq		<- DNAString("AGGAGGT")
 
-# For each P-set calculate how many SD sequences are present, how many sequences contain SD sites, and get a list of these SD sequences
-SD_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
-	# Get the (unique) nucloetide sequences for each P-set and r
-	nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+# For each P-set (including Random) calculate how many SD sequences are present, how many sequences contain SD sites, and get a list of these SD sequences
+SD_AllPosits_list <- lapply(PSet_name_list_wRand, function(p_set_name) {
+
+	if (p_set_name != "RAND") {
+		# Get the (unique) nucloetide sequences for each P-set
+		nucleot_seqs	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+	} else {
+		nucleot_seqs	<- randomDNA_bg	
+	}
 	
 	# Get all sequences that contain at an SD sequence with max 0 nucleotide mismatch
 	SD_AllSeqs		<- nucleot_seqs[which(vcountPattern(SD_seq, nucleot_seqs, max.mismatch = 0) > 0),]
@@ -514,50 +544,40 @@ SD_AllPosits_list <- lapply(PSet_name_list, function(p_set_name) {
 	return(SD_data_list)
 })
 # Rename list and get the numberical SD stats (number and number of sequences containing SD)
-names(SD_AllPosits_list)	<- PSet_name_list
+names(SD_AllPosits_list)	<- PSet_name_list_wRand
 SD_AllNums_df	<- bind_rows(lapply(SD_AllPosits_list, function(pset) return(pset$SD_nums_df)))
 
+
 ## Combine SD position list into single dataframe 
-SD_AllPosits_df	<- bind_rows(lapply(SD_AllPosits_list, function(pset) return(pset$SD_posits_df)))
+SD_AllPosits_df		<- bind_rows(lapply(SD_AllPosits_list, function(pset) return(pset$SD_posits_df)))
+statComparisons		<- lapply(combn(unique(SD_AllPosits_df$PSet), 2, simplify = FALSE), paste0)
+
+## Reorder so RAND comes first
+PSet_factors			<- unique(SD_AllPosits_df$PSet)
+SD_AllPosits_df$PSet	<- factor(SD_AllPosits_df$PSet, levels =  c("RAND", sort(PSet_factors[PSet_factors != "RAND"])))
 
 # Boxplot of the SD position distribution across P-sets with pairwise significance tests
-SD_AllPos_boxplot	<- ggplot(data = SD_AllPosits_df, aes(x = PSet, y = SDPosition, color = PSet)) +
-	geom_boxplot() +
-	ylim(0, 450) +
-	geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = 151, ymax = 174), color = "black", linetype = "solid", size = 0.5, fill = NA) +
+SD_AllPos_violin	<- ggplot(data = SD_AllPosits_df, aes(x = PSet, y = SDPosition, fill = PSet)) +
+	geom_violin(scale = "area") +
+	scale_fill_manual(values = rev(wes_palette("FantasticFox", n = numPSets_wRand, type = "continuous"))) +
+	scale_y_continuous(breaks = round(seq(1, 324, by = 9), 1)) +
 	geom_hline(yintercept = 324, color = "red", linetype = "dashed") +
+	geom_hline(yintercept = 151, color = "blue", linetype = "dashed") +
+	geom_hline(yintercept = 174, color = "blue", linetype = "dashed") +
 	ggtitle("Positions of SD seqs in sequences containing SD seqs") +
 	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
-	stat_compare_means(comparisons = PairComp_list, method = "wilcox.test", p.adjust = "bonferroni")
-
-# Density plot of SD positions in all P-sets
-SD_AllPos_densplot	<- ggplot(data = SD_AllPosits_df, aes(SDPosition, color = PSet)) +
-	geom_density()
-
-# Break the 324-bp sequences containing SD into 9 x 36 bp chunks so we can plot seqlogos
-SD_SeqBreaks_list <- lapply(PSet_name_list, function(p_set_name) {
-	nucleot_seqs	<- SD_AllPosits_list[[p_set_name]]$SD_contain_seqs
-	nucleo_chars	<- as.character(nucleot_seqs)
-	
-	splitVector		<- split(1:324, ceiling(seq_along(1:324)/36))
-	splitNucleoCassette <- lapply(splitVector, function(cassette) {
-		cassette_range	<- c(min(cassette), max(cassette))
-		sequence_split 	<- lapply(nucleo_chars, function(char_seq) {
-			str_sub(char_seq, cassette_range[1], cassette_range[2])
-		})
-		return(unlist(sequence_split))
-	})
-})
-names(SD_SeqBreaks_list) <- PSet_name_list
-
-# Only worth plotting seqLogos for P-values and chunks we think might be of interest - e.g. at the density spike in P1
-# In P1 - the spike is between 100-150 bps from start, so we plot bins 3,4,5 to cover that area
-P1_SD_spike_logo <- ggseqlogo(data = SD_SeqBreaks_list$P1[3:5], method = "probability", ncol = 1, nrow = 3)
+	stat_compare_means(ref.group = "RAND", method = "wilcox.test", label.y = 350)
 
 
-### Peptide-level analysis
+# If we find a region of interest, e.g. the massive density spike in P1 at position 115,
+# we can plot a seqLogo to see if there are any other interesting features nearby (visually)
+# See the functions script for details...
+P1_115_plot	<- plotSDSeqLogo("P1", 115)
+P1_115_plot
 
 
+
+### /// Peptide-level analysis /// ###
 
 ## Translate our per-set unique sequences
 finalAA_data 	<- lapply(PSet_name_list, function(p_set_name) {
@@ -573,15 +593,18 @@ finalAA_data 	<- lapply(PSet_name_list, function(p_set_name) {
 })
 names(finalAA_data) <- PSet_name_list
 
+
 ## Format the background proteome for the dagLogo function
 dagProteome_bg	<- prepareProteome(fasta = randomAA_bg)
 
 ## Format the AA sequences for the dagLogo function
 dagAAdata_list	<- lapply(PSet_name_list, function(p_set_name, bgProteome = dagProteome_bg) {
-	noStopSeqs_char	<- as.character(finalAA_data[[p_set_name]]$NoStpSeqs)
+	message(paste0("Formatting input sequences for the enrichment analysis: ", p_set_name, "..."), appendLF = FALSE)
 
-	message(paste0("Formatting sequences for the dagLogo function: ", p_set_name))
+	noStopSeqs_char	<- as.character(finalAA_data[[p_set_name]]$NoStpSeqs)
 	dagFormatSeqs	<- formatSequence_AE(seq = noStopSeqs_char, proteome = bgProteome)
+	message(paste0("\rFormatting input sequences for the enrichment analysis: ", p_set_name, "... done"))
+
 	return(dagFormatSeqs)
 })
 names(dagAAdata_list)	<- PSet_name_list
@@ -590,76 +613,180 @@ names(dagAAdata_list)	<- PSet_name_list
 dagAAtest_list <- lapply(PSet_name_list, function(p_set_name, bgProteome = dagProteome_bg) {
 	dagPeptideData	<- dagAAdata_list[[p_set_name]]
 	
-	message(paste0("Peforming DAU enrichment test for: ", p_set_name))
+	message(paste0("Peforming enrichment analysis for: ", p_set_name))
 
-	built_bg_model	<- buildBackgroundModel(dagPeptideData, bg = "nonInputSet", proteome = bgProteome)
+	message("\tBuilding backgroud model...", appendLF = FALSE)
+	built_bg_model	<- buildBackgroundModel_AE(dagPeptideData, proteome = bgProteome)
+	message("\r\tBuilding backgroud model... done")
 	
-	byAAEnrich_test			<- testDAU(dagPeptideData, built_bg_model)
-	byTypeEnrich_test		<- testDAU(dagPeptideData, built_bg_model, group = "classic")
+	message("\tAnalysing amino acid enrichment...", appendLF = FALSE)
+	byAAEnrich_test			<- testDAU_AE(dagPeptideData, built_bg_model)
+	message("\r\tAnalysing amino acid enrichment... done")
+
+	message("\tAnalysing AA type enrichment...", appendLF = FALSE)
+	byTypeEnrich_test		<- testDAU_AE(dagPeptideData, built_bg_model, group = "classic")
+	message("\r\tAnalysing AA type enrichment... done")
 	return(list(AAEnrich = byAAEnrich_test, typeEnrich = byTypeEnrich_test))
 })
 names(dagAAtest_list)	<- PSet_name_list
 
 
-## MotifRG
+## // Hydropathy // ##
 
+message("Calculating per-site hydrophobicity score for random set...", appendLF = FALSE)
+randomAA_bg_samp		<- sample(randomAA_bg, 200000)
+RAND_hydro_score		<- featureHydro_AE(as.character(randomAA_bg_samp))
+RAND_hydro_perSeq_df	<- data.frame(PSet = rep("RAND", length(rowMeans(RAND_hydro_score))), SeqHydro = rowMeans(RAND_hydro_score), row.names = NULL, stringsAsFactors = FALSE)
+message("\rCalculating per-site hydrophobicity score for random set... done")
 
+hydroAAtest_list <- lapply(PSet_name_list, function(p_set_name) {
+	message(paste0("Calculating per-site hydrophobicity score: ", p_set_name, "..."), appendLF = FALSE)
+	PSet_hydro_score	<- featureHydro_AE(as.character(finalAA_data[[p_set_name]]$NoStpSeqs))
+	rownames(PSet_hydro_score)	<- NULL
+	
+	PSet_hydro_perSeq_vec	<- rowMeans(PSet_hydro_score)
+	PSet_hydro_perSeq_df	<- data.frame(PSet = rep(p_set_name, length(PSet_hydro_perSeq_vec)), SeqHydro = PSet_hydro_perSeq_vec, stringsAsFactors = FALSE)
+	
+	PSet_hydro_norm		<- colMeans(PSet_hydro_score) - colMeans(RAND_hydro_score)
+	PSet_hydro_norm_mat	<- t(as.matrix(PSet_hydro_norm))
 
+	rownames(PSet_hydro_norm_mat)	<- p_set_name
+	colnames(PSet_hydro_norm_mat)	<- as.character(1:ncol(PSet_hydro_score))
 
+	message(paste0("\rCalculating per-site hydrophobicity score: ", p_set_name, "... done"))
 
-
-
-x <- data.frame(AA = names(P1_t4@difference[3,]), P1 = P1_t4@difference[3,], P8 = P8_t4@difference[3,], row.names = NULL)
-x_melt <- melt(x, id.vars = "AA")
-runs.test(x$P8, threshold = 0, plot = TRUE)
-
-
-
-
-noStp_P8 <- finalUniqAA_data$P8[which(vcountPattern("*", finalUniqAA_data$P8) == 0)]
-noStp_P1 <- finalUniqAA_data$P1[which(vcountPattern("*", finalUniqAA_data$P1) == 0)]
-
-fHydro_rand	<- featureHydro(as.character(randomProteome), hydro.method = "kpm")
-fHydro_P8	<- featureHydro(as.character(noStp_P8), hydro.method = "kpm")
-fHydro_P1	<- featureHydro(as.character(noStp_P1), hydro.method = "kpm")
-
-
-fHydro_rand_df	<- as.data.frame(fHydro_rand[,59:108])
-fHydro_P8_df	<- as.data.frame(fHydro_P8[,59:108])
-fHydro_P1_df	<- as.data.frame(fHydro_P1[,59:108])
-
-
-rownames(fHydro_P8_df) <- NULL
-rownames(fHydro_P1_df) <- NULL
-
-fHydro_rand_melt	<- melt(fHydro_rand_df)
-fHydro_rand_melt	<- data.frame(Group = rep("Rand", nrow(fHydro_rand_melt)), fHydro_rand_melt)
-fHydro_P8_melt		<- melt(fHydro_P8_df)
-fHydro_P8_melt		<- data.frame(Group = rep("P8", nrow(fHydro_P8_melt)), fHydro_P8_melt)
-fHydro_P1_melt		<- melt(fHydro_P1_df)
-fHydro_P1_melt		<- data.frame(Group = rep("P1", nrow(fHydro_P1_melt)), fHydro_P1_melt)
-fHydro_rand_P8		<- rbind(fHydro_rand_melt, fHydro_P8_melt)
-fHydro_rand_P1		<- rbind(fHydro_rand_melt, fHydro_P1_melt)
-
-
-ggplot(fHydro_rand_P8, aes(x = variable, y = value, color = Group)) + geom_violin()
-ggplot(fHydro_rand_P1, aes(x = variable, y = value, color = Group)) + geom_violin()
-ggplot(fHydro_P8_melt, aes(x = variable, y = value)) + geom_violin()
-ggplot(fHydro_P1_melt, aes(x = variable, y = value)) + geom_violin()
-
-
-noStp_P8_trm <- str_sub(noStp_P8, 1, -2)
-noStp_P1_trm <- str_sub(noStp_P1, 1, -2)
-
-fACH_P8 <- featureACH(as.character(noStp_P8_trm))
-fACH_P1 <- featureACH(as.character(noStp_P1_trm))
-
-
-KF_P8 <- kideraFactors(as.character(noStp_P8))
-KF_P8 <- lapply(KF_P8, function(row) {
-	new_row <- data.frame(as.list(row))
+	return(list(PSet_hydro_perSite_norm = PSet_hydro_norm_mat, PSet_hydro_perSeq = PSet_hydro_perSeq_df))
 })
-KF_P8_df <- bind_rows(KF_P8)
+names(hydroAAtest_list)	<- PSet_name_list
+hydroAAtest_list$RAND$PSet_hydro_perSeq	<- RAND_hydro_perSeq_df
+
+
+## Calculate and plot a heatmap comparing the hydropathy per site between the Psets
+all_perSite_hydroNorm	<- do.call(rbind, lapply(hydroAAtest_list, function(p_set) {
+	return(p_set$PSet_hydro_perSite_norm)
+}))
+
+perSite_hydroNorm_hmap	<- pheatmap::pheatmap(
+    mat = all_perSite_hydroNorm * 10,
+    color = colorRampPalette(rev(brewer.pal(n = 9, name = "RdBu")))(100),
+    cluster_rows = FALSE,
+    cluster_cols = FALSE
+)
+
+## 
+all_perSeq_hydro		<- bind_rows(lapply(hydroAAtest_list, function(x) return(x$PSet_hydro_perSeq)))
+all_perSeq_hydro$PSet	<- factor(all_perSeq_hydro$PSet, levels = PSet_name_list_wRand)
+
+pairComparisons			<- lapply(combn(PSet_name_list, 2, simplify = FALSE), paste0)
+
+perSeq_hydro_violin		<- ggplot(data = all_perSeq_hydro, aes(x = PSet, y = SeqHydro, fill = PSet)) +
+	geom_violin(scale = "area") +
+	scale_fill_manual(values = rev(wes_palette("FantasticFox", n = numPSets_wRand, type = "continuous"))) +
+	scale_y_continuous(breaks = seq(-0.4, 0.2, by = 0.05)) +
+	ggtitle("Per-sequence hydropathy in P-Sets") +
+	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
+	stat_compare_means(comparisons = pairComparisons, method = "wilcox.test", p.adjust = "bonferroni") + 
+	stat_compare_means(ref.group = "RAND", method = "wilcox.test", label.y.npc = "bottom")
+
+
+
+## // RNA folding // ##
+
+
+numCores	<- detectCores() - 2
+randSample	<- 50000
+
+RNAfold_path	<- file.path(fastq_file_path, "RNAfold")
+dir.create(RNAfold_path, showWarnings = FALSE)
+
+RNAfold_deltaG_list	<- lapply(PSet_name_list_wRand, function(p_set_name) {
+
+	message(paste0("Performing RNA fold analysis for PSet: ", p_set_name))
+
+	## Split data into chunks based on number of cores ##
+	if (p_set_name == "RAND") {
+		message(paste0("\tFor the random background, sequences sampled = ", randSample))
+		PSet_nucleot	<- sample(randomDNA_bg, randSample)
+	} else {
+		PSet_nucleot	<- finalUniqSeq_data_list[[p_set_name]]$UniqSeqData
+	}
+
+	message(paste0("\tSplitting DNA data into ", numCores, " chunks..."), appendLF = FALSE)
+	PSet_chunks			<- chunk(PSet_nucleot, numCores)
+	names(PSet_chunks)	<- paste("chunk", 1:numCores, sep = "")
+	message(paste0("\r\tSplitting DNA data into ", numCores, " chunks... done"))
+
+	## Create the output directory to store RNAfold predictions
+	p_set_path	<- file.path(RNAfold_path, p_set_name)
+	dir.create(p_set_path, showWarnings = FALSE)
+
+	message(paste0("\tCalculating RNA folding on ", numCores, " cores (this can take a while)..."), appendLF = FALSE)
+	clust	<- makeCluster(numCores, type = "FORK")
+	outputFiles	<- parLapply(clust, 1:length(PSet_chunks), function(chunk_index) {
+		chunk_name		<- names(PSet_chunks)[chunk_index]
+
+		chunk_fileName	<- paste0(chunk_name, "_RNAfold_in.fa")	
+		chunk_inPath	<- file.path(p_set_path, chunk_fileName)
+		chunk_outPath	<- file.path(p_set_path, paste0(chunk_name, "_RNAfold_out.txt"))
+
+		if (!file.exists(chunk_outPath)) {
+			chunk_DNA		<- PSet_chunks[[chunk_index]]
+			chunk_RNA		<- RNAStringSet(chunk_DNA)
+			names(chunk_RNA)	<- 1:length(chunk_RNA)
+					
+			writeXStringSet(chunk_RNA, file = chunk_inPath)
+			system2('RNAfold', args = c("--filename-delim=/", '--noPS', paste0("--outfile=", chunk_outPath), paste0("--infile=", chunk_inPath)))
+		}
+		return(chunk_outPath)
+	})
+	stopCluster(clust)
+	message(paste0("\r\tCalculating RNA folding on ", numCores, " cores (this can take a while)... done"))
+
+	PSet_foldFull	<- bind_rows(lapply(outputFiles, function(file) struct <- readRNAfold(file)))
+
+	PSet_deltaGs	<- unlist(lapply(outputFiles, function(file) deltaG <- readRNAfold(file)$deltaG))
+	PSet_deltaGs_df	<- data.frame(PSet = rep(p_set_name, length(PSet_deltaGs)), foldDeltaG = PSet_deltaGs, stringsAsFactors = FALSE)
+
+	return(list(FullFold = PSet_foldFull, deltaGs = PSet_deltaGs_df))
+})
+names(RNAfold_deltaG_list)	<- PSet_name_list_wRand
+
+RNAfold_deltaG_df		<- bind_rows(RNAfold_deltaG_list)
+RNAfold_deltaG_df$PSet	<- factor(RNAfold_deltaG_df$PSet, levels = PSet_name_list_wRand)
+
+pairComparisons			<- lapply(combn(PSet_name_list, 2, simplify = FALSE), paste0)
+RNAfold_deltaG_violin	<- ggplot(data = RNAfold_deltaG_df, aes(x = PSet, y = foldDeltaG, fill = PSet)) +
+	geom_violin(scale = "area") +
+	scale_fill_manual(values = rev(wes_palette("FantasticFox", n = numPSets_wRand, type = "continuous"))) +
+	# scale_y_continuous(breaks = seq(-0.4, 0.2, by = 0.05)) +
+	ggtitle("Per-sequence RNA-folding free energy across P-sets") +
+	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "grey40")) +
+	stat_compare_means(comparisons = pairComparisons, method = "wilcox.test", p.adjust = "bonferroni") + 
+	stat_compare_means(ref.group = "RAND", method = "wilcox.test", label.y.npc = "bottom")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
