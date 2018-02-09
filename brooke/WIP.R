@@ -699,7 +699,7 @@ randSample	<- 50000
 RNAfold_path	<- file.path(fastq_file_path, "RNAfold")
 dir.create(RNAfold_path, showWarnings = FALSE)
 
-RNAfold_deltaG_list	<- lapply(PSet_name_list_wRand, function(p_set_name) {
+RNAfold_full_list	<- lapply(PSet_name_list_wRand, function(p_set_name) {
 
 	message(paste0("Performing RNA fold analysis for PSet: ", p_set_name))
 
@@ -721,6 +721,7 @@ RNAfold_deltaG_list	<- lapply(PSet_name_list_wRand, function(p_set_name) {
 	dir.create(p_set_path, showWarnings = FALSE)
 
 	message(paste0("\tCalculating RNA folding on ", numCores, " cores (this can take a while)..."), appendLF = FALSE)
+
 	clust	<- makeCluster(numCores, type = "FORK")
 	outputFiles	<- parLapply(clust, 1:length(PSet_chunks), function(chunk_index) {
 		chunk_name		<- names(PSet_chunks)[chunk_index]
@@ -733,7 +734,7 @@ RNAfold_deltaG_list	<- lapply(PSet_name_list_wRand, function(p_set_name) {
 			chunk_DNA		<- PSet_chunks[[chunk_index]]
 			chunk_RNA		<- RNAStringSet(chunk_DNA)
 			names(chunk_RNA)	<- 1:length(chunk_RNA)
-					
+
 			writeXStringSet(chunk_RNA, file = chunk_inPath)
 			system2('RNAfold', args = c("--filename-delim=/", '--noPS', paste0("--outfile=", chunk_outPath), paste0("--infile=", chunk_inPath)))
 		}
@@ -751,7 +752,7 @@ RNAfold_deltaG_list	<- lapply(PSet_name_list_wRand, function(p_set_name) {
 })
 names(RNAfold_deltaG_list)	<- PSet_name_list_wRand
 
-RNAfold_deltaG_df		<- bind_rows(RNAfold_deltaG_list)
+RNAfold_deltaG_df		<- bind_rows(lapply(RNAfold_full_list, function(x) return(x$deltaGs))
 RNAfold_deltaG_df$PSet	<- factor(RNAfold_deltaG_df$PSet, levels = PSet_name_list_wRand)
 
 pairComparisons			<- lapply(combn(PSet_name_list, 2, simplify = FALSE), paste0)
