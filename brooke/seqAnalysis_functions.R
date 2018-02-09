@@ -1,5 +1,5 @@
 ## // Split into n chunks // ##
-chunk <- function(x,n) split(x, cut(seq_along(x), n, labels = FALSE)) 
+chunk <- function(x,n) split(x, cut(seq_along(x), n, labels = FALSE))
 
 
 ## // Functions to create random DNA sequences 
