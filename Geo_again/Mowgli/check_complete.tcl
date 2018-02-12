@@ -1,4 +1,4 @@
-set penalty		4
+set penalty		5
 set direct		/scratch2/ade110/Geo_again/Mowgli
 
 set in_direct	$direct/GeneTree_input
@@ -24,7 +24,6 @@ foreach recon_dir $recon_dirs {
 	}
 }
 
-# 
 
 puts stdout "Total number of input gene trees: [llength $input_dirs]"
 puts stdout "Total number of reconciliations attempted: [llength $recon_dirs]"
@@ -58,6 +57,11 @@ puts stdout "Total number of reconciliations failed: $incomp_recon"
 # Total number of reconciliations succeeded: 6218
 # Total number of reconciliations failed: 494
 
+## T5
+# Total number of input gene trees: 6712
+# Total number of reconciliations attempted: 6712
+# Total number of reconciliations succeeded: 6343
+# Total number of reconciliations failed: 369
 
 ## /// At 100G RAM /// ##
 ## T3 
@@ -66,6 +70,11 @@ puts stdout "Total number of reconciliations failed: $incomp_recon"
 # Total number of reconciliations succeeded: 6560
 # Total number of reconciliations failed: 152
 
+## T4
+# Total number of input gene trees: 6712
+# Total number of reconciliations attempted: 6712
+# Total number of reconciliations succeeded: 6548
+# Total number of reconciliations failed: 164
 
 
 
