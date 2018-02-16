@@ -1,6 +1,6 @@
 #!/bin/sh
 #PBS -l walltime=72:00:00
-#PBS -l select=1:ncpus=1:mem=100gb+1:ncpus=0:mem=1mb
+#PBS -l select=1:ncpus=1:mem=150gb+1:ncpus=0:mem=1mb
 #PBS -J 1-6712
 
 module load mowgli/v2.0A

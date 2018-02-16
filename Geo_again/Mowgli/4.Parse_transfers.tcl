@@ -154,7 +154,7 @@ foreach reconciliation $reconciliations {
 			set donor_edge		[dict get $parsed_transfer donor_edge]
 			
 			# Here we want to test whether the transfer is predicted into the most parsimonious branch. If not, find the most parsimonious transfer
-			set true_receiver_event		[ReduceTransferBranch $non_trans_AG_event $events_list $dir_log $reconciliation]
+			set true_receiver_event		[ReduceTransferBranch $non_trans_AG_event $transfer_AG2AG $events_list $dir_log $reconciliation]
 
 			set parsed_receiver			[ParseEvent $true_receiver_event]
 			set receiver_genet_parent	[dict get $parsed_receiver genet_parent]
@@ -259,7 +259,7 @@ foreach reconciliation $reconciliations {
 			set penul_event		[dict get $parent_child_events penul_event]
 			set sister_event	[GetSisterEvent $parent_event $penul_event $events_list]
 
-			set sister_fate		[TestAllChildren $sister_event $events_list]
+			set sister_fate		[TestAllChildren $sister_event $transfer_AG2AG $events_list]
 		}
 
 		if {$scenario eq ""} {
@@ -268,7 +268,7 @@ foreach reconciliation $reconciliations {
 			dict set edge_heritage $initial_event "Vertical"
 		# In scenario 2 the parent event is a TransIn
 		} elseif {$scenario == 2} {
-			set reduced_transfer		[ReduceTransferBranch $tested_event $events_list $dir_log $reconciliation]
+			set reduced_transfer		[ReduceTransferBranch $tested_event $AG2AG_transfer $events_list $dir_log $reconciliation]
 			set parsed_reduced			[ParseEvent $reduced_transfer]
 
 			set donor_edge				[dict get $parsed_parent donor_edge]	

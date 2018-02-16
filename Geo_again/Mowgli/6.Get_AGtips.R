@@ -5,7 +5,7 @@
 ## 05/2017 - Completely reworked the script to use lapply. Importantly, in some rare cases HGTs into Anoxy/Geobacillus were nested within other transfers. This meant that for a certain gene family (e.g. 1872, T=5) the same tips were counted as part of more than one transfer ##
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("ape", "gdata", "phylobase", "phangorn", "stringr", "gtools")
+pacman::p_load("parallel", "ape", "gdata", "phylobase", "phangorn", "stringr", "gtools")
 
 GetTerminalTip	<- function(node, tree) {
 	 pattern = paste0("(", node, "_)+")
@@ -16,6 +16,7 @@ GetTerminalTip	<- function(node, tree) {
 
 penalty_list	<- c(3, 4, 5, 6)
 include_AG2AG	<- TRUE
+numCores		<- detectCores() - 2
 
 master_dir <- "/Users/aesin/Desktop/Geo_again/Mowgli/Mowgli_output/"
 if (include_AG2AG == TRUE) {
@@ -33,10 +34,15 @@ NodeLabPattern = "[0-9]+$"
 tip_number_tbl	<- data.frame(Penalty = numeric(), Number.Of.Tips = numeric())
 
 for (penalty in penalty_list) {
+
+	message(paste0("Identifying AG tips per group for penalty: ", penalty, "..."), appendLF = FALSE)
+
 	directories <- mixedsort(dir(file.path(master_dir, paste0("Output_", penalty))))
+
+	clust		<- makeCluster(numCores, type = "FORK")
 	  
 	## WARNINGS ABOUT NODES NOT FOUND REFER TO INABILITY TO FIND NODES WHICH ARE IN FACT TIPS (SOLO TRANSFER TO ONE SPECIES) ##
-	per_group_HGT_tips	<- lapply(directories, function(directory) {
+	per_group_HGT_tips	<- parLapply(clust, directories, function(directory) {
 		# message(paste0("Penalty: ", penalty, " == Directory: ", directory))
 		dir <- file.path(master_dir, paste0("Output_", penalty), directory)
 
@@ -72,13 +78,16 @@ for (penalty in penalty_list) {
 			## New approach to find nested nodes because terminal nodes are now given as
 			## binomial names instead of node IDs
 			find_nested_nodes	<- lapply(OutAG_nodes, function(OutAG_node) {
-				## If we wind that an OutAG node contains letters, it must be a
-				## terminal binomial so we use a pattern allowing us to catch the
-				## binomial together with it's trailing ID. E.g.:
-				## Geobacillus_stearothermophilus_2 + _8
-				if (length(grep("[a-z]+", OutAG_node)) != 0) {
-					pattern = paste0("(^", OutAG_node, ")+")
-				## If there are no letters, the OutAG node is numeric and we want to 
+
+				## If we find that an OutAG node contains an underscore, it must be a
+				## terminal tip so we use a pattern allowing us to catch the
+				## tip together with it's trailing ID. E.g.:
+				## 471223_1 + _1905
+
+				if (length(grep("[_]+", OutAG_node)) != 0) {
+					pattern	<- paste0("(^", OutAG_node, "_)+")
+
+				## If there is no underscore, the OutAG node is an internal branch and we want to 
 				## find an exact copy (i.e. we don't want to find "198" when the node)
 				## we are looking for is "19"
 				} else {
@@ -149,7 +158,9 @@ for (penalty in penalty_list) {
 				message(paste0("Penalty: ", penalty, " == Directory: ", directory))
 			}
 
-			return(data.frame(Directory = directory, Donor_edge = OutAG$Donor.Edge, Receiver_edge = OutAG$Receiver.Edge, GeneT_child_node = genet_receiver, Tip_number = length(anoxygeo_tips_trim_unique), Species = paste(anoxygeo_tips_trim_unique, collapse = " "), Nested_T = nested_transfers))
+			AGtips_char	<- paste0(" ", paste(anoxygeo_tips_trim_unique, collapse = " "), " ")
+
+			return(data.frame(Directory = directory, Donor_edge = OutAG$Donor.Edge, Receiver_edge = OutAG$Receiver.Edge, GeneT_child_node = genet_receiver, Tip_number = length(anoxygeo_tips_trim_unique), Species = AGtips_char, Nested_T = nested_transfers))
 
 		})
 
@@ -157,20 +168,22 @@ for (penalty in penalty_list) {
 		## In some cases, we have nested nodes with secondary AG2AG transfers (that are also the nested) but are not removed in the above steps. We corrected for that here
 		corrected_tips_out	<- lapply(HGT_transfer_tips, function(element) {
 			if (is.na(element$Nested_T) == FALSE) {
-				tip_list		<- unlist(str_split(element$Species, " "))
+
+				tip_list		<- unlist(str_split(str_trim(element$Species), " "))
 				nested_nodes	<- unlist(str_split(element$Nested_T, " "))
+
 				# For each nest node, exclude the tips belonging to the nested node from the nestING node tips
 				for (node in nested_nodes) {
 					tips_to_exclude	<- unlist(lapply(HGT_transfer_tips, function(element2) {
 						if (element2$GeneT_child_node == node) {
-							tips	<- unlist(str_split(element2$Species, " "))
+							tips	<- unlist(str_split(str_trim(element2$Species), " "))
 							return(tips)
 						}
 					}))
 					tip_list		<- tip_list[!tip_list %in% tips_to_exclude]
 				}
 				# Replace original tip list with the derived tip list
-				element$Species		<- paste0(tip_list, collapse = " ")
+				element$Species		<- paste0(" ", paste(tip_list, collapse = " "), " ")
 				element$Tip_number	<- length(tip_list)
 			}
 			return(element)
@@ -180,6 +193,8 @@ for (penalty in penalty_list) {
 		return(trunc_table)
 	})
 
+	stopCluster(clust)
+
 	per_group_HGT_tips	<- per_group_HGT_tips[lapply(per_group_HGT_tips, length) > 0]
 	per_penalty_df		<- do.call(rbind.data.frame, per_group_HGT_tips)
 
@@ -187,6 +202,8 @@ for (penalty in penalty_list) {
 	tip_number_tbl[nrow(tip_number_tbl)+1,]	<- c(penalty, total_num_tips)
 
 	write.table(per_penalty_df, file = file.path(output_dir, paste0("Per_penalty_tips_t", penalty, ".tsv")), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+
+	message(paste0("\rIdentifying AG tips per group for penalty: ", penalty, "... done"))
 }
 
 write.table(tip_number_tbl, file = file.path(output_dir, "Stats.tsv"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)

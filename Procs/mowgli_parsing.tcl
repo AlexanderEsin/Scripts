@@ -230,7 +230,7 @@ proc GetSisterEvent {parent_event known_child events_list} {
 	return [lindex $sister_event 0]
 }
 
-proc TestAllChildren {start_event events_list} {
+proc TestAllChildren {start_event ag2agTrans_list events_list} {
 	set events_to_test [list $start_event]
 
 	set condition "Loss"
@@ -243,6 +243,13 @@ proc TestAllChildren {start_event events_list} {
 		set type			[dict get $event_info type]
 
 		if {$type eq "Trans"} {
+
+			# If while reducing the receiver branch we find an AG2AG transfer. We don't want to reduce past this point
+			if {[lsearch $ag2agTrans_list $tested_event] != -1} {
+				set condition "AG2AG Trans: $tested_event"
+				return $condition
+			}
+
 			set test_edge			[dict get $event_info donor_edge]
 			set child_parent_events	[SkipAllTransOut $tested_event $test_edge $events_list "down"]
 			set next_event			[dict get $child_parent_events child_event]
@@ -283,7 +290,7 @@ proc TestAllChildren {start_event events_list} {
 	return $condition
 }
 
-proc ReduceTransferBranch {top_event events_list dir_log out_dir} {
+proc ReduceTransferBranch {top_event ag2agTrans_list events_list dir_log out_dir} {
 	while 1 {
 		set parsed_event	[ParseEvent $top_event]
 		set genet_child		[dict get $parsed_event genet_child]
@@ -297,7 +304,8 @@ proc ReduceTransferBranch {top_event events_list dir_log out_dir} {
 		set child_events	[lsearch -all -inline -glob $events_list "\{$genet_child\,*"]
 
 		foreach child_event $child_events {
-			set fate	[TestAllChildren $child_event $events_list]
+			set fate	[TestAllChildren $child_event $ag2agTrans_list $events_list]
+			# puts $fate
 			if {$fate eq "Loss"} {
 				set child_events	[lremove $child_events $child_event]
 			}
