@@ -17,10 +17,10 @@ file mkdir		$plasmid_out
 set AG_acc_asses	[split [string trim [openfile $direct/Genome_lists/AG_acc_Ass_names.txt]] \n]
 
 ## Get the input gbff files
-set input_zipped		[glob $gbff_dir/*gz]
+set input_zipped		[glob -nocomplain $gbff_dir/*gz]
 if {[llength $input_zipped] != 0} {
 	puts stdout "Unzipping gbff files ..."
-	catch {exec unpigz -r $gbff_dir}
+	catch {exec gunzip -r $gbff_dir}
 	puts stdout "Unzipping gbff files ... DONE"
 }
 set input_gbffs		[glob $gbff_dir/*gbff]
@@ -124,7 +124,7 @@ foreach gbff_file $input_gbffs {
 	## Add the total length of the genome to the global table
 	## Also add the plasmid locus tags to a global list
 	lappend genome_len_tbl "$acc_ass\t$total_length"
-	set AG_global_plasmids	[concat $AG_global_plasmids $clean_partition_tags]
+	set AG_global_plasmids	[concat $AG_global_plasmids $total_clean_tags]
 
 	## Write out the plasmid tags
 	if {[llength $total_clean_tags] > 0} {
@@ -146,7 +146,7 @@ close $out
 
 ## Write out the global plasmid tag table
 set out [open $direct/All_plasmid_tags.tsv w]
-puts $out [join $global_plasmids \n]
+puts $out [join $AG_global_plasmids \n]
 close $out
 
 

@@ -1,0 +1,337 @@
+---
+title: HGT Density Plotting
+date: 5 Oct 2017
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+    code_folding: hide
+    theme: cosmo
+---
+
+```{r global_options, include = FALSE}
+knitr::opts_chunk$set(	fig.width	= 10, 
+						fig.height	= 7, 
+						fig.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Figures/", 
+						fig.align	= 'center', 
+						dpi			= 300, 
+						cache.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Cache/", 
+						warning		= TRUE, 
+						message		= TRUE,
+						tidy		= TRUE)
+
+```
+get_subgroup_branches	<- function() {
+	subgroupings	<- read.csv(file = "/Users/aesin/Desktop/Geo_analysis/Geo_omes/Subspecies_geo_groups.csv", header = TRUE, sep = ",")
+
+	# Get those tips that have a fellow tip in the same subgroup. Isolate all the subgroups that have more than one member #
+	subgroup_only	<- subset(subgroupings, duplicated(subgroupings$Group) | duplicated(subgroupings$Group, fromLast = TRUE))
+	subgroup.unique	<- unique(subgroup_only$Group)
+
+	# Tree #
+	species_tree_clado <- read.tree("/Users/aesin/Desktop/Mowgli/Species_tree/Reconciled_species_tree/outputSpeciesTree.mpr")
+
+	# Get the set of Geobacillus and Anoxybacillus tips and combine into a single set #
+	clado_tips <- grep("Geobacillus_|Anoxybacillus_", species_tree_clado$tip.label, value = TRUE)
+
+	# Anoxy/Geobacillus tips used to extract the Anoxy/Geobacillus subclade. Transform to phylo4 object #
+	anoxy_geo_clado		<- drop.tip(species_tree_clado, setdiff(species_tree_clado$tip.label, clado_tips))
+	anoxy_geo_clado4	<- phylo4(anoxy_geo_clado)
+	clado4_relab		<- anoxy_geo_clado4
+	clado4_relab@label	<- sapply(clado4_relab@label, str_sub, -4, -1)
+
+	# For each groups, use the list of species to get the corresponding branches #
+	subgroup_branches <- vector(mode = "list")
+	for (group in subgroup.unique) {
+		# Species names as they appear in the Subspecies_geo_groups file #
+	    tips_in_subgroup <- as.vector(subgroup_only$Species[which(subgroup_only$Group == group)])
+	    # Corresponding species names in the Mowgli format - matching the species_tree_clado #
+	   	tips_in_subgroup <- lapply(tips_in_subgroup, function(tip) grep(tip, clado_tips, value = T))
+	   	# All the descendent nodes of the common ancestor of all the species in a particular group #
+	    descend_nodes <- as.vector(descendants(anoxy_geo_clado4, MRCA(anoxy_geo_clado4, tips_in_subgroup), "all"))
+	    # For each node, get the corresponding edges - format the edges as {ancestor descendent} - the same format as the input branch column in the long-distance HGT data #
+	    descend_edges <- lapply(descend_nodes, function(node) {
+	    	ancestor	<- ancestor(clado4_relab, node)
+	    	node_lab	<- labels(clado4_relab, type = c("all"))[node]
+	    	ance_lab	<- labels(clado4_relab, type = c("all"))[ancestor]
+	    	branch_lab	<- paste(ance_lab, node_lab, sep = " ")
+	    })
+	    # Add to list of subgroup branches #
+	    subgroup_branches <- c(subgroup_branches, descend_edges)
+	}
+	# Return a list data structure: the first element is a vector of the subgroup branches (edges), second element is the list of subgroup species, third element is the anoxy/geo tree in phylo4 format #
+	return(list(subgroup_branches = unlist(subgroup_branches), species = as.vector(subgroup_only$Species), clado_tree = anoxy_geo_clado4))
+}
+
+# / Get COG data / #
+GetCOGData	<- function() {
+	# / List of the eggNOG mapping annotation files / #
+	emap_files	<- Sys.glob(file.path("/Users/aesin/Desktop/Geo_analysis/Geo_ortholog_nucl/Functional_annot/Output_annots", "*emapper.annotations"))
+
+	# / We need to define each column, otherwise F COGs are read in as a logical / #
+	col_class	<- c("character", "character", "numeric", "numeric", "character", "character", "character", "character", "character", "character", "character", "character")
+
+	# / A list containing the eggNOG annotation table for each group (file) / #
+	group_tbls <- lapply(emap_files, function(file) {
+		group_name	<- str_extract(file, "[0-9]+")
+		annot_data	<- read.table(file, header = T, sep = "\t", colClasses = col_class)
+		# The group number is added as a seperate column
+		annot_data$Group	<- rep(group_name, nrow(annot_data))
+		return(annot_data)
+	})
+
+	# Make into a data table and set a key on the protein ID
+	full_cog_tbl <- data.table(bind_rows(group_tbls))
+	setkey(full_cog_tbl, query_name)
+
+	# Annotate mobile elements as a separate column
+	search_string	<- paste(c("transposase", "integrase", "transposon"), collapse = "|")
+	full_cog_tbl$mob_element	<- grepl(search_string, full_cog_tbl$eggNOG.annot, ignore.case = TRUE)
+
+	names(full_cog_tbl)[1]	<- "Full_protID"
+	return(full_cog_tbl)
+}
+
+combined_species_data	<- function(species = species, penalty = penalty, bandwith = bandwith, window = window, subgroup_data = subgroup_data, cog_data = cog_data, set_names = c("all", "const", "long", "vert", "short")) {
+	
+	## Get position data for the four sets: all genes; constant-predicted HGTs, long-distance HGTs, vertical genes ##
+	master_dir	<- paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty)
+
+	## Prepare output list for all_dfs. These contain the full data for each gene in each set in each species ##
+	all_dfs <- setNames(vector("list", length(set_names)), set_names)
+
+	# Read in the per-penalty positions for each species #
+	all_dfs <- mapply(function(all_dfs, i) 	{	directory <- paste0(master_dir, "/Per_species_", i, "/Full_entries/")
+												file_name <- paste0(directory, grep(species, dir(directory), value = T))
+												read_in_full_data(file_name)
+											},	all_dfs, names(all_dfs), SIMPLIFY = FALSE)
+
+	# Circularise the start positions #
+	all_dfs <- lapply(all_dfs, function(set) {
+		circ_coords <- circular(set$Rel_start * (2 * pi));
+		cbind(set, Circular_start = circ_coords)
+	})
+
+	# Add functional annotation to each protein entry #
+	cog_dfs	<- lapply(all_dfs, function(set) {
+		# Assume cog_data[1] is named "Full_protID"
+		set_cog_df <- merge(set, cog_data[,c(1,9,11,12,14)], by = "Full_protID", all.x = TRUE, sort = FALSE)
+		names(set_cog_df)[(ncol(set_cog_df)-3):ncol(set_cog_df)]	<- c("NOG", "COG", "Prot_name", "Mobile_element")
+		# Any NA mobile element values change to FALSE
+		set_cog_df$Mobile_element[is.na(set_cog_df$Mobile_element)] <- FALSE
+		set_cog_df[is.na(set_cog_df)] <- "-"
+		set_cog_df$COG	<- str_split(set_cog_df$COG, ",")
+		set_cog_df$NOG	<- lapply(str_split(set_cog_df$NOG, ","), function(OGs) grep("@NOG", unlist(OGs), value = TRUE))
+
+		return(set_cog_df)
+	})
+	names(cog_dfs) <- names(all_dfs)
+
+	# If we are separating by subgroup, subset the group and subgroup positions into two individual list elements #
+	if (length(grep(species, subgroup_data$species)) != 0) {
+		subgroup_index <- unlist(lapply(subgroup_data$subgroup_branches, function(edge) which(cog_dfs$long$Receptor_node == edge)))
+		cog_dfs$long_group		<- cog_dfs$long[-subgroup_index,]
+		cog_dfs$long_subgroup	<- cog_dfs$long[subgroup_index,]
+	}
+
+	# Get circular densities #
+	densities <- lapply(cog_dfs, function(set) density.circular(set$Circular_start, kernel = "vonmises", bw = bandwith))
+
+	## Process the GC enrichment data ##
+	## Requires reworking ##
+
+	gc_dir	<- paste0("/users/aesin/desktop/Geo_analysis/HGT_position/GC_content/Window_", window, "/")
+	gc_file	<- paste0(gc_dir, grep(species, dir(gc_dir), value = T))
+	gc_data	<- read.table(gc_file, header = F, sep = "\t")
+
+	colnames(gc_data)	<- c("Position", "GC_content")
+	gc_data$Circular	<- circular(gc_data$Position * (2 * pi))
+	gc_data$AT_content	<- (1 - gc_data$GC_content)
+
+	# Critical values are those where AT or GC richness > 2 * sd of dataset #
+	crit_val_gc	<- 2 * sd(gc_data$GC_content)
+	crit_val_at <- 2 * sd(gc_data$AT_content)
+
+	# Isolate all windows with AT > critical value #
+	high_gc		<- gc_data[which(gc_data$GC_content > (mean(gc_data$GC_content) + crit_val_gc)),]
+	high_at		<- gc_data[which(gc_data$AT_content > (mean(gc_data$AT_content) + crit_val_at)),]
+
+	nuc_densities		<- list(high_gc = density.circular(high_gc$Circular, kernel = "vonmises", bw = bandwith))
+	nuc_densities		<- c(nuc_densities, list(high_at = density.circular(high_at$Circular, kernel = "vonmises", bw = bandwith)))
+
+	## Get rrna gene positions ##
+	rrna_dir	<- "/Users/aesin/Desktop/Geo_analysis/HGT_position/Ribosmal_rna_locations/Relative_start/"
+	rrna_file	<- paste0(rrna_dir, grep(species, dir(rrna_dir), value = T))
+	rrna_data	<- read_in_rrna_data(rrna_file)
+	# Circularise #
+	rrna_data$Circular	<- circular(rrna_data$Position * (2 * pi))
+
+	## Combine all the data for export ##
+	combined_data <- list(species = species, penalty = penalty, all_dfs = cog_dfs, densities = densities, nuc_densities = nuc_densities, rrna_data = rrna_data)
+	return(combined_data)
+}
+
+List of the the assembled _Geobacillus_ genomes
+```{r per_spec_hgt_dens_all, warning = FALSE, message = FALSE, cache = TRUE}
+
+# Set the global penalty variables. We will read in data for all penalties (over penalty_l) - we can then select separate HGT and vertical penalties for which to get data #
+penalty_l	<- as.character(c(3, 4, 5, 6))
+HGT_penalty	<- "5"
+VER_penalty	<- "3"
+
+# Process the penalty names to be used for table subsetting downstream #
+HGT_name	<- paste0("T", HGT_penalty)
+ver_name	<- paste0("T", VER_penalty)
+
+# Get subgroup information and COG data for each group
+subgroup_data	<- get_subgroup_branches()
+cog_data		<- GetCOGData()
+
+# Set the window size (gc-content) and bandwith (circular density) options #
+window_size	= 500
+
+
+
+
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("circular", "polyclip", "RCircos")
+
+
+
+master_dir			<- "/Users/aesin/Desktop/Geo_again"
+allPosInput_dir		<- file.path(master_dir, "HGT_position", "All_input")
+hgtPosInput_dir		<- file.path(master_dir, "HGT_position", "HGT_input")
+verPosInput_dir		<- file.path(master_dir, "HGT_position", "Ver_input")
+
+dataTypes			<- c("All", "lHGT", "sHGT", "Ver")
+penalty_list		<- as.character(c(3, 4, 5, 6))
+bandwith 			<- 3000
+
+perTypeData	<- lapply(dataTypes, function(type) {
+	message(paste0("Working on type: ", type))
+	if (type == "All") {
+		allPos_file	<- file.path(allPosInput_dir, "All_positionData.tsv")
+		all_data	<- read.table(file = allPos_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+		# Circularise the relative start and end positions
+		all_data$CircStart	<- circular(all_data$relGeneStart * (2 * pi))
+		all_data$CircEnd	<- circular(all_data$relGeneEnd * (2 * pi))
+
+		# Calculate circular density (on the start position)
+		allData_dens		<- density.circular(all_data$CircStart, kernel = "vonmises", bw = bandwith)
+		return(list(dataTable = all_data, circsDensity = allData_dens))
+	}
+
+	if (type == "lHGT" || type == "sHGT") {
+		input_dir	<- hgtPosInput_dir
+	} else if (type == "Ver") {
+		input_dir	<- verPosInput_dir
+	}
+
+	perPenaltyData	<- lapply(penalty_list, function(penalty) {
+		input_file	<- file.path(input_dir, paste0("T", penalty, "_", type, "_positionData.tsv"))
+		read_data	<- read.table(file = input_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+		# Circularise the relative start and end positions
+		read_data$CircStart	<- circular(read_data$relGeneStart * (2 * pi))
+		read_data$CircEnd	<- circular(read_data$relGeneEnd * (2 * pi))
+
+		# Calculate circular density (on the start position)
+		readData_dens		<- density.circular(read_data$CircStart, kernel = "vonmises", bw = bandwith)
+		return(list(Penalty = penalty, dataTable = read_data, circsDensity = readData_dens))
+	})
+	names(perPenaltyData)	<- penalty_list
+	return(perPenaltyData)
+})
+names(perTypeData)	<- dataTypes
+
+
+## /// TEST PLOT /// ##
+
+testPenalty	<- as.character(4)
+
+dens_all	<- perTypeData$All$circsDensity
+dens_long	<- perTypeData$sHGT[[testPenalty]]$circsDensity
+dens_vert	<- perTypeData$Ver[[testPenalty]]$circsDensity
+
+shrink = 1.4
+title_cex = 1.2
+title_elev = -2
+
+plotName	<- paste0("Test plot at penalty: ", testPenalty)
+plot(	dens_all,
+		points.plot = F,
+		axes = F,
+		xlab = NA,
+		ylab = NA,
+		control.circle = circle.control(type = "n"),
+		nosort = T,
+		lwd = 2,
+		col = "white",
+		ylim = c(-1.1, 1.1),
+		plot.type = "circle",
+		zero = (pi/2),
+		rotation = "clock",
+		shrink = shrink,
+		main = ""
+)
+# Plot title and axes
+title(main = plotName, line = title_elev, cex.main = title_cex)
+axis.circular(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi /2), template = "none", tcl = 0.12, tcl.text = 0.2)
+
+# Density lines
+all_line	<- lines(dens_all, lwd = 1.5, col = "black", zero = (pi/2), rotation = "clock", ylim = c(-1.1, 1.1))
+long_line	<- lines(dens_long, lwd= 0, col = "white", zero = (pi/2), rotation = "clock", ylim = c(-1.1, 1.1))
+
+# Enrichment polygons
+lapply(polyclip(A=list("x"=long_line$x, "y"=long_line$y), B=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(0,1,0,0.5), border = rgb(0,1,0,0.5))
+lapply(polyclip(B=list("x"=long_line$x, "y"=long_line$y), A=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(1,0,0,0.5), border = rgb(1,0,0,0.5))
+
+vert_line <- lines(dens_vert, lwd = 1.5, col = "blue", zero = (pi/2), rotation = "clock")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```

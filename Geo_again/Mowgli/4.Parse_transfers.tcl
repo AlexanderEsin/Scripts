@@ -128,12 +128,15 @@ foreach reconciliation $reconciliations {
 		set parent_event		[dict get $parent_child_events parent_event]
 		set parsed_parent		[ParseEvent $parent_event]
 		
-		# In v. rare situations the 'root' is actually a transfer event 'out'. As a result, the correct interpretation is that the child event (i.e. input) is the root. E.g. 2085 T=5	
+		# In v. rare situations the 'root' is actually a transfer event 'out'. As a result, the correct interpretation is that the child event (i.e. input) is the root. E.g. 7165 T=3	
 		set root_flag			[IsEventRoot $parent_event]
 		if {[dict get $parsed_parent type] eq "Trans" && $root_flag == TRUE && [IsTransIntoEdge $parent_event $edge] == FALSE} {
-			puts $dir_log "\t--> Event: $non_trans_AG_event has a parent that is both a Root and a Transfer Out:\n\t$parent_event"
+			puts $non_trans_AG_event
+			# puts $dir_log "\t--> Event: $non_trans_AG_event has a parent that is both a Root and a Transfer Out:\n\t$parent_event"
 			lappend NonTrans_AG_done "--> Event: $non_trans_AG_event has a parent that is both a Root and a Transfer Out:\n\t-->$parent_event"
 			dict set edge_heritage $parent_event "Root"
+			set AG_root TRUE
+			incr scenario_3
 			continue
 		}
 

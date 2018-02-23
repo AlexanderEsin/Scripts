@@ -1,98 +1,43 @@
 ---
-title: Branch-length vs transfer correlation
-date: 11 Aug 2017
+title: Branch length vs HGT number
+date: 22 Feb 2018
 output:
   html_document:
-	toc: true
-	toc_depth: 4
-	toc_float: true
-	code_folding: hide
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+    code_folding: hide
+    theme: cosmo
 ---
 
 
 ```{r global_options, include = FALSE}
 knitr::opts_chunk$set(	fig.width	= 10, 
 						fig.height	= 7, 
-						fig.path	= "/Users/aesin/Desktop/Geo_analysis/Geo_HGT_timing/Branch_transfer_correlation/Figures/", 
+						fig.path	= "/Users/aesin/Desktop/Geo_again/HGT_time/Branch_transfer_correlation_220218/Figures/", 
 						fig.align	= 'center', 
 						dpi			= 300, 
-						cache.path	= "/Users/aesin/Desktop/Geo_analysis/Geo_HGT_timing/Branch_transfer_correlation/Cache/", 
+						cache.path	= "/Users/aesin/Desktop/Geo_again/HGT_time/Branch_transfer_correlation_220218/Cache/", 
 						warning		= TRUE, 
 						message		= TRUE,
 						tidy		= TRUE)
 
 ```
-#### 0. Packages, functions & global variables {.tabset .tabset-fade}
-##### Packages
+
+
+### Packages & functions
 ```{r packages, warning = FALSE, message = FALSE}
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load("data.table", "ape", "phylobase", "phytools", "phangorn", "stringr", "geiger", "RSvgDevice", "reshape2", "ggplot2", "RColorBrewer", "wesanderson", "dplyr")
-
 ```
 
-##### Functions
 ```{r functions, warning = FALSE, message = FALSE}
 # Annotate branches function. This is used to label a particular branch with something... #
-annotate_transfer_num <- function (edge_entry, index, colName) {
+AnnotateBranch	<- function (edge_entry, index, colName) {
 	edge		<- edge_entry[1:2]
 	edge_label	<- as.character(round(edge_entry[,colName], digits = 2))
 	edgelabels(edge_label, index, adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 1)
-}
-
-# Plot particular branches on the phylogeny #
-PlotSegmentByNodes <- function(nodes0, nodes1, colour) {
-	lastPP <- get("last_plot.phylo", envir = .PlotPhyloEnv)
-	if (length(nodes0) != length(nodes1)) {
-		tmp <- cbind(nodes0, nodes1)
-		nodes0 <- tmp[, 1]
-		nodes1 <- tmp[, 2]
-	}
-	x0 <- lastPP$xx[nodes0]
-	y0 <- lastPP$yy[nodes0]
-	x1 <- lastPP$xx[nodes1]
-	y1 <- lastPP$yy[nodes1]
-	segments(x0, y0, x0, y1, lty = 1, lwd = 3, col = colour)
-	segments(x0, y1, x1, y1, lty = 1, lwd = 3, col = colour)
-}
-
-# Calculate all the relevant correlations for a given transfer column #
-CalcCorrLengthTransfers <- function(full_df, transfer_column, outlier_index) {
-	full_no_outlier_df <- full_df[! (full_df$Index == outlier_index),]
-
-	# Correlations - make df and fill it with different combinations #
-	cor_df <- data.frame(               Condition=character(),
-										Pearson=double(),
-										Spearman=double(),
-										Rsquared=double(), 
-										stringsAsFactors = FALSE)
-
-	# All together - outlier kept #
-	cor_df <- rbind(cor_df, data.frame( Condition = "All with outlier",
-										Pearson = cor(full_df$Branch_len, full_df[,transfer_column], method = "pearson"),
-										Spearman = cor(full_df$Branch_len, full_df[,transfer_column], method = "spearman"),
-										Rsquared = summary(lm(full_df$Branch_len ~ full_df[,transfer_column]))$r.squared))
-
-	# All together - outlier removed #
-	cor_df <- rbind(cor_df, data.frame( Condition = "All no outlier",
-										Pearson = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "pearson"),
-										Spearman = cor(full_no_outlier_df$Branch_len, full_no_outlier_df[,transfer_column], method = "spearman"),
-										Rsquared = summary(lm(full_no_outlier_df$Branch_len ~ full_no_outlier_df[,transfer_column]))$r.squared))
-
-	# Split by Subgroup #
-	# Intergroup #
-	cor_df <- rbind(cor_df, data.frame( Condition = "Intergroup no outlier",
-										Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "pearson"),
-										Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)], method = "spearman"),
-										Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == TRUE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == TRUE)]))$r.squared))
-
-	# Intragroup #
-	cor_df <- rbind(cor_df, data.frame( Condition = "Intragroup no outlier",
-										Pearson = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "pearson"),
-										Spearman = cor(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)], full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)], method = "spearman"),
-										Rsquared = summary(lm(full_no_outlier_df$Branch_len[! (full_no_outlier_df$Subgroup == FALSE)] ~ full_no_outlier_df[,transfer_column][! (full_no_outlier_df$Subgroup == FALSE)]))$r.squared))
-
-	cor_df[,2:4] <- cbind(round(cor_df$Pearson, digits = 4), round(cor_df$Spearman, digits = 4), round(cor_df$Rsquared, digits = 4))
-	return(cor_df)
 }
 
 # / Adjusted plotBranchbyTrait to accept a custom palette / #
@@ -236,88 +181,116 @@ plotBranchbyTrait_AE <- function (tree, x, mode = c("edges", "tips", "nodes"), p
 }
 ```
 
-##### Global variables
-```{r global_variables, warning = FALSE, message = FALSE}
-## Variables used globally ##
+
+# Input data {.tabset .tabset-fade}
+## Read in tables
+```{r readInLists, warning = FALSE, message = FALSE, cache = TRUE}
+
 penalty_list	<- list(4, 5, 6)
-# min_taxa = 0
 
-# single_pen_plot = TRUE
-# single_pen_val = 5
+# Define the working directories
+main_dir		<- "/Users/aesin/Desktop/Geo_again"
+genomes_dir		<- file.path(main_dir, "Genomes")
+mowgli_dir		<- file.path(main_dir, "Mowgli")
 
-# if (min_taxa > 4) {
-# 	file_name_add <- paste0("_min_",min_taxa)
-# } else {
-# 	file_name_add <- ""
-# }
+# This directory contains the consistent HGT results
+# AE: changed Refined_events to Clean_events to remove the plasmid-contaminated events
+refinedHGTs_dir	<- file.path(mowgli_dir, "Mowgli_output", "Cleaned_events", "HGT_events")
+
+# Define and read in the list of all AG tips as they appear in the Mowgli species tree
+AG_mowCladoTips_file	<- file.path(mowgli_dir, "Inside_group", "AnoxyGeo_mowTips.txt")
+AG_mowCladoTips_char	<- read.table(file = AG_mowCladoTips_file, sep = "\n", stringsAsFactors = FALSE)$V1
+
+# Define and read in the taxid <-> binomial translation table
+taxidBinom_trans_file	<- file.path(genomes_dir, "Genome_lists", "Taxid_refinedBinomial_table.tsv")
+taxidBinom_trans_df		<- read.table(file = taxidBinom_trans_file, sep = "\t", header = TRUE,stringsAsFactors = FALSE)
+
+```
+
+## Read in trees
+```{r readInTrees, warning = FALSE, message = FALSE, cache = TRUE}
+# Define and read in the mowgli species tree
+mowSpeciesTree_file	<- file.path(mowgli_dir, "Mowgli_output", "Output_3", "1", "outputSpeciesTree.mpr")
+if (!file.exists(mowSpeciesTree_file)) stop("Cannot find Mowgli species tree file, try a different file")
+mowSpecies_tree		<- read.tree(mowSpeciesTree_file)
+
+# Define and read in the consensus time tree (same topology as mowgli tree)
+consensusTree_file	<- file.path(main_dir, "Consensus_groups", "Bacillaceae", "Final_trees", "Taxid_labelled", "RAxML_bipartitions.super_tree-50.txt")
+consensusTree_tree	<- read.tree(file = consensusTree_file)
 ```
 
 
-## 1. Species tree (clado)
-```{r get_clado_tree, message = FALSE, cache = TRUE}
 
-main_dir			<- "/Users/aesin/Desktop/Geo_again"
-mowgli_dir			<- file.path(main_dir, "Mowgli")
-
-mowSpeciesTree_file		<- file.path(mowgli_dir, "Mowgli_output", "Output_3", "1", "outputSpeciesTree.mpr")
-AG_mowCladoTips_file	<- file.path(mowgli_dir, "Inside_group", "AnoxyGeo_mowTips.txt")
-
-if (file.exists(mowSpeciesTree_file)) {
-	mowSpecies_tree	<- read.tree(mowSpeciesTree_file)
-} else {
-	stop("Cannot find Mowgli species tree file, try a different file")
-}
-
-AG_mowCladoTips_char	<- read.table(file = AG_mowCladoTips_file, sep = "\n", stringsAsFactors = FALSE)$V1
+# Clado and Time trees {.tabset .tabset-fade}
+## Clado-Mowgli tree
+```{r processCladoTree, warning = FALSE, message = FALSE, cache = TRUE}
+# Using the AG mowgli tips labels extract the AG subtree
 AG_mowClado_tree		<- drop.tip(mowSpecies_tree, setdiff(mowSpecies_tree$tip.label, AG_mowCladoTips_char))
 
+# Produce a df with corresponding taxid - mowgli tip entries
 taxidMowExtend_df			<- data.frame(Full = AG_mowClado_tree$tip.label, str_split(AG_mowClado_tree$tip.label, "_", simplify = TRUE), stringsAsFactors = FALSE)
-names(taxidMowExtend_df)	<- c("Full", "Taxid", "Extension")
+# Final column is the binomials
+taxidMowExtend_df[,4]		<- apply(taxidMowExtend_df, 1, function(row) {
+	taxid	<- row[2]
+	binom	<- taxidBinom_trans_df$Binomial[which(taxidBinom_trans_df$Taxid == taxid)]
+})
+# Rename columns 
+names(taxidMowExtend_df)	<- c("Full", "Taxid", "Extension", "Binomial")
 
+# Translate the mowgli clado tree tips to binomials
+AG_mowCladoBin_tree		<- AG_mowClado_tree
+AG_mowCladoBin_tree$tip.label	<- unlist(lapply(AG_mowCladoBin_tree$tip.label, function(tip) {
+	newTipLabel_char	<- taxidMowExtend_df$Binomial[which(taxidMowExtend_df$Full == tip)]
+}))
+
+# Translate the mowgli clado tree tips to the mowgli node IDs
 AG_mowClado_tree$tip.label	<- unlist(lapply(AG_mowClado_tree$tip.label, function(tip) {
 	newTipLabel_char	<- taxidMowExtend_df$Extension[which(taxidMowExtend_df$Full == tip)]
 }))
 
-
 # Transform to phylo4 object
 AG_mowClado_as4	<- phylo4(AG_mowClado_tree)
-# Get the node labels as a data frame ##
-AG_mowClado_allNodes	<- data.frame(labels(AG_mowClado_as4, "all"))
-AG_mowClado_intNodes	<- nodeId(AG_mowClado_as4, "internal")
-names(AG_mowClado_allNodes)[1] 	<- "Labels"
-
-plot.phylo(AG_mowClado_tree)
 ```
 
 
-##### 2. Time-resolved tree {#time_tree}
-
-```{r get_time_tree, message = FALSE, warning = FALSE, cache = TRUE}
-# Use the same tree we used to correct the Astral phylogeny
-consensusTree_file	<- file.path(main_dir, "Consensus_groups", "Bacillaceae", "Final_trees", "Taxid_labelled", "RAxML_bipartitions.super_tree-50.txt")
-consensusTree_tree	<- read.tree(file = consensus_file)
-
+## Time-resolved tree
+```{r processTimeTree, message = FALSE, warning = FALSE, cache = TRUE}
 # Extract the AG subtree
 AG_conTime_tree		<- drop.tip(consensusTree_tree, setdiff(consensusTree_tree$tip.label, taxidMowExtend_df$Taxid))
 
-# Relabel the tree to the Mowgli extension
+# Relabel the time tree to binomials
+AG_conTimeBin_tree	<- AG_conTime_tree
+AG_conTimeBin_tree$tip.label	<- unlist(lapply(AG_conTimeBin_tree$tip.label, function(tip) {
+	newTipLabel_char		<- taxidMowExtend_df$Binomial[which(taxidMowExtend_df$Taxid == tip)]
+}))
+
+# Relabel the time tree to the Mowgli extension
 AG_conTime_tree$tip.label	<- unlist(lapply(AG_conTime_tree$tip.label, function(tip) {
 	newTipLabel_char		<- taxidMowExtend_df$Extension[which(taxidMowExtend_df$Taxid == tip)]
 }))
-
-# Double check the clado (Astral) and time (consensus) topologies are the same
-cladoVsTime_rfDist	<- RF.dist(AG_mowClado_tree, AG_conTime_tree)
 
 # Remove the BS values and conver the phylo4
 AG_conTime_tree$node.label	<- NULL
 AG_conTime_as4		<- phylo4(AG_conTime_tree)
 
-# Relabel internal timeTree nodes to match the Mowgli labels in the clado tree
-AG_conTime_intNodes	<- nodeId(AG_conTime_as4, "internal")
+# Double check the clado (Astral) and time (consensus) topologies are the same
+cladoVsTime_rfDist	<- RF.dist(AG_mowClado_tree, AG_conTime_tree)
+```
 
-# For each internal node in the time tree find a corresponding internal clado node
-# with the same underlying tips, then relabel that time tree node with the corresponding
-# clado (mowgli) label
+The Robinson-Foulds distance between the Mowgli (Clado) and Consensus (Time) trees is: `r cladoVsTime_rfDist`
+
+
+## Confirm node identity
+```{r matchCladoTimeNodes, message = FALSE, warning = FALSE, cache = TRUE}
+# Relabel internal timeTree nodes to match the Mowgli labels in the clado tree
+AG_conTime_intNodes		<- nodeId(AG_conTime_as4, "internal")
+
+# Get the node labels as a data frame
+AG_mowClado_intNodes	<- nodeId(AG_mowClado_as4, "internal")
+
+# For each internal node in the time tree find a corresponding internal clado
+# node with the same underlying tips, then relabel that time tree node with the
+# corresponding clado (mowgli) label
 for (timeIntNode in AG_conTime_intNodes) {
 	matched	<- FALSE
 	for (cladoIntNode in AG_mowClado_intNodes) {
@@ -343,75 +316,97 @@ for (timeIntNode in AG_conTime_intNodes) {
 }
 ```
 
+# Read in HGT {.tabset .tabset-fade}
+## Prepare output tables
+```{r prepNodeEdgeDfs, message = FALSE, warning = FALSE, cache = TRUE}
+# A list of two dfs - the lists of all nodes found in the Clado and Time trees
+# These will be matched to the receptor nodes of the HGTs below, and is why we 
+# needed to relabel the tips to the Mowgli node IDs - to match transfer nodes.
 allNodeLabels_dfs	<- list(
 	clado = data.frame(NodeLabels = labels(AG_mowClado_as4, "all"), stringsAsFactors = FALSE),
 	time = data.frame(NodeLabels = labels(AG_conTime_as4, "all"), stringsAsFactors = FALSE)
 )
 
+# Prepare tree-edge based dfs. Each edge, flanked by two nodes (E1 & E2) will
+# have transfers assigned. In the HGT prediction the "receptor node" corresponds
+# to the bottom of the edge (E2). The list of node (above) and edges appear in
+# an identical order within each tree, so we can assign the transfers to the edges
+# using the mowgli node IDs.
 allEdgeFinal_dfs	<- list(clado = data.frame(AG_mowClado_tree$edge, Subgroup = NA), time = data.frame(AG_conTime_tree$edge, Subgroup = NA))
 allEdgeFinal_dfs	<- lapply(allEdgeFinal_dfs, setnames, c("E1", "E2", "Subgroup"))
 
-
+# Create columns for each penalty tested (minimal penalty for consistent HGT)
+# is T4 (i.e. consistent over penalties 3 and 4)
 allPenNames_char	<- lapply(penalty_list, function(penalty) paste0("T", penalty))
 allEdgeFinal_dfs	<- lapply(allEdgeFinal_dfs, function(df) {
-	for (penName in allPenNames_char) {
-		0 -> df[eval(penName)]
-	}
+	for (penName in allPenNames_char) {0 -> df[eval(penName)]}
 	return(df)
 })
+```
 
-
-refinedHGTs_dir		<- file.path(mowgli_dir, "Mowgli_output", "Refined_events", "Events")
+## Process lHGT data
+```{r countHGTbyEdge, message = FALSE, warning = FALSE, cache = TRUE}
+# For each penalty, process the lHGTs into each node, and assign them to an edge
+# in the tree-edge based dfs
 for (penalty in penalty_list) {
+
+	# Define and read in the consistent lHGT file
 	lHGT_name_file	<- paste0("T", penalty, "_full_lHGT_events.tsv")
 	lHGT_data_df	<- read.table(file = file.path(refinedHGTs_dir, lHGT_name_file), header = TRUE, sep = "\t")
 
+	# Define column to which HGTs are assigned
 	colName			<- paste0("T", penalty)
+	# Counter for transfers at the AG root (not plotted on tree)
 	at_root			<- 0
 
+	# Process the lHGT results line-by-line
 	for (rowIndex in 1:nrow(lHGT_data_df)) {
+
+		# Define line and extract the "receptor node"
 		row 		<- lHGT_data_df[rowIndex,]
 		recNodes	<- str_split(row$Receptor_nodes, pattern = " ", simplify = T)
 
-		if (recNodes[1] == 1531) {
+		# Check whether transfer is into the root of AG
+		if (recNodes[2] == 1375) {
 			at_root	<- at_root + 1
+		# This would be a transfer above the root of AG and shouldn't happen
 		} else if (recNodes[2] == 1531) {
 			message("Should not get this")
 		} else {
-			# If one of the nodes of the edge is '3728' - this is the Anoxy/Geobacillus root node #
 			# Pull out row number (indication of phylogeny edge) corresponding to the Mowgli tree label.
 			edgeForClado	<- grep(recNodes[2], allNodeLabels_dfs$clado$NodeLabels)
 			edgeForTime		<- grep(recNodes[2], allNodeLabels_dfs$time$NodeLabels)
 
-			## Fill in the count for the species-derived tree ##
+			# Shortcut names for the corresponding edge + penalty values (ongoing count)
 			cladoEntry		<- allEdgeFinal_dfs$clado[[colName]][which(allEdgeFinal_dfs$clado$E2 == edgeForClado)]
 			timeEntry		<- allEdgeFinal_dfs$time[[colName]][which(allEdgeFinal_dfs$time$E2 == edgeForTime)]
 
+			# Update both Time and Clado trees with an extra transfer at the edge + penalty
 			allEdgeFinal_dfs$clado[[colName]][which(allEdgeFinal_dfs$clado$E2 == edgeForClado)]	<-  cladoEntry + 1      	
 			allEdgeFinal_dfs$time[[colName]][which(allEdgeFinal_dfs$time$E2 == edgeForTime)]	<-  timeEntry + 1
 		}
-
 	}
 	message(paste0("Penalty: " , penalty, " - at root transfers: ", at_root))
 }
+```
 
-
-
-
-# 3. Subdividing the _Geobacillus_ clade {.tabset .tabset-fade}
+# Subdividing the _Anoxy / Geobacillus_ clade {.tabset .tabset-fade}
 _Aliyu et al 2016_ divides the _Geobacillus_ phylogeny into a number of species subgroups (fig 3). I applied that classification to the genomes used in this analysis. Branches separating species/tips belonging to the same subgroup are considered to not have undergone substantial differentiation and purifying selection.
 
-## 1. Read in subdivisions
-```{r read_in_subgroup, message = FALSE, warning = FALSE, cache = TRUE}
-# Read in the table constructed based on the publication #
+## Read in subdivisions
+```{r prepSubgroupData, message = FALSE, warning = FALSE, cache = TRUE}
 
-subspeciesGroup_file	<- file.path(main_dir, "Genomes", "Genome_lists", "AG_subspeciesGroups.txt")
+# Read in the table constructed based on the publication #
+subspeciesGroup_file	<- file.path(genomes_dir, "Genome_lists", "AG_subspeciesGroups.txt")
 subspeciesGroup_data	<- read.table(file = subspeciesGroup_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
 # Get those tips that have a fellow tip in the same subgroup. Isolate all the subgroups that have more than one member #
 subspecOnly_data		<- subset(subspeciesGroup_data, duplicated(subspeciesGroup_data$Group) | duplicated(subspeciesGroup_data$Group, fromLast = TRUE))
 uniqueSubGroup_char		<- unique(subspecOnly_data$Group)
+```
 
+## Assign subgroup identity
+```{r assignSubgroup, message = FALSE, warning = FALSE, cache = TRUE}
 # Label branches that connect tips belonging to the same subgroup:
 # For each group with more than one member, identify the tips. Find all the
 # descendant nodes from the common ancestor of the subgroup (they are
@@ -430,47 +425,59 @@ for (subGroup in uniqueSubGroup_char) {
 	}
 }
 
-# All other branches labelled as 0
+# All other edges labelled as 0 (not subgroup)
 allEdgeFinal_dfs	<- lapply(allEdgeFinal_dfs, function(df) {
 	df$Subgroup[is.na(df$Subgroup)]	<- 0
 	return(df)
 })
 ```
 
-```{r plot_subgroup_tree, message = FALSE, warning = FALSE, cache = TRUE}
-plotBranchbyTrait(AG_conTime_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", title = "Subgroup branches")
+```{r bySubgroupTimeTree_plot, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6}
+Royal1Pal	<- colorRampPalette(rev(wes_palette("Royal1")[1:2]))
+plotBranchbyTrait_AE(AG_conTimeBin_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", palette = Royal1Pal, title = "Subgroup branches")
 ```
 
 
-#### 4. Average transfers per branch {.tabset .tabset-fade #sect4}
+# HGT per branch {.tabset .tabset-fade}
+## Calculate fraction of all HGT
 ```{r averaging_transfers, message = FALSE, warning = FALSE, cache = TRUE}
 allEdgeFinal_fract_dfs	<- lapply(allEdgeFinal_dfs, function(df) cbind(df[,1:3], sweep(df[,-1:-3] , 2, colSums(df[,-1:-3]), "/") * 100))
 allEdgeFinal_fract_dfs	<- lapply(allEdgeFinal_fract_dfs, function(df) cbind(df, Mean = rowMeans(df[,-1:-3])))
+```
 
+## HGT-per-branch - Clado
+```{r cladoTreeByHGT_plot, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 7}
+# Color palette for HGT / branch 
+conPal <- colorRampPalette(wes_palette("Zissou1"))
 
 # Plot mean fraction of transfer per branch on the Clado tree
-plotBranchbyTrait(AG_mowClado_tree, allEdgeFinal_fract_dfs$clado$Mean, method = "edges", legend = 5, title = "Fraction of transfers")
+plotBranchbyTrait_AE(AG_mowCladoBin_tree, allEdgeFinal_fract_dfs$clado$Mean, method = "edges", legend = 5, palette = conPal, title = "Fraction of transfers")
+
 # Anotate the branches with the numeric values
 for (index in 1:nrow(allEdgeFinal_fract_dfs$clado)) {
 	entry <- allEdgeFinal_fract_dfs$clado[index,]
-	annotate_transfer_num(entry, index, "Mean")
+	AnnotateBranch(entry, index, "Mean")
 }
+```
 
+## HGT-per-branch - Time
+```{r timeTreeByHGT_plot, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 12, fig.height = 7}
 # Plot mean fraction of transfer per branch on the Time tree
-plotBranchbyTrait(AG_conTime_tree, allEdgeFinal_fract_dfs$time$Mean, method = "edges", legend = .1, title = "Fraction of transfers")
+plotBranchbyTrait_AE(AG_conTimeBin_tree, allEdgeFinal_fract_dfs$time$Mean, method = "edges", legend = .1, palette = conPal, title = "Fraction of transfers")
+
 # Anotate the branches with the numeric values
 for (index in 1:nrow(allEdgeFinal_fract_dfs$time)) {
 	entry <- allEdgeFinal_fract_dfs$time[index,]
-	annotate_transfer_num(entry, index, "Mean")
+	AnnotateBranch(entry, index, "Mean")
 }
-
 ```
 
 
-##### 3. Branch length correlation (1)
-1. Add the branch lengths from the time-resolved tree to the time-resolved dataframe. We take these directly from the Time-resolved tree: [2. Time-resolved tree](#sect1). At same time, add a point index, a mapping for each branch so any point in the correlation point can be easily associated with a branch on the tree.
-``` {r add_branch_length}
+# Continuous HGT
 
+## HGT vs Branch Length
+1. Add the branch lengths from the time-resolved tree to the time-resolved dataframe. We take these directly from the Time-resolved tree: [2. Time-resolved tree](#sect1). At same time, add a point index, a mapping for each branch so any point in the correlation point can be easily associated with a branch on the tree.
+``` {r BranchLengthAdd, message = FALSE, warning = FALSE, cache = TRUE}
 allEdgeFinal_dfs$time	<- data.frame(
 	allEdgeFinal_dfs$time,
 	Mean = allEdgeFinal_fract_dfs$time$Mean,
@@ -479,49 +486,36 @@ allEdgeFinal_dfs$time	<- data.frame(
 	SubGroupLogic = as.logical(allEdgeFinal_dfs$time$Subgroup),
 	stringsAsFactors = FALSE
 )
-
+```
+```{r branchLengthVsHGT_dotPlot, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 8}
 branchVsHGT_dotplot	<- ggplot(data = allEdgeFinal_dfs$time, mapping = aes(x = BranchLen, y = Mean, label = Index, color = SubGroupLogic)) +
 	geom_point(size = 3) +
 	geom_text(aes(label = Index), hjust = 0, vjust = -1) +
 	xlab("Branch length") + ylab("Mean fraction of HGTs across penalties") +
 	scale_color_manual(values = rev(wes_palette("Royal1")[1:2])) +
 	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "black"), panel.grid.major = element_line(colour = "grey80"))
+plot(branchVsHGT_dotplot)
+```
 
-
+```{r timeTreeByGroupIndex_plot, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6}
 Royal1Pal	<- colorRampPalette(rev(wes_palette("Royal1")[1:2]))
-plotBranchbyTrait_AE(AG_conTime_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", palette = Royal1Pal, title = "Subgroup branches")
+plotBranchbyTrait_AE(AG_conTimeBin_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", palette = Royal1Pal, title = "Subgroup branches")
 for (i in as.vector(allEdgeFinal_dfs$time$Index)) {
 	edgelabels(i, as.numeric(i), adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 0.8)
 }
-
-# Pearson + rsquared
-mean_Pcor		<- cor(allEdgeFinal_dfs$time$BranchLen, allEdgeFinal_dfs$time$Mean)
-meanRsqrd		<- summary(lm(allEdgeFinal_dfs$time$BranchLen ~ allEdgeFinal_dfs$time$Mean))$r.squared
-
-# Pearson + rsquared (without two obvious outliers)
-outlierBranchIndex	<- as.character(c(1, 8))
-allEdgeNoOut_df		<- allEdgeFinal_dfs$time[-which(allEdgeFinal_dfs$time$Index %in% outlierBranchIndex),]
-meanNoOut_Pcor		<- cor(allEdgeNoOut_df$BranchLen, allEdgeNoOut_df$Mean)
-meanNoOutRsqrd		<- summary(lm(allEdgeNoOut_df$BranchLen ~ allEdgeNoOut_df$Mean))$r.squared
-
-## Correlation when subgroup removed
-groupEdgeFinal_df	<- allEdgeFinal_dfs$time[which(allEdgeFinal_dfs$time$SubGroupLogic == FALSE),]
-# Pearson + rsquared
-meanGrp_Pcor		<- cor(groupEdgeFinal_df$BranchLen, groupEdgeFinal_df$Mean)
-meanGrpRsqrd		<- summary(lm(groupEdgeFinal_df$BranchLen ~ groupEdgeFinal_df$Mean))$r.squared
-
-# Pearson + rsquared (without two obvious outliers)
-groupEdgeNoOut_df	<- groupEdgeFinal_df[-which(groupEdgeFinal_df$Index %in% outlierBranchIndex),]
-meanGrpNoOut_Pcor	<- cor(groupEdgeNoOut_df$BranchLen, groupEdgeNoOut_df$Mean)
-meanGrpNoOutRsqrd	<- summary(lm(groupEdgeNoOut_df$BranchLen ~ groupEdgeNoOut_df$Mean))$r.squared
 ```
 
 
+## HGT vs Branch Length: Correlation
+```{r crossPenaltyCorCalc, message = FALSE, warning = FALSE, cache = TRUE}
 
-```{r calculate_correlation, message = FALSE, warning = FALSE, cache = TRUE}
-
-perPenaltyCor_list	<- lapply(penalty_list, function(penalty) {
-	penColName		<- paste0("T", penalty)
+perPenaltyCor_list	<- lapply(c(penalty_list, "Mean"), function(penalty) {
+	
+	if (is.numeric(penalty)) {
+		penColName	<- paste0("T", penalty)
+	} else {
+		penColName	<- penalty
+	}
 	time_df			<- allEdgeFinal_dfs$time
 
 	# Overall pearson + rsquared
@@ -546,8 +540,8 @@ perPenaltyCor_list	<- lapply(penalty_list, function(penalty) {
 	grpNoOut_Pcor	<- cor(grpTimeNoOut_df$BranchLen, grpTimeNoOut_df[[penColName]])
 	grpNoOutRsqrd	<- summary(lm(grpTimeNoOut_df$BranchLen ~ grpTimeNoOut_df[[penColName]]))$r.squared
 
-	outputPearson	<- data.frame(Penalty = penalty, Test = "Pearson", All = all_Pcor, NoOutlier = noOut_Pcor, Group = grp_Pcor, GroupNoOutlier = grpNoOut_Pcor)
-	outputRsqrd		<- data.frame(Penalty = penalty, Test = "Rsquared", All = allRsqrd, NoOutlier = noOutRsqrd, Group = grpRsqrd, GroupNoOutlier = grpNoOutRsqrd)
+	outputPearson	<- data.frame(Penalty = as.character(penalty), Test = "Pearson", All = all_Pcor, NoOutlier = noOut_Pcor, Group = grp_Pcor, GroupNoOutlier = grpNoOut_Pcor, stringsAsFactors = FALSE)
+	outputRsqrd		<- data.frame(Penalty = as.character(penalty), Test = "Rsquared", All = allRsqrd, NoOutlier = noOutRsqrd, Group = grpRsqrd, GroupNoOutlier = grpNoOutRsqrd, stringsAsFactors = FALSE)
 
 	return(rbind(outputPearson, outputRsqrd))
 })
@@ -555,8 +549,9 @@ perPenaltyCor_list	<- lapply(penalty_list, function(penalty) {
 perPenaltyCor_df	<- bind_rows(perPenaltyCor_list)
 perPenaltyCor_melt	<- melt(perPenaltyCor_df, id.vars = c("Penalty", "Test"), variable.name = "Subset", value.name = "StatisticValue")
 perPenaltyCor_melt$Penalty	<- factor(as.character(perPenaltyCor_melt$Penalty), levels = unique(as.character(perPenaltyCor_melt$Penalty)))
+```
 
-
+```{r crossPenaltyCor_plot, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 8, fig.height = 8}
 perPenaltyCor_plot	<- ggplot(data = perPenaltyCor_melt, mapping = aes(x = Penalty, y = StatisticValue, color = Subset, group = Subset)) +
 	geom_point(size = 3) +
 	geom_line(size = 2) +
@@ -564,9 +559,7 @@ perPenaltyCor_plot	<- ggplot(data = perPenaltyCor_melt, mapping = aes(x = Penalt
 	facet_wrap(~Test) +
 	scale_color_manual(values = rev(wes_palette("BottleRocket2")[1:4])) +
 	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "black"), panel.grid.major = element_line(colour = "grey80"))
-
-
-
+plot(perPenaltyCor_plot)
 ```
 
 

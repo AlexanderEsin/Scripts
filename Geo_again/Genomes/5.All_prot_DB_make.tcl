@@ -169,7 +169,7 @@ foreach clean_proteome $clean_proteomes {
 
 	incr databased_counter
 }
-puts "\nMaking index on the protID column ..."
+puts "\nMaking index on the protID and taxid columns ..."
 ## Make an index on the protID
 db1 eval {create index protID_index on t1 (protID)}
 db1 eval {create index taxid_index on t1 (taxid)}
