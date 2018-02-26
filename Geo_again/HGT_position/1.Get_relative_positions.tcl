@@ -43,9 +43,7 @@ proc GetRelativePosition {gene_pos oriPos_data hostGenomeLen} {
 set master_dir		/Users/aesin/Desktop/Geo_again
 set mowgli_dir		$master_dir/Mowgli/Mowgli_output
 set genome_dir		$master_dir/Genomes/Genome_lists
-set hgtPosit_dir	$master_dir/HGT_position/HGT_input
-set verPosit_dir	$master_dir/HGT_position/Ver_input
-set allPosit_dir	$master_dir/HGT_position/All_input
+set posit_dir		$master_dir/HGT_position/Position_data
 
 # Find and open the DB
 set all_db_file		$master_dir/All_prot_db
@@ -58,9 +56,6 @@ set tipKey_dir		$master_dir/Mowgli/GeneTree_input
 set cleaned_dir		$mowgli_dir/Cleaned_events
 set hgtClean_dir	$cleaned_dir/HGT_events
 set verClean_dir	$cleaned_dir/Ver_events
-
-# Make output directory
-file mkdir			$hgtPosit_dir $verPosit_dir $allPosit_dir
 
 
 ## Positions of starting genes (dnaA and polB III)
@@ -87,7 +82,6 @@ foreach entry $startLocTag_data {
 	if {[llength $accAss_entry] == 1} {set accAss_entry [lindex $accAss_entry 0]} else {error "Not finding exactly 1 entry for acc_ass: $acc_ass"}
 	# Get the taxid
 	set taxid			[lindex [split $accAss_entry \t] 1]
-	puts $taxid
 
 	set dbEntry			[allProt_db eval {SELECT taxid, gene_start, gene_end, strand FROM t1 WHERE taxid = $taxid AND locus = $dnaA_locTag}]
 	set dbEntry_list	[join $dbEntry \t]
@@ -108,7 +102,7 @@ foreach hgtType $hgtType_list {
 		puts "Working on $hgtType penalty = $penalty..."
 
 		# Prepare the output list
-		set penaltyOut_head		[list "orthGroup" "protID" "locusTag" "taxid" "binomial" "geneStart" "geneEnd" "strand" "relGeneStart" "relGeneEnd" "relStrand"]
+		set penaltyOut_head		[list "orthGroup" "protID" "locusTag" "taxid" "binomial" "COGcat" "geneStart" "geneEnd" "strand" "relGeneStart" "relGeneEnd" "relStrand"]
 
 		if {$hgtType eq "lHGT" || $hgtType eq "sHGT"} {
 			set inputEvents_file	$hgtClean_dir/T$penalty\_full_$hgtType\_events.tsv
@@ -166,7 +160,7 @@ foreach hgtType $hgtType_list {
 					set protID			$tipID
 				}
 				
-				set prot_data		[allProt_db eval {SELECT OrthGroup, protID, locus, taxid, binomial, gene_start, gene_end, strand, genome_l FROM t1 where protID = $protID}]
+				set prot_data		[allProt_db eval {SELECT OrthGroup, protID, locus, taxid, binomial, COGcat, gene_start, gene_end, strand, genome_l FROM t1 where protID = $protID}]
 
 				set taxid			[lindex $prot_data 3]
 				set hostGenomeLen	[lindex $prot_data end]
@@ -217,13 +211,16 @@ foreach hgtType $hgtType_list {
 
 		puts "\nProcessed a total of [expr $totalTipIDs - 1] protein IDs\n"
 
-		if {$hgtType eq "lHGT" || $hgtType eq "sHGT"} {
-			set output_file		$hgtPosit_dir/T$penalty\_$hgtType\_positionData.tsv
-		} elseif {$hgtType eq "Ver"} {
-			set output_file		$verPosit_dir/T$penalty\_$hgtType\_positionData.tsv
-		} elseif {$hgtType eq "All"} {
-			set output_file		$allPosit_dir/$hgtType\_positionData.tsv
+		## Define and make output directory
+		set output_dir			$posit_dir/$hgtType\_input
+		file mkdir				$output_dir
+
+		## Write out data
+		if {$hgtType eq "All"} {
+			set output_file		$output_dir/$hgtType\_positionData.tsv
 			set allDone_flag	TRUE
+		} else {
+			set output_file		$output_dir/T$penalty\_$hgtType\_positionData.tsv
 		}
 		
 		set output_chan		[open $output_file w]

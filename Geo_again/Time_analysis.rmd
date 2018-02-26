@@ -192,6 +192,10 @@ penalty_list	<- list(4, 5, 6)
 main_dir		<- "/Users/aesin/Desktop/Geo_again"
 genomes_dir		<- file.path(main_dir, "Genomes")
 mowgli_dir		<- file.path(main_dir, "Mowgli")
+output_dir		<- file.path(main_dir, "HGT_time", "Data")
+
+# Create output directory
+dir.create(output_dir, showWarnings = FALSE)
 
 # This directory contains the consistent HGT results
 # AE: changed Refined_events to Clean_events to remove the plasmid-contaminated events
@@ -237,6 +241,9 @@ taxidMowExtend_df[,4]		<- apply(taxidMowExtend_df, 1, function(row) {
 # Rename columns 
 names(taxidMowExtend_df)	<- c("Full", "Taxid", "Extension", "Binomial")
 
+## Write out the table for future use
+write.table(taxidMowExtend_df, file = file.path(output_dir, "Taxid2MowTip_table.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+
 # Translate the mowgli clado tree tips to binomials
 AG_mowCladoBin_tree		<- AG_mowClado_tree
 AG_mowCladoBin_tree$tip.label	<- unlist(lapply(AG_mowCladoBin_tree$tip.label, function(tip) {
@@ -272,6 +279,7 @@ AG_conTime_tree$tip.label	<- unlist(lapply(AG_conTime_tree$tip.label, function(t
 # Remove the BS values and conver the phylo4
 AG_conTime_tree$node.label	<- NULL
 AG_conTime_as4		<- phylo4(AG_conTime_tree)
+
 
 # Double check the clado (Astral) and time (consensus) topologies are the same
 cladoVsTime_rfDist	<- RF.dist(AG_mowClado_tree, AG_conTime_tree)
@@ -314,6 +322,9 @@ for (timeIntNode in AG_conTime_intNodes) {
 		stop(paste0("Time tree node: ", timeIntNode, " did not map to any species tree node\n"))
 	}
 }
+
+## Write out the time tree (for use in other scripts - e.g. HGT_position)
+write.tree(as(AG_conTime_as4, "phylo"), file = file.path(output_dir, "AG_conTimeTree.tree"))
 ```
 
 # Read in HGT {.tabset .tabset-fade}
@@ -499,7 +510,7 @@ plot(branchVsHGT_dotplot)
 
 ```{r timeTreeByGroupIndex_plot, message = FALSE, warning = FALSE, cache = TRUE, fig.width = 10, fig.height = 6}
 Royal1Pal	<- colorRampPalette(rev(wes_palette("Royal1")[1:2]))
-plotBranchbyTrait_AE(AG_conTimeBin_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", palette = Royal1Pal, title = "Subgroup branches")
+plotBranchbyTrait_AE(AG_mowCladoBin_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", palette = Royal1Pal, title = "Subgroup branches")
 for (i in as.vector(allEdgeFinal_dfs$time$Index)) {
 	edgelabels(i, as.numeric(i), adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 0.8)
 }
