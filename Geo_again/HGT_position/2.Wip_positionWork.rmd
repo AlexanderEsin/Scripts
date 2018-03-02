@@ -24,6 +24,170 @@ knitr::opts_chunk$set(	fig.width	= 10,
 
 ```
 
+AxisCircularRad_AE  <- function(at, units, labels, attext, tick, tcl, tcl.text, cex, col, lty, lwd, tcl.offset) {
+	r <- tcl.offset + tcl * c(-1/2, 1/2)
+	r.l <- tcl.offset - tcl.text
+	z <- cos(at)
+	y <- sin(at)
+	
+	for (i in 1:length(at)) {
+		if (tick) {
+			lines.default(z[i] * r, y[i] * r, col = col, lty = lty, 
+						  lwd = lwd)
+		}
+		if (is.null(labels)) {
+			labeltext <- substitute(at * pi, list(at = attext[i]))
+		}
+		else {
+			labeltext <- labels[i]
+		}
+		text.default(z[i] * r.l, y[i] * r.l, labeltext, cex = cex, col = col)
+	}
+	# text(0, 0, "+", cex = 1, col = col)
+}
+
+axis.circular_AE    <- function(at = NULL, labels = NULL, units = NULL, template = NULL, modulo = NULL, zero = NULL, rotation = NULL, tick = TRUE, lty, lwd, cex, col, font, tcl = 0.025, tcl.text = 0.125, tcl.offset = 1, digits = 2) {
+	
+	if (missing(cex)) 
+		cex <- par("cex.axis")
+	if (missing(col)) 
+		col <- par("col.axis")
+	if (missing(font)) 
+		font <- par("font.axis")
+	if (missing(lty)) 
+		lty <- par("lty")
+	if (missing(lwd)) 
+		lwd <- par("lwd")
+	
+	
+	
+	if (is.null(at)) {
+		if (is.null(template) | template == "none" | template == 
+			"geographics") {
+			at <- circular(c(0, pi/2, pi, 3/2 * pi), rotation = rotation, 
+						   zero = zero)
+		}
+		else if (template == "clock24") {
+			at <- circular(seq(0, 23), units = "hours", rotation = rotation, 
+						   zero = zero)
+			units <- "hours"
+		}
+		else if (template == "clock12") {
+			at <- circular(seq(0, 11), units = "hours", rotation = rotation, 
+						   zero = zero)
+			units <- "hours"
+		}
+	}
+	
+	at <- na.omit(at)
+	atcircularp <- attr(as.circular(at), "circularp")
+	type <- atcircularp$type
+	if (is.null(modulo)) 
+		modulo <- atcircularp$modulo
+	if (is.null(units)) 
+		units <- atcircularp$units
+	if (is.null(template)) 
+		template <- atcircularp$template
+	if (template == "geographics" | template == "clock24") {
+		zero <- pi/2
+		rotation <- "clock"
+	} else if (template == "clock12") {
+		zero <- pi/2
+		rotation <- "clock"
+	} else {
+		if (is.null(zero)) 
+			zero <- atcircularp$zero
+		if (is.null(rotation)) 
+			rotation <- atcircularp$rotation
+	}
+	atasis <- at
+	attr(atasis, "circularp") <- attr(atasis, "class") <- NULL
+	attext <- atasis/pi
+	if (modulo == "2pi") {
+		if (units == "radians") {
+			atasis <- atasis%%(2 * pi)
+		} else if (units == "degrees") {
+			atasis <- atasis%%(360)
+		} else if (units == "hours") {
+			atasis <- atasis%%(24)
+		}
+		attext <- attext%%2
+	} else if (modulo == "pi") {
+		if (units == "radians") {
+			atasis <- atasis%%pi
+		} else if (units == "degrees") {
+			atasis <- atasis%%180
+		} else if (units == "hours") {
+			atasis <- atasis%%12
+		}
+		attext <- attext%%1
+	}
+	attext <- round(attext, digits = digits)
+	if (template == "clock12") {
+		at <- 2 * at
+	}
+	at <- conversion.circular(at, units = "radians", modulo = "2pi", zero = 0, rotation = "counter")
+	
+	attr(at, "circularp") <- attr(at, "class") <- NULL
+	
+	if (is.null(labels)) {
+		if (length(atasis) == 4 && all(atasis == c(0, pi/2, pi, 3/2 * pi))) {
+			if (template == "geographics") {
+				labels <- c("N", "E", "S", "W")
+			} else {
+				if (units == "radians") {
+					labels <- c("0", expression(frac(pi, 2)), expression(pi), 
+								expression(frac(3 * pi, 2)))
+				} else if (units == "degrees") {
+					labels <- c("0", "90", "180", "270")
+				}
+			}
+		} else if (length(atasis) == 12 && all(atasis == 0:11) && 
+				   template == "clock12") {
+			labels <- c("0/12", "1", "2", "3", "4", "5", "6", 
+						"7", "8", "9", "10", "11")
+		} else if (length(atasis) == 24 && all(atasis == 0:23) && 
+				   template == "clock24") {
+			labels <- c("0/24", "1", "2", "3", "4", "5", "6", 
+						"7", "8", "9", "10", "11", "12", "13", "14", 
+						"15", "16", "17", "18", "19", "20", "21", "22", 
+						"23")
+		} else if (units == "radians") {
+			labels <- as.character(round(atasis, digits = digits))
+		} else if (units == "degrees") {
+			labels <- as.character(round(atasis, digits = digits))
+		} else if (units == "hours") {
+			labels <- as.character(round(atasis, digits = digits))
+		}
+	}
+	if (!is.null(labels) && length(at) != length(labels)) 
+		stop("'at' and 'labels' must have the same length")
+	AxisCircularRad_AE(at, units, labels, attext, tick, tcl, tcl.text, cex, col, lty, lwd, tcl.offset)
+}
+
+
+summary.circular_AE <- function(object, digits = max(3, getOption("digits") - 3), control.circular = list(), ...) {
+	
+	if (is.matrix(object)) {
+		return(summary.matrix(object, ...))
+	}
+	if (is.data.frame(object)) {
+		return(summary.data.frame(object, ...))
+	}
+	else {
+		nas <- is.na(object)
+		object <- object[!nas]
+		n <- length(object)
+		qq <- minusPiPlusPi(quantile.circular(object))
+		qq <- signif(c(n, qq[1L:3L], mean.circular(object, control.circular = control.circular), qq[4L:5L], 
+			rho.circular(object)), digits)
+		names(qq) <- c("n", "Min.", "1st Qu.", "Median", "Mean", 
+			"3rd Qu.", "Max.", "Rho")
+		if (any(nas)) 
+			# c(qq, `NA's` = sum(nas))
+		else qq
+	}
+}
 
 combined_species_data	<- function(species = species, penalty = penalty, bandwith = bandwith, window = window, subgroup_data = subgroup_data, cog_data = cog_data, set_names = c("all", "const", "long", "vert", "short")) {
 	
@@ -112,14 +276,14 @@ window_size	= 500
 
 
 
-
-
-
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("circular", "polyclip", "RCircos", "stringr", "dplyr", "reshape2")
+pacman::p_load("ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "ggplot2", "wesanderson")
 
 
-getSubgroupData		<- function() {
+getSubgroupData		<- function(genome_dir = NA) {
+	if (is.na(genome_dir)) {
+		stop("Need to provide \'Genome\' directory")
+	}
 	subspeciesGroup_file	<- file.path(genome_dir, "Genome_lists", "AG_subspeciesGroups.txt")
 	subspeciesGroup_data	<- read.table(file = subspeciesGroup_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
@@ -176,8 +340,8 @@ processInputData	<- function(dataType = "All", penalty = NA, inputDir, bandwith,
 	genePos_data	<- read.table(file = genePos_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
 	# Circularise the relative start and end positions
-	genePos_data$CircStart	<- circular(genePos_data$relGeneStart * (2 * pi))
-	genePos_data$CircEnd	<- circular(genePos_data$relGeneEnd * (2 * pi))
+	genePos_data$CircStart	<- circular(genePos_data$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+	genePos_data$CircEnd	<- circular(genePos_data$relGeneEnd * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
 
 	# Calculate circular density (on the start position)
 	genePosDens		<- density.circular(genePos_data$CircStart, kernel = "vonmises", bw = bandwith)
@@ -199,23 +363,120 @@ processInputData	<- function(dataType = "All", penalty = NA, inputDir, bandwith,
 	return(list(Penalty = penalty, allPosData = genePos_data, circDensity = genePosDens))
 }
 
-getPropCOG	<- function(dataType, Penalty = NA) {
 
-	if (is.na(Penalty)) {
-		COG			<- unlist(perTypeData[[dataType]]$allPosData$COGcat)
-		colName		<- "Prop_All"
-	} else {
-		COG			<- unlist(perTypeData[[dataType]][[Penalty]]$allPosData$COGcat)
-		colName		<- paste0(dataType, "_T", Penalty)
+## // Circular plots // ##
+basicPositionPlot	<- function(dataDensityA, dataDensityB = NA, bgDensity, shrink = 1.4, titleCex = 1.2, titleName = "", tcl.offset = 1, uin = 2.1) {
+
+	# Check all data input is density.circular
+	dataClass_l	<- lapply(list(dataDensityA, bgDensity), class)
+	uniqueClass	<- unique(dataClass_l)
+	if (length(uniqueClass) != 1 || uniqueClass != "density.circular") {
+		stop("All data must be of class \'density.circular\'")
 	}
-	
-	COG_df			<- as.data.frame(table(COG), stringsAsFactors = FALSE)
-	totalCOGs		<- sum(COG_df$Freq)
-	COG_df$Prop		<- COG_df$Freq / totalCOGs
 
-	names(COG_df)[3]	<- colName
-	return(list(propDF = COG_df[,-2], totalCOGs = totalCOGs))
+	# Colour background
+	par(bg = '#333233')
+
+	# Produce main plot and use the info for further plotting
+	mainPlot <- circular:::plot.density.circular(
+		x = bgDensity,
+		points.plot = F,
+		uin = uin,
+		axes = F,
+		xlab = NA,
+		ylab = NA,
+		control.circle = circle.control(type = "n"),
+		nosort = T,
+		lwd = 1.5,
+		col = "transparent",
+		ylim = c(-1.1, 1.1),
+		plot.type = "circle",
+		zero = (pi/2),
+		rotation = "clock",
+		shrink = shrink,
+		main = ""
+	)
+
+	# Density lines
+	bg_line	<- lines(bgDensity, lwd = 1.5, col = "transparent", plot.info = mainPlot, shrink = shrink)
+	A_line	<- lines(dataDensityA, lwd = 0, col = "transparent", plot.info = mainPlot, shrink = shrink)
+
+	# Set up colours
+	enrichUp	<- alpha(wes_palette("Darjeeling1")[2], 0.5)
+	enrichDown	<- alpha(wes_palette("Darjeeling1")[1], 0.5)
+
+	# Colour polygons
+	lapply(polyclip(A = list("x" = A_line$x, "y" = A_line$y), B = list("x" = bg_line$x, "y" = bg_line$y), op = "minus"), polygon, col = enrichUp, border = enrichUp)
+	lapply(polyclip(A = list("x" = bg_line$x, "y" = bg_line$y), B = list("x" = A_line$x, "y" = A_line$y), op = "minus"), polygon, col = enrichDown, border = enrichDown)
+
+	# If provided, plot the other data as a seperate line
+	if (!identical(dataDensityB, NA) & identical(class(dataDensityB), "density.circular")) {
+		Bline_col	<- alpha(wes_palette("Darjeeling1")[3], 0.8)
+		B_line		<- lines(dataDensityB, lwd = 1.5, col = Bline_col, plot.info = mainPlot, shrink = shrink)
+	}
+
+	# Replot the background line so it appears on top of the polygons
+	bg_line	<- lines(bgDensity, lwd = 1, col = "#D9D9D9", plot.info = mainPlot, shrink = shrink)
+
+	# Place the title in the middle
+	text(0, 0.2, titleName, cex = titleCex, col = "#D9D9D9", font = 4)
+
+	# Draw the axis - use custom functions to allow the the axis lines to be offset by a custom value
+	par(cex.axis = titleCex)
+	axis.circular_AE(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi / 2), template = "none", tcl = 0.3, tcl.text = 0.25, col = "#D9D9D9", tcl.offset = tcl.offset)
+
+	# Record the plot as an object
+	recordedPlot	<- recordPlot()
+	return(recordedPlot)
 }
+
+## // ggplot // ##
+centerLegendTitle	<- function(plot) {
+	## Requires gtools
+
+	# extract legend
+	g		<- ggplotGrob(plot)
+	grobs 	<- g$grobs
+	legend_index	<- which(sapply(grobs, function(x) x$name) == "guide-box")
+	legend	<- grobs[[legend_index]]
+
+	# extract guides table
+	guides_index 	<- which(sapply(legend$grobs, function(x) x$name) == "layout")
+	guides	<- legend$grobs[[guides_index]]
+
+	# add extra column for spacing
+	# guides$width[5] is the extra spacing from the end of the legend text
+	# to the end of the legend title. If we instead distribute it 50:50 on
+	# both sides, we get a centered legend
+	guides	<- gtable_add_cols(guides, 0.5*guides$width[5], 1)
+	guides$widths[6]	<- guides$widths[2]
+	title_index	<- guides$layout$name == "title"
+	guides$layout$l[title_index]	<- 2
+
+	# reconstruct legend and write back
+	legend$grobs[[guides_index]]	<- guides
+	g$grobs[[legend_index]]			<- legend
+
+	return(g)
+}
+
+darkTheme	<- theme(
+	plot.background = element_rect(fill = "#333233", color = NA),
+	panel.background = element_rect(fill = "transparent", color = NA),
+	panel.grid.major = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.5)),
+	panel.grid.minor = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.5)),
+	axis.ticks = element_line(size = 0.2, color = "#D9D9D9"),
+	plot.title = element_text(size = 16, hjust = 0.5, color = "#D9D9D9"),
+	legend.key = element_rect(fill = "transparent", color = NA),
+	legend.background = element_rect(fill = "transparent", color = NA),
+	legend.text = element_text(size = 14, color = "#D9D9D9"),
+	legend.title = element_text(size = 14, color = "#D9D9D9"),
+	legend.title.align = 0.5,
+	axis.title = element_text(size = 14, color = "#D9D9D9"),
+	axis.text = element_text(size = 14, colour = "#D9D9D9")
+)
+
+
 
 
 master_dir			<- "/Users/aesin/Desktop/Geo_again"
@@ -239,7 +500,7 @@ perTypeData	<- lapply(dataTypes, function(dataType) {
 	}
 
 	# Get the branches corresponding to subgroups (for lHGT and sHGT data types)
-	subgroupBranches	<- getSubgroupData()
+	subgroupBranches	<- getSubgroupData(genome_dir = genome_dir)
 
 	## For Vertical, lHGT, and sHGT read in the position data per penalty
 	perPenaltyData	<- lapply(penalty_list, function(penalty) {
@@ -253,8 +514,321 @@ perTypeData	<- lapply(dataTypes, function(dataType) {
 names(perTypeData)	<- dataTypes
 
 
+## Check the Vertical density across different penalty values
+quartz(width = 12, height = 12)
+par(mfrow = c(2, 2))
+par(mar = c(0, 0, 0, 0))
+invisible(lapply(penalty_list, function(penalty) {
 
-## Basic functional analysis
+	vertDensity	<- perTypeData$Ver[[penalty]]$circDensity
+	allDensity	<- perTypeData$All$circDensity
+
+	# Number of genes for each density plot
+	numGenes	<- length(vertDensity$data)
+
+	position_plot	<- basicPositionPlot(dataDensityA = vertDensity, bgDensity = allDensity, shrink = 0.7, tcl.offset = 0.8, titleName = paste0("Vertical Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
+	replayPlot(position_plot)
+}))
+
+
+## Check lHGT density across different penalty values
+quartz(width = 12, height = 12)
+par(mfrow = c(2, 2))
+par(mar = c(0, 0, 0, 0))
+invisible(lapply(penalty_list, function(penalty) {
+
+	lHGTDensity	<- perTypeData$lHGT[[penalty]]$circDensity
+	allDensity	<- perTypeData$All$circDensity
+	vertDensity	<- perTypeData$Ver$'3'$circDensity
+
+	# Number of genes for each density plot
+	numGenes	<- length(lHGTDensity$data)
+
+	position_plot	<- basicPositionPlot(dataDensityA = lHGTDensity, dataDensityB = vertDensity, bgDensity = allDensity, shrink = 0.7, tcl.offset = 0.8, titleName = paste0("lHGT Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
+	replayPlot(position_plot)
+}))
+
+
+## Compare lHGT and sHGT density at a given penalty
+quartz(width = 12, height = 6.5)
+par(mfrow = c(1, 2))
+par(mar = c(0, 0, 0, 0))
+penalty	<- "4"
+invisible(lapply(list("lHGT", "sHGT"), function(dataType) {
+
+	HGTDensity	<- perTypeData[[dataType]][[penalty]]$circDensity
+	allDensity	<- perTypeData$All$circDensity
+	vertDensity	<- perTypeData$Ver$'3'$circDensity
+
+	# Number of genes for each density plot
+	numGenes	<- length(HGTDensity$data)
+
+	position_plot	<- basicPositionPlot(dataDensityA = HGTDensity, dataDensityB = vertDensity, bgDensity = allDensity, shrink = 0.7, tcl.offset = 0.8, titleName = paste0(dataType, " Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
+	replayPlot(position_plot)
+}))
+
+
+
+## Compare group vs subgroup lHGT density at a given penalty
+quartz(width = 21, height = 8)
+par(mfrow = c(1, 3))
+par(mar = c(0, 0, 0, 0))
+penalty	<- "3"
+invisible(lapply(list("lHGT", "Group", "Subgroup"), function(type) {
+
+	dataShortcut	<- perTypeData$lHGT[[penalty]]$allPosData
+
+	if (identical(type, "Group")) {
+		typeCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
+	} else if (identical(type, "Subgroup")) {
+		typeCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
+	} else {
+		typeCircStart	<- dataShortcut$CircStart
+	}
+
+	# Calculate circular density (on the start position)
+	HGTDensity	<- density.circular(typeCircStart, kernel = "vonmises", bw = bandwith)
+	allDensity	<- perTypeData$All$circDensity
+	vertDensity	<- perTypeData$Ver$'3'$circDensity
+
+	# Number of genes for each density plot
+	numGenes	<- length(HGTDensity$data)
+
+	position_plot	<- basicPositionPlot(dataDensityA = HGTDensity, dataDensityB = vertDensity, bgDensity = allDensity, shrink = 0.7, tcl.offset = 0.8, titleCex = 1.8, titleName = paste0(type, " Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
+	replayPlot(position_plot)
+}))
+
+quartz.save(file = "/Users/aesin/Desktop/Geo_again/HGT_position/lHGT_grp_sub.png")
+
+
+
+
+
+
+
+
+penalty		<- "4"
+bandwith	<- 2000
+binomials	<- unique(perTypeData$All$allPosData$binomial)
+
+perSpeciesCircStart_list	<- lapply(binomials, function(binomial) {
+	hgtRelStart		<- perTypeData$lHGT[[penalty]]$allPosData$relGeneStart[which(perTypeData$lHGT[[penalty]]$allPosData$binomial == binomial)]
+	hgtCircStart	<- circular(hgtRelStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+	return(hgtCircStart)
+})
+names(perSpeciesCircStart_list)	<- binomials
+
+
+
+perSpeciesCircSummary_list <- lapply(1:length(perSpeciesCircStart_list), function(index) {
+	speciesCircSum	<- summary.circular(perSpeciesCircStart_list[[index]])
+	speciesName		<- names(perSpeciesCircStart_list)[index]
+
+	SpeciesCircSum_df	<- cbind(Species = speciesName, as.data.frame(t(speciesCircSum)), stringsAsFactors = FALSE)
+	return(SpeciesCircSum_df)
+})
+
+perSpeciesCircSummary_df	<- bind_rows(perSpeciesCircSummary_list)
+
+
+
+ggplot(perSpeciesCircSummary_df, aes(x = Mean, y = Rho, color = Species, label = Species)) +
+    guides(color = FALSE) +
+    scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
+    scale_y_continuous(limits = c(0, 0.25)) +
+    coord_polar() +
+    geom_point() +
+	geom_text(aes(label = ifelse(Rho > 0.1, as.character(Species),'')), hjust = -0.05, vjust = 0.5, angle = -45)
+
+
+
+
+
+perSpeciesCircSummary_mat <- as.matrix(perSpeciesCircSummary_df[,c(6,9)])
+rownames(perSpeciesCircSummary_mat)	<- perSpeciesCircSummary_df$Species
+plot(hclust(dist(perSpeciesCircSummary_mat), method = "ward.D2"), col = "#D9D9D9", col.axis = "#D9D9D9")
+
+
+
+
+perSpecies_plots	<- lapply(binomials, function(binomial) {
+
+	# print(binomial)
+	allCircStart	<- perTypeData$All$allPosData$CircStart[which(perTypeData$All$allPosData$binomial == binomial)]
+	hgtCircStart	<- perTypeData$lHGT[[penalty]]$allPosData$CircStart[which(perTypeData$lHGT[[penalty]]$allPosData$binomial == binomial)]
+	vertCircStart	<- perTypeData$Ver[[penalty]]$allPosData$CircStart[which(perTypeData$Ver[[penalty]]$allPosData$binomial == binomial)]
+	
+	# # Calculate circular density (on the start position)
+	allDensity	<- density.circular(allCircStart, kernel = "vonmises", bw = bandwith)
+	HGTDensity	<- density.circular(hgtCircStart, kernel = "vonmises", bw = bandwith)
+	vertDensity	<- density.circular(vertCircStart, kernel = "vonmises", bw = bandwith)
+
+	# Number of genes for each density plot
+	numGenes	<- length(HGTDensity$data)
+
+	position_plot	<- basicPositionPlot(dataDensityA = HGTDensity, dataDensityB = vertDensity, bgDensity = allDensity, shrink = 0.7, tcl.offset = 0.8, titleName = paste0(binomial, "\nlHGT Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
+	return(position_plot)
+})
+names(perSpecies_plots)	<- binomials
+
+
+quartz(width = 18, height = 6.5)
+par(mfrow = c(1, 3))
+par(mar = c(0, 0, 0, 0))
+replayPlot(perSpecies_plots$`Geobacillus genomosp. 3`)
+perSpecies_plots$`Anoxybacillus flavithermus`
+perSpecies_plots$`Geobacillus sp. Y412MC61`
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Test whether the lHGT Group & lHGT subGroup distributions vary at any penalty
+
+testGrpSubgrpDistrib	<- lapply(penalty_list, function(penalty) {
+
+	dataShortcut	<- perTypeData$lHGT[[penalty]]$allPosData
+
+	groupCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
+	subgrCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
+
+	ksResult	<- ks.test(groupCircStart, subgrCircStart)
+	return(list(Penalty = penalty, ksResult = ksResult, numGrp = length(groupCircStart), numSubgrp = length(subgrCircStart)))
+})
+
+
+## Test the spacing uniformity - e.g. the "All" set is significantly uniform
+# rao.spacing.test
+
+## Consider rao.test
+
+## Consider wallraff.test
+
+## Consider watson.two.test
+
+## Consider watson.wheeler.test 
+
+## Consider watson.williams.test
+
+wallraff.test(list(group3, sub3))
+
+
+
+dataShortcut	<- perTypeData$lHGT$'3'$allPosData
+
+group3	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
+sub3	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
+all3	<- dataShortcut$CircStart
+
+dataShortcut	<- perTypeData$lHGT$'6'$allPosData
+
+group6	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
+sub6	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
+all6	<- dataShortcut$CircStart
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## // Functional analysis // ##
+
+## For a datatype and penalty (if not "All") extract COG list and total number
+getPropCOG	<- function(dataType, Penalty = NA) {
+
+	if (is.na(Penalty)) {
+		COG			<- unlist(perTypeData[[dataType]]$allPosData$COGcat)
+		colName		<- "Prop_All"
+	} else {
+		COG			<- unlist(perTypeData[[dataType]][[Penalty]]$allPosData$COGcat)
+		colName		<- paste0(dataType, "_T", Penalty)
+	}
+	
+	COG_df			<- as.data.frame(table(COG), stringsAsFactors = FALSE)
+	totalCOGs		<- sum(COG_df$Freq)
+	COG_df$Prop		<- COG_df$Freq / totalCOGs
+
+	names(COG_df)[3]	<- colName
+	return(list(propDF = COG_df[,-2], totalCOGs = totalCOGs))
+}
+
+## Calculate the enrichment of COGs in one Class (and penalty) over another
+## For comparison against Vertical - use penalty 3 as this is the most stringent set
+calcPropEnrich	<- function(data = "lHGT", background = "Ver", penalty = "3") {
+
+	if (identical(data, background)) {
+		stop("Can't compare to itself")
+	} else if (identical(background, "Ver")) {
+		bg_df	<- perTypeCOGprop$Ver$'3'$propCOGdf
+	} else if (identical(background, "All")) {
+		bg_df	<- perTypeCOGprop$All$propCOGdf
+	}
+
+	data_df		<- perTypeCOGprop[[data]][[penalty]]$propCOGdf
+
+	join_df		<- inner_join(data_df, bg_df, by = "COG")
+	join_df$Diff		<- log(join_df[,2] / join_df[,3])
+	names(join_df)[4]	<- paste0("Diff_T", penalty)
+
+	return(join_df[,c(1,4)])
+}
+
+## Calculate the per-COG ranges of enrichment values (across penalties)
+## Produce coordinates to pass to geom_rect
+calcEnrichRangesForPlot	<- function(df, molten_df, box_width = 0.2) {
+	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
+
+	for (i in 1:length(df$COG)) {
+		COG_needed	<- levels(molten_df$COG)[i]
+		row_number	<- which(df$COG == COG_needed)
+
+		## Do not count NAs in identifying min/max values ##
+		data_line	<- df[row_number,-1]
+		data_line_clean	<- data_line[,as.vector(!is.na(data_line))]
+
+		## Calculate the max and min values for the boxes ##
+		max_y	<- max(data_line_clean)
+		min_y	<- min(data_line_clean)
+
+		coordinate_df[nrow(coordinate_df)+1, ]	<- c((i - box_width), (i + box_width), min_y, max_y)
+	}
+	return(coordinate_df)
+}
+
+
+#### //// Functional analysis //// ####
+
+## Extract functional annotation (COG) data for each dataType (Class)
 perTypeCOGprop	<- lapply(dataTypes, function(dataType) {
 
 	if (identical(dataType, "All")) {
@@ -276,230 +850,163 @@ perTypeCOGprop	<- lapply(dataTypes, function(dataType) {
 })
 names(perTypeCOGprop)	<- dataTypes
 
-# Per-penalty HGT COG enrichment
-HGTtypes	<- c("lHGT", "sHGT")
 
-functionEnrichPlots	<- lapply(HGTtypes, function(HGTtype) {
+## Common plot variables
+penCol_palette	<- colorRampPalette(wes_palette("Zissou1"))(length(penalty_list))
 
-	perPenaltyEnrich_list	<- lapply(penalty_list, function(penalty) {
-		HGT_df	<- perTypeCOGprop[[HGTtype]][[penalty]]$propCOGdf
-		Ver_df	<- perTypeCOGprop$Ver$'3'$propCOGdf
+### /// Plot number of COGs at each HGT-type at each penalty /// ###
 
-		join_df	<- inner_join(HGT_df, Ver_df, by = "COG")
+## Extract number of COGs for each dataType for each Penalty
+perTypeNumCOGs_list	<- lapply(dataTypes, function(dataType) {
 
-		# join_df$Diff		<- join_df[,2] - join_df[,3]
-		join_df$Diff		<- log(join_df[,2] / join_df[,3])
-		names(join_df)[4]	<- paste0("Diff_T", penalty)
+	## Return N/A for penalty for plotting purposes
+	if (identical(dataType, "All")) {
+		numCOGs	<- perTypeCOGprop[[dataType]]$totalCOGs
+		penalty	<- "N/A"
+		return(data.frame(Class = dataType, Penalty = penalty, numCOGs = numCOGs, stringsAsFactors = FALSE))
+	}
 
-		return(join_df[,c(1,4)])
+	## Otherwise iterate over penalty
+	perPenaltyNumCOGS_list	<- lapply(penalty_list, function(penalty) {
+		numCOGs	<- perTypeCOGprop[[dataType]][[penalty]]$totalCOGs
+		return(data.frame(Class = dataType, Penalty = penalty, numCOGs = numCOGs, stringsAsFactors = FALSE))
 	})
-
-	perPenaltyEnrich_df			<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), perPenaltyEnrich_list)
-	perPenaltyEnrich_melt		<- melt(perPenaltyEnrich_df, id.var = "COG", variable.name = "Penalty", value.name = "Enrichment")
-	perPenaltyEnrich_melt$COG	<- factor(perPenaltyEnrich_melt$COG, levels = unique(perPenaltyEnrich_melt$COG[order(-perPenaltyEnrich_melt$Enrichment)]))
-
-
-	col_ramp	<- brewer.pal(9,"YlOrRd")
-	col_palette	<- colorRampPalette(col_ramp[1:9])(ncol(perPenaltyEnrich_df)-1)
-	font_size = 12
-
-	perPenaltyEnrich_plot	<- ggplot(data = perPenaltyEnrich_melt, aes(x = COG, y = Enrichment, group = Penalty, color = Penalty)) +
-		geom_point(size = 3) +
-		theme(plot.title = element_text(hjust = 0.5)) +
-		theme(panel.grid.major = element_line(color = "grey"), plot.title = element_text(size = 12), legend.key = element_rect(fill = "gray55"), legend.text = element_text(size = font_size), legend.title = element_text(size = font_size), axis.title.x = element_text(size = font_size), axis.title.y = element_text(size = font_size), axis.text = element_text(size = font_size, colour = "black")) +
-		guides(colour = guide_legend(title.hjust = 0.5)) +
-		scale_color_manual(values = col_palette, name = "HGT Penalty")
-
-
-
-	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
-	for (i in 1:length(perPenaltyEnrich_df$COG)) {
-		COG_needed <- levels(perPenaltyEnrich_melt$COG)[i]
-		row_number <- which(perPenaltyEnrich_df$COG == COG_needed)
-
-		## Do not count NAs in identifying min/max values ##
-		data_line <- perPenaltyEnrich_df[row_number,-1]
-		data_line_clean <- data_line[,as.vector(!is.na(data_line))]
-
-		## Calculate the max and min values for the boxes ##
-		max_y <- max(data_line_clean)
-		min_y <- min(data_line_clean)
-
-		## Add vertical lines ##
-		coordinate_df[nrow(coordinate_df)+1, ] <- c((i - 0.2), (i - 0.2), min_y, max_y)
-		coordinate_df <- rbind(coordinate_df, c((i + 0.2), (i + 0.2), min_y, max_y))
-
-		## Add horizontal lines ##
-		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), min_y, min_y))
-		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), max_y, max_y))
-	}
-	perPenaltyEnrichBox_plot <- perPenaltyEnrich_plot + geom_segment(aes(x = x1, y = y1, xend = x2, yend = y2), data = coordinate_df, inherit.aes = FALSE)
-	return(perPenaltyEnrichBox_plot)
+	perPenaltyNumCOGS_df	<- bind_rows(perPenaltyNumCOGS_list)
+	return(perPenaltyNumCOGS_df)
 })
-names(functionEnrichPlots)	<- HGTtypes
+
+## Combine into dataframe and factorise the dataType
+perTypeNumCOGs_df			<- bind_rows(perTypeNumCOGs_list)
+perTypeNumCOGs_df$Class		<- factor(perTypeNumCOGs_df$Class, levels = c("All", "Ver", "lHGT", "sHGT"))
 
 
-## // Plot number of COGs at each HGT-type at each penalty // ##
+## // Plot WITH the "All" group for comparison // ##
 
+# Add a colour for "N/A" - the "All" group doesn't divide by penalty. N/A takes the last colour in the palette
+penPlusCol_palette	<- c(penCol_palette, wes_palette("Royal1")[1])
 
+# Y-axis maximum
+ymax	<-  round_any(max(perTypeNumCOGs_df$numCOGs), accuracy = 10000, f = ceiling)
 
-
-
-
-
-PlotRelativeEnrichmentBoxes <- function(merged_prop_df, set_1_name, set_2_name) {
-
-	## Log the table 
-	merged_prop_log_df	<- cbind(COG = merged_prop_df[,1], log(merged_prop_df[,-1]))
-	if (nrow(merged_prop_log_df[merged_prop_log_df$COG == "W",]) > 0) {
-		title_add <- " - Mobile Element (W) seperate"
-	} else {
-		title_add <- ""
-	}
-
-	## Melt for plotting ##
-	merged_prop_molten	<- melt(merged_prop_log_df, id.vars = "COG")
-	merged_prop_molten	<- merged_prop_molten[!is.na(merged_prop_molten$value),] 
-	merged_prop_molten$COG <- factor(merged_prop_molten$COG, levels = unique(merged_prop_molten$COG[order(-merged_prop_molten$value)]))
-
-	## Set up a colour ramp palette ##
-	col_ramp <- brewer.pal(9,"YlOrRd")
-	col_palette <- colorRampPalette(col_ramp[1:9])(ncol(merged_prop_log_df)-1)
-
-	## Prepare the point plot ##
-	font_size = 12
-	plot_relative_HGT <- ggplot(merged_prop_molten, aes(x = COG, y = value, group = variable, color = variable)) + 
-			geom_point(size = 3) +
-			scale_y_continuous(paste0("Enrichment: ", set_1_name, " / ", set_2_name)) +
-			ggtitle(paste0("COG enrichment for \"", set_1_name, "\" set versus \"", set_2_name, "\" set ", title_add)) + 
-			theme(plot.title = element_text(hjust = 0.5)) +
-			theme(panel.grid.major = element_line(color = "grey"), plot.title = element_text(size = 12), legend.key = element_rect(fill = "gray55"), legend.text = element_text(size = font_size), legend.title = element_text(size = font_size), axis.title.x = element_text(size = font_size), axis.title.y = element_text(size = font_size), axis.text = element_text(size = font_size, colour = "black")) +
-			guides(colour = guide_legend(title.hjust = 0.5)) +
-			scale_color_manual(values = col_palette, name = "HGT Penalty")
-
-	## Draw boxes ##
-	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
-
-	for (i in 1:length(merged_prop_log_df$COG)) {
-		COG_needed <- levels(merged_prop_molten$COG)[i]
-		row_number <- which(merged_prop_log_df$COG == COG_needed)
-
-		## Do not count NAs in identifying min/max values ##
-		data_line <- merged_prop_log_df[row_number,-1]
-		data_line_clean <- data_line[,as.vector(!is.na(data_line))]
-
-		## Calculate the max and min values for the boxes ##
-		max_y <- max(data_line_clean)
-		min_y <- min(data_line_clean)
-
-		## Add vertical lines ##
-		coordinate_df[nrow(coordinate_df)+1, ] <- c((i - 0.2), (i - 0.2), min_y, max_y)
-		coordinate_df <- rbind(coordinate_df, c((i + 0.2), (i + 0.2), min_y, max_y))
-
-		## Add horizontal lines ##
-		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), min_y, min_y))
-		coordinate_df <- rbind(coordinate_df, c((i - 0.2), (i + 0.2), max_y, max_y))
-	}
-
-	plot_relative_HGT_boxes <- plot_relative_HGT + geom_segment(aes(x = x1, y = y1, xend = x2, yend = y2), data = coordinate_df, inherit.aes = FALSE)
-	return(plot_relative_HGT_boxes)
-}
-
-
-
-
-crossPenaltyCOGprop_df		<- Reduce(function(df1, df2) full_join(df1, df2, by = "COG"), perPenaltyCOGprop_list)
-crossPenaltyCOGprop_melt	<- melt(crossPenaltyCOGprop_df, id.vars = "COG", variable.name = "Penalty", value.name = "Proportion")
-
-ggplot(data = crossPenaltyCOGprop_melt, aes(x = Penalty, y = Proportion, fill = COG)) +
+# Make the plot
+byPenaltyNumCOGs_plot	<- ggplot(data = perTypeNumCOGs_df, aes(x = Class, y = numCOGs, fill = Penalty)) +
 	geom_bar(stat = "identity", position = "dodge") +
-	facet_wrap(~COG)
+	scale_fill_manual(values = penPlusCol_palette) +
+	scale_y_continuous(name = "Number of COG assignments", breaks = seq(0, ymax, by = 20000), limits = c(0, ymax)) +
+	darkTheme
+
+# Centre the legend title
+byPenaltyNumCOGs_grob	<- centerLegendTitle(byPenaltyNumCOGs_plot)
+
+# Plot the grob
+grid.newpage()
+grid.draw(byPenaltyNumCOGs_grob)
+
+
+## // Plot WITHOUT the "All" group for comparison // ##
+
+# Trim away the "All" category
+perTypeNumCOGs_trim_df	<- perTypeNumCOGs_df[-which(perTypeNumCOGs_df$Class == "All"),]
+
+# Y-axis maximum
+ymax	<-  round_any(max(perTypeNumCOGs_trim_df$numCOGs), accuracy = 10000, f = ceiling)
+
+# Make the plot as above (different y-axis breaks here)
+byPenaltyNumCOGs_trim_plot	<- ggplot(data = perTypeNumCOGs_trim_df, aes(x = Class, y = numCOGs, fill = Penalty)) +
+	geom_bar(stat = "identity", position = "dodge") +
+	scale_fill_manual(values = penCol_palette) +
+	scale_y_continuous(name = "Number of COG assignments", breaks = seq(0, ymax, by = 10000), limits = c(0, ymax)) +
+	darkTheme
+
+# Centre the legend title
+byPenaltyNumCOGs_trim_grob	<- centerLegendTitle(byPenaltyNumCOGs_trim_plot)
+
+# Plot the grob
+grid.newpage()
+grid.draw(byPenaltyNumCOGs_trim_grob)
+
+
+### /// Show Vertical COG enrichment (vs All genes) and HGT COG enrichment (vs Vertical genes) /// ###
+
+## // Plot Vertical COG enrichment vs all COGs // ##
+
+ver_perPenaltyEnrich_list	<- lapply(penalty_list, calcPropEnrich, data = "Ver", background = "All")
+ver_COGenrich_df			<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), ver_perPenaltyEnrich_list)
+ver_COGenrich_melt			<- melt(ver_COGenrich_df, id.var = "COG", variable.name = "Penalty", value.name = "Enrichment")
+ver_COGenrich_melt$COG		<- factor(ver_COGenrich_melt$COG, levels = unique(ver_COGenrich_melt$COG[order(-ver_COGenrich_melt$Enrichment)]))
+
+ver_rangeBoxes_df	<- calcEnrichRangesForPlot(ver_COGenrich_df, ver_COGenrich_melt)
+
+# Set y-limits (use the round_any function from 'plyr')
+ymax	<- round_any(max(ver_COGenrich_melt$Enrichment), accuracy = 0.5, f = ceiling)
+ymin	<- round_any(min(ver_COGenrich_melt$Enrichment), accuracy = 0.5, f = floor)
+
+## Set up main plot
+ver_byPenaltyEnrich_plot	<- ggplot(data = ver_COGenrich_melt, aes(x = COG, y = Enrichment, group = Penalty, color = Penalty)) +
+	geom_point(size = 3) +
+	guides(colour = guide_legend(title.hjust = 0.5)) +
+	scale_color_manual(labels = penalty_list, values = penCol_palette, name = "Vertical\nPenalty") +
+	scale_y_continuous(breaks = seq(ymin, ymax, by = 1), minor_breaks = NULL, limits = c(ymin, ymax)) +
+	ggtitle("COG enrichment of Vertical genes against All genes") +
+	darkTheme
+
+## Add range boxes + replot points to be above the lines
+ver_byPenaltyEnrichBox_plot <- ver_byPenaltyEnrich_plot +
+	geom_rect(data = ver_rangeBoxes_df, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), color = "white", fill = "#333233", size = 0.3, inherit.aes = FALSE) +
+	geom_point(size = 3)
+
+## Centre the legend title
+ver_byPenaltyEnrichBox_grob	<- centerLegendTitle(ver_byPenaltyEnrichBox_plot)
+
+## Plot the grob
+grid.newpage()
+grid.draw(ver_byPenaltyEnrichBox_grob)
+
+
+## // Plot HGT COG enrichment vs the stringent (T3) vertical COG predictions // ##
+
+lHGT_perPenaltyEnrich_list	<- lapply(penalty_list, calcPropEnrich, data = "lHGT", background = "Ver")
+sHGT_perPenaltyEnrich_list	<- lapply(penalty_list, calcPropEnrich, data = "sHGT", background = "Ver")
+
+lHGT_COGenrich_df			<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), lHGT_perPenaltyEnrich_list)
+lHGT_COGenrich_melt			<- melt(lHGT_COGenrich_df, id.var = "COG", variable.name = "Penalty", value.name = "Enrichment")
+
+sHGT_COGenrich_df			<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), sHGT_perPenaltyEnrich_list)
+sHGT_COGenrich_melt			<- melt(sHGT_COGenrich_df, id.var = "COG", variable.name = "Penalty", value.name = "Enrichment")
+
+lHGT_COGenrich_melt$COG		<- factor(lHGT_COGenrich_melt$COG, levels = unique(lHGT_COGenrich_melt$COG[order(-lHGT_COGenrich_melt$Enrichment)]))
+sHGT_COGenrich_melt$COG		<- factor(lHGT_COGenrich_melt$COG, levels = levels(lHGT_COGenrich_melt$COG))
+
+
+lHGT_rangeBoxes_df	<- calcEnrichRangesForPlot(lHGT_COGenrich_df, lHGT_COGenrich_melt)
+sHGT_rangeBoxes_df	<- calcEnrichRangesForPlot(sHGT_COGenrich_df, sHGT_COGenrich_melt, box_width = 0.2)
+
+# Use the round_any function (plyr)
+ymax	<- round_any(max(rbind(lHGT_COGenrich_melt, sHGT_COGenrich_melt)$Enrichment), accuracy = 0.5, f = ceiling)
+ymin	<- round_any(min(rbind(lHGT_COGenrich_melt, sHGT_COGenrich_melt)$Enrichment), accuracy = 0.5, f = floor)
+
+## Set up main plot
+HGT_byPenaltyEnrich_plot	<- ggplot(data = lHGT_COGenrich_melt, aes(x = COG, y = Enrichment, group = Penalty, color = Penalty)) +
+	geom_point(size = 3) +
+	guides(colour = guide_legend(title.hjust = 0.5)) +
+	scale_color_manual(labels = penalty_list, values = penCol_palette, name = "HGT Penalty") +
+	scale_y_continuous(breaks = seq(ymin, ymax, by = 1), minor_breaks = NULL, limits = c(ymin, ymax)) +
+	ggtitle("COG enrichment of lHGT genes against Vertical genes") +
+	darkTheme
+
+## Add range boxes + replot points to be above the lines
+sHGTbox_col	<- wes_palette("GrandBudapest1")[2]
+HGT_byPenaltyEnrichBox_plot <- HGT_byPenaltyEnrich_plot +
+	geom_rect(data = sHGT_rangeBoxes_df, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), color = sHGTbox_col, fill = "#333233", size = 0.3, inherit.aes = FALSE) +
+	geom_rect(data = lHGT_rangeBoxes_df, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), color = "white", fill = "#333233", size = 0.3, inherit.aes = FALSE) +
+	geom_point(size = 3)
+
+## Centre the legend title
+HGT_byPenaltyEnrichBox_grob	<- centerLegendTitle(HGT_byPenaltyEnrichBox_plot)
+
+## Plot the grob
+grid.newpage()
+grid.draw(HGT_byPenaltyEnrichBox_grob)
 
 
 
-## /// TEST PLOT /// ##
-
-testPenalty	<- as.character(4)
-
-dens_all	<- perTypeData$All$circsDensity
-dens_long	<- perTypeData$sHGT[[testPenalty]]$circsDensity
-dens_vert	<- perTypeData$Ver[[testPenalty]]$circsDensity
-
-shrink = 1.4
-title_cex = 1.2
-title_elev = -2
-
-plotName	<- paste0("Test plot at penalty: ", testPenalty)
-plot(	dens_all,
-		points.plot = F,
-		axes = F,
-		xlab = NA,
-		ylab = NA,
-		control.circle = circle.control(type = "n"),
-		nosort = T,
-		lwd = 2,
-		col = "white",
-		ylim = c(-1.1, 1.1),
-		plot.type = "circle",
-		zero = (pi/2),
-		rotation = "clock",
-		shrink = shrink,
-		main = ""
-)
-# Plot title and axes
-title(main = plotName, line = title_elev, cex.main = title_cex)
-axis.circular(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi /2), template = "none", tcl = 0.12, tcl.text = 0.2)
-
-# Density lines
-all_line	<- lines(dens_all, lwd = 1.5, col = "black", zero = (pi/2), rotation = "clock", ylim = c(-1.1, 1.1))
-long_line	<- lines(dens_long, lwd= 0, col = "white", zero = (pi/2), rotation = "clock", ylim = c(-1.1, 1.1))
-
-# Enrichment polygons
-lapply(polyclip(A=list("x"=long_line$x, "y"=long_line$y), B=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(0,1,0,0.5), border = rgb(0,1,0,0.5))
-lapply(polyclip(B=list("x"=long_line$x, "y"=long_line$y), A=list("x"=all_line$x, "y"=all_line$y), op="minus"), polygon, col = rgb(1,0,0,0.5), border = rgb(1,0,0,0.5))
-
-vert_line <- lines(dens_vert, lwd = 1.5, col = "blue", zero = (pi/2), rotation = "clock")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```
