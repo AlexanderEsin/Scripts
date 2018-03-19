@@ -3,12 +3,12 @@ title: HGT Density Plotting
 date: 5 Oct 2017
 output:
   html_document:
-    toc: true
-    toc_depth: 3
-    toc_float: true
-    number_sections: true
-    code_folding: hide
-    theme: cosmo
+	toc: true
+	toc_depth: 3
+	toc_float: true
+	number_sections: true
+	code_folding: hide
+	theme: cosmo
 ---
 
 ```{r global_options, include = FALSE}
@@ -24,260 +24,14 @@ knitr::opts_chunk$set(	fig.width	= 10,
 
 ```
 
-AxisCircularRad_AE  <- function(at, units, labels, attext, tick, tcl, tcl.text, cex, col, lty, lwd, tcl.offset) {
-	r <- tcl.offset + tcl * c(-1/2, 1/2)
-	r.l <- tcl.offset - tcl.text
-	z <- cos(at)
-	y <- sin(at)
-	
-	for (i in 1:length(at)) {
-		if (tick) {
-			lines.default(z[i] * r, y[i] * r, col = col, lty = lty, 
-						  lwd = lwd)
-		}
-		if (is.null(labels)) {
-			labeltext <- substitute(at * pi, list(at = attext[i]))
-		}
-		else {
-			labeltext <- labels[i]
-		}
-		text.default(z[i] * r.l, y[i] * r.l, labeltext, cex = cex, col = col)
-	}
-	# text(0, 0, "+", cex = 1, col = col)
-}
-
-axis.circular_AE    <- function(at = NULL, labels = NULL, units = NULL, template = NULL, modulo = NULL, zero = NULL, rotation = NULL, tick = TRUE, lty, lwd, cex, col, font, tcl = 0.025, tcl.text = 0.125, tcl.offset = 1, digits = 2) {
-	
-	if (missing(cex)) 
-		cex <- par("cex.axis")
-	if (missing(col)) 
-		col <- par("col.axis")
-	if (missing(font)) 
-		font <- par("font.axis")
-	if (missing(lty)) 
-		lty <- par("lty")
-	if (missing(lwd)) 
-		lwd <- par("lwd")
-	
-	
-	
-	if (is.null(at)) {
-		if (is.null(template) | template == "none" | template == 
-			"geographics") {
-			at <- circular(c(0, pi/2, pi, 3/2 * pi), rotation = rotation, 
-						   zero = zero)
-		}
-		else if (template == "clock24") {
-			at <- circular(seq(0, 23), units = "hours", rotation = rotation, 
-						   zero = zero)
-			units <- "hours"
-		}
-		else if (template == "clock12") {
-			at <- circular(seq(0, 11), units = "hours", rotation = rotation, 
-						   zero = zero)
-			units <- "hours"
-		}
-	}
-	
-	at <- na.omit(at)
-	atcircularp <- attr(as.circular(at), "circularp")
-	type <- atcircularp$type
-	if (is.null(modulo)) 
-		modulo <- atcircularp$modulo
-	if (is.null(units)) 
-		units <- atcircularp$units
-	if (is.null(template)) 
-		template <- atcircularp$template
-	if (template == "geographics" | template == "clock24") {
-		zero <- pi/2
-		rotation <- "clock"
-	} else if (template == "clock12") {
-		zero <- pi/2
-		rotation <- "clock"
-	} else {
-		if (is.null(zero)) 
-			zero <- atcircularp$zero
-		if (is.null(rotation)) 
-			rotation <- atcircularp$rotation
-	}
-	atasis <- at
-	attr(atasis, "circularp") <- attr(atasis, "class") <- NULL
-	attext <- atasis/pi
-	if (modulo == "2pi") {
-		if (units == "radians") {
-			atasis <- atasis%%(2 * pi)
-		} else if (units == "degrees") {
-			atasis <- atasis%%(360)
-		} else if (units == "hours") {
-			atasis <- atasis%%(24)
-		}
-		attext <- attext%%2
-	} else if (modulo == "pi") {
-		if (units == "radians") {
-			atasis <- atasis%%pi
-		} else if (units == "degrees") {
-			atasis <- atasis%%180
-		} else if (units == "hours") {
-			atasis <- atasis%%12
-		}
-		attext <- attext%%1
-	}
-	attext <- round(attext, digits = digits)
-	if (template == "clock12") {
-		at <- 2 * at
-	}
-	at <- conversion.circular(at, units = "radians", modulo = "2pi", zero = 0, rotation = "counter")
-	
-	attr(at, "circularp") <- attr(at, "class") <- NULL
-	
-	if (is.null(labels)) {
-		if (length(atasis) == 4 && all(atasis == c(0, pi/2, pi, 3/2 * pi))) {
-			if (template == "geographics") {
-				labels <- c("N", "E", "S", "W")
-			} else {
-				if (units == "radians") {
-					labels <- c("0", expression(frac(pi, 2)), expression(pi), 
-								expression(frac(3 * pi, 2)))
-				} else if (units == "degrees") {
-					labels <- c("0", "90", "180", "270")
-				}
-			}
-		} else if (length(atasis) == 12 && all(atasis == 0:11) && 
-				   template == "clock12") {
-			labels <- c("0/12", "1", "2", "3", "4", "5", "6", 
-						"7", "8", "9", "10", "11")
-		} else if (length(atasis) == 24 && all(atasis == 0:23) && 
-				   template == "clock24") {
-			labels <- c("0/24", "1", "2", "3", "4", "5", "6", 
-						"7", "8", "9", "10", "11", "12", "13", "14", 
-						"15", "16", "17", "18", "19", "20", "21", "22", 
-						"23")
-		} else if (units == "radians") {
-			labels <- as.character(round(atasis, digits = digits))
-		} else if (units == "degrees") {
-			labels <- as.character(round(atasis, digits = digits))
-		} else if (units == "hours") {
-			labels <- as.character(round(atasis, digits = digits))
-		}
-	}
-	if (!is.null(labels) && length(at) != length(labels)) 
-		stop("'at' and 'labels' must have the same length")
-	AxisCircularRad_AE(at, units, labels, attext, tick, tcl, tcl.text, cex, col, lty, lwd, tcl.offset)
-}
-
-
-summary.circular_AE <- function(object, digits = max(3, getOption("digits") - 3), control.circular = list(), ...) {
-	
-	if (is.matrix(object)) {
-		return(summary.matrix(object, ...))
-	}
-	if (is.data.frame(object)) {
-		return(summary.data.frame(object, ...))
-	}
-	else {
-		nas <- is.na(object)
-		object <- object[!nas]
-		n <- length(object)
-		qq <- minusPiPlusPi(quantile.circular(object))
-		qq <- signif(c(n, qq[1L:3L], mean.circular(object, control.circular = control.circular), qq[4L:5L], 
-			rho.circular(object)), digits)
-		names(qq) <- c("n", "Min.", "1st Qu.", "Median", "Mean", 
-			"3rd Qu.", "Max.", "Rho")
-		if (any(nas)) 
-			# c(qq, `NA's` = sum(nas))
-		else qq
-	}
-}
-
-combined_species_data	<- function(species = species, penalty = penalty, bandwith = bandwith, window = window, subgroup_data = subgroup_data, cog_data = cog_data, set_names = c("all", "const", "long", "vert", "short")) {
-	
-	## Get position data for the four sets: all genes; constant-predicted HGTs, long-distance HGTs, vertical genes ##
-	master_dir	<- paste0("/Users/aesin/Desktop/Geo_analysis/HGT_position/For_circular/T", penalty)
-
-	## Prepare output list for all_dfs. These contain the full data for each gene in each set in each species ##
-	all_dfs <- setNames(vector("list", length(set_names)), set_names)
-
-	# Read in the per-penalty positions for each species #
-	all_dfs <- mapply(function(all_dfs, i) 	{	directory <- paste0(master_dir, "/Per_species_", i, "/Full_entries/")
-												file_name <- paste0(directory, grep(species, dir(directory), value = T))
-												read_in_full_data(file_name)
-											},	all_dfs, names(all_dfs), SIMPLIFY = FALSE)
-
-	# Circularise the start positions #
-	all_dfs <- lapply(all_dfs, function(set) {
-		circ_coords <- circular(set$Rel_start * (2 * pi));
-		cbind(set, Circular_start = circ_coords)
-	})
-
-	# Add functional annotation to each protein entry #
-	cog_dfs	<- lapply(all_dfs, function(set) {
-		# Assume cog_data[1] is named "Full_protID"
-		set_cog_df <- merge(set, cog_data[,c(1,9,11,12,14)], by = "Full_protID", all.x = TRUE, sort = FALSE)
-		names(set_cog_df)[(ncol(set_cog_df)-3):ncol(set_cog_df)]	<- c("NOG", "COG", "Prot_name", "Mobile_element")
-		# Any NA mobile element values change to FALSE
-		set_cog_df$Mobile_element[is.na(set_cog_df$Mobile_element)] <- FALSE
-		set_cog_df[is.na(set_cog_df)] <- "-"
-		set_cog_df$COG	<- str_split(set_cog_df$COG, ",")
-		set_cog_df$NOG	<- lapply(str_split(set_cog_df$NOG, ","), function(OGs) grep("@NOG", unlist(OGs), value = TRUE))
-
-		return(set_cog_df)
-	})
-	names(cog_dfs) <- names(all_dfs)
-
-	# If we are separating by subgroup, subset the group and subgroup positions into two individual list elements #
-	if (length(grep(species, subgroup_data$species)) != 0) {
-		subgroup_index <- unlist(lapply(subgroup_data$subgroup_branches, function(edge) which(cog_dfs$long$Receptor_node == edge)))
-		cog_dfs$long_group		<- cog_dfs$long[-subgroup_index,]
-		cog_dfs$long_subgroup	<- cog_dfs$long[subgroup_index,]
-	}
-
-	# Get circular densities #
-	densities <- lapply(cog_dfs, function(set) density.circular(set$Circular_start, kernel = "vonmises", bw = bandwith))
-
-	## Process the GC enrichment data ##
-	## Requires reworking ##
-
-	gc_dir	<- paste0("/users/aesin/desktop/Geo_analysis/HGT_position/GC_content/Window_", window, "/")
-	gc_file	<- paste0(gc_dir, grep(species, dir(gc_dir), value = T))
-	gc_data	<- read.table(gc_file, header = F, sep = "\t")
-
-	colnames(gc_data)	<- c("Position", "GC_content")
-	gc_data$Circular	<- circular(gc_data$Position * (2 * pi))
-	gc_data$AT_content	<- (1 - gc_data$GC_content)
-
-	# Critical values are those where AT or GC richness > 2 * sd of dataset #
-	crit_val_gc	<- 2 * sd(gc_data$GC_content)
-	crit_val_at <- 2 * sd(gc_data$AT_content)
-
-	# Isolate all windows with AT > critical value #
-	high_gc		<- gc_data[which(gc_data$GC_content > (mean(gc_data$GC_content) + crit_val_gc)),]
-	high_at		<- gc_data[which(gc_data$AT_content > (mean(gc_data$AT_content) + crit_val_at)),]
-
-	nuc_densities		<- list(high_gc = density.circular(high_gc$Circular, kernel = "vonmises", bw = bandwith))
-	nuc_densities		<- c(nuc_densities, list(high_at = density.circular(high_at$Circular, kernel = "vonmises", bw = bandwith)))
-
-	## Get rrna gene positions ##
-	rrna_dir	<- "/Users/aesin/Desktop/Geo_analysis/HGT_position/Ribosmal_rna_locations/Relative_start/"
-	rrna_file	<- paste0(rrna_dir, grep(species, dir(rrna_dir), value = T))
-	rrna_data	<- read_in_rrna_data(rrna_file)
-	# Circularise #
-	rrna_data$Circular	<- circular(rrna_data$Position * (2 * pi))
-
-	## Combine all the data for export ##
-	combined_data <- list(species = species, penalty = penalty, all_dfs = cog_dfs, densities = densities, nuc_densities = nuc_densities, rrna_data = rrna_data)
-	return(combined_data)
-}
-
-# Set the window size (gc-content) and bandwith (circular density) options #
-window_size	= 500
-
-
-
-
-
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "ggplot2", "wesanderson")
+pacman::p_load("ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "wesanderson", "ggrepel", "phytools")
+
+
+sourceScriptDir	<- "/Users/aesin/Documents/Scripts/Geo_again/HGT_position"
+# Source circular functions
+source(file.path(sourceScriptDir, "includeCircularFunctions.R"))
 
 
 getSubgroupData		<- function(genome_dir = NA) {
@@ -293,15 +47,21 @@ getSubgroupData		<- function(genome_dir = NA) {
 
 	# Read in the taxid <-> mowgliNode translation table (output in Time_analysis.rmd)
 	timeAnalysis_dir		<- file.path(master_dir, "HGT_time", "Data")
-	taxidMowExtend_df		<- read.table(file = file.path(timeAnalysis_dir, "Taxid2MowTip_table.tsv"), sep = "\t", header = TRUE)
+	taxidMowExtend_df		<- read.table(file = file.path(timeAnalysis_dir, "Taxid2MowTip_table.tsv"), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
 	taxidMowExtend_df$Extension	<- as.character(taxidMowExtend_df$Extension)
 
 	# Read in the consensus AG time tree (output in Time_analysis.rmd)
 	AG_conTime_tree			<- read.tree(file = file.path(timeAnalysis_dir, "AG_conTimeTree.tree"))
 	AG_conTime_as4			<- phylo4(AG_conTime_tree)
 
-	subgroup_branches <- vector(mode = "character")
+	# Translate the taxid-tip tree to binomial-tip tree
+	AG_binomTime_tree		<- AG_conTime_tree
+	AG_binomTime_tree$tip.label	<- unlist(lapply(AG_binomTime_tree$tip.label, function(tip) {
+		newTipLabel_char	<- taxidMowExtend_df$Binomial[which(taxidMowExtend_df$Extension == tip)]
+	}))
 
+	# Work out which branches are subgroup
+	subgroup_branches <- vector(mode = "character")
 	for (subGroup in uniqueSubGroup_char) {
 		taxidsInSubGroup	<- as.vector(subspecOnly_data$Taxid[which(subspecOnly_data$Group == subGroup)])
 		taxidsToMowTips		<- taxidMowExtend_df$Extension[which(taxidMowExtend_df$Taxid %in% taxidsInSubGroup)]
@@ -318,7 +78,7 @@ getSubgroupData		<- function(genome_dir = NA) {
 		subgroup_branches	<- c(subgroup_branches, unlist(subgroupEdges_list))
 	}
 
-	return(subgroup_branches)
+	return(list(subgroupBranch_list = subgroup_branches, AG_conTime_tree = AG_conTime_tree, AG_binomTime_tree = AG_binomTime_tree))
 }
 
 processInputData	<- function(dataType = "All", penalty = NA, inputDir, bandwith, subgroupBranches = NA) {
@@ -460,6 +220,147 @@ centerLegendTitle	<- function(plot) {
 	return(g)
 }
 
+plotBranchbyTrait_AE <- function (tree, x, mode = c("edges", "tips", "nodes"), palette = "rainbow", legend = TRUE, xlims = NULL, ...) {
+	
+	mode <- mode[1]
+	if (!inherits(tree, "phylo")) 
+		stop("tree should be an object of class \"phylo\".")
+	if (mode == "tips") {
+		x <- c(x[tree$tip.label], fastAnc(tree, x))
+		names(x)[1:length(tree$tip.label)] <- 1:length(tree$tip.label)
+		XX <- matrix(x[tree$edge], nrow(tree$edge), 2)
+		x <- rowMeans(XX)
+	}
+	else if (mode == "nodes") {
+		XX <- matrix(x[tree$edge], nrow(tree$edge), 2)
+		x <- rowMeans(XX)
+	}
+	if (hasArg(tol)) 
+		tol <- list(...)$tol
+	else tol <- 1e-06
+	if (hasArg(prompt)) 
+		prompt <- list(...)$prompt
+	else prompt <- FALSE
+	if (hasArg(type)) 
+		type <- list(...)$type
+	else type <- "phylogram"
+	if (hasArg(show.tip.label)) 
+		show.tip.label <- list(...)$show.tip.label
+	else show.tip.label <- TRUE
+	if (hasArg(show.node.label)) 
+		show.node.label <- list(...)$show.node.label
+	else show.node.label <- FALSE
+	if (hasArg(edge.width)) 
+		edge.width <- list(...)$edge.width
+	else edge.width <- 4
+	if (hasArg(edge.lty)) 
+		edge.lty <- list(...)$edge.lty
+	else edge.lty <- 1
+	if (hasArg(font)) 
+		font <- list(...)$font
+	else font <- 3
+	if (hasArg(cex)) 
+		cex <- list(...)$cex
+	else cex <- par("cex")
+	if (hasArg(adj)) 
+		adj <- list(...)$adj
+	else adj <- NULL
+	if (hasArg(srt)) 
+		srt <- list(...)$srt
+	else srt <- 0
+	if (hasArg(no.margin)) 
+		no.margin <- list(...)$no.margin
+	else no.margin <- TRUE
+	if (hasArg(root.edge)) 
+		root.edge <- list(...)$root.edge
+	else root.edge <- FALSE
+	if (hasArg(label.offset)) 
+		label.offset <- list(...)$label.offset
+	else label.offset <- 0.01 * max(nodeHeights(tree))
+	if (hasArg(underscore)) 
+		underscore <- list(...)$underscore
+	else underscore <- FALSE
+	if (hasArg(x.lim)) 
+		x.lim <- list(...)$x.lim
+	else x.lim <- NULL
+	if (hasArg(y.lim)) 
+		y.lim <- list(...)$y.lim
+	else y.lim <- if (legend && !prompt && type %in% c("phylogram", 
+		"cladogram")) 
+		c(1 - 0.06 * length(tree$tip.label), length(tree$tip.label))
+	else NULL
+	if (hasArg(direction)) 
+		direction <- list(...)$direction
+	else direction <- "rightwards"
+	if (hasArg(lab4ut)) 
+		lab4ut <- list(...)$lab4ut
+	else lab4ut <- NULL
+	if (hasArg(tip.color)) 
+		tip.color <- list(...)$tip.color
+	else tip.color <- "black"
+	if (hasArg(plot)) 
+		plot <- list(...)$plot
+	else plot <- TRUE
+	if (hasArg(rotate.tree)) 
+		rotate.tree <- list(...)$rotate.tree
+	else rotate.tree <- 0
+	if (hasArg(open.angle)) 
+		open.angle <- list(...)$open.angle
+	else open.angle <- 0
+
+	if (is.function(palette)) 
+		cols <- palette(n = 1000)
+	else {
+		if (palette == "heat.colors") 
+			cols <- heat.colors(n = 1000)
+		if (palette == "gray") 
+			cols <- gray(1000:1/1000)
+		if (palette == "rainbow") 
+			cols <- rainbow(1000, start = 0.7, end = 0)
+		else
+			cols <- palette
+	}
+	if (is.null(xlims)) 
+		xlims <- range(x) + c(-tol, tol)
+	breaks <- 0:1000/1000 * (xlims[2] - xlims[1]) + xlims[1]
+	whichColor <- function(p, cols, breaks) {
+		i <- 1
+		while (p >= breaks[i] && p > breaks[i + 1]) i <- i + 
+			1
+		cols[i]
+	}
+	colors <- sapply(x, whichColor, cols = cols, breaks = breaks)
+	par(lend = 2)
+	xx <- plot.phylo(tree, type = type, show.tip.label = show.tip.label, 
+		show.node.label = show.node.label, edge.color = colors, 
+		edge.width = edge.width, edge.lty = edge.lty, font = font, 
+		cex = cex, adj = adj, srt = srt, no.margin = no.margin, 
+		root.edge = root.edge, label.offset = label.offset, underscore = underscore, 
+		x.lim = x.lim, y.lim = y.lim, direction = direction, 
+		lab4ut = lab4ut, tip.color = tip.color, plot = plot, 
+		rotate.tree = rotate.tree, open.angle = open.angle, lend = 2, 
+		new = FALSE)
+	
+	if (legend == TRUE && is.logical(legend)) 
+		legend <- round(0.3 * max(nodeHeights(tree)), 2)
+	if (legend) {
+		if (hasArg(title)) 
+			title <- list(...)$title
+		else title <- "trait value"
+		if (hasArg(digits)) 
+			digits <- list(...)$digits
+		else digits <- 1
+		if (prompt) 
+			add.color.bar(legend, cols, title, xlims, digits, 
+				prompt = TRUE)
+		else add.color.bar(legend, cols, title, xlims, digits, 
+			prompt = FALSE, x = par()$usr[1] + 0.05 * (par()$usr[2] - 
+				par()$usr[1]), y = par()$usr[3] + 0.05 * (par()$usr[4] - 
+				par()$usr[3]))
+	}
+	invisible(xx)
+}
+
 darkTheme	<- theme(
 	plot.background = element_rect(fill = "#333233", color = NA),
 	panel.background = element_rect(fill = "transparent", color = NA),
@@ -477,8 +378,6 @@ darkTheme	<- theme(
 )
 
 
-
-
 master_dir			<- "/Users/aesin/Desktop/Geo_again"
 genome_dir			<- file.path(master_dir, "Genomes")
 position_dir		<- file.path(master_dir, "HGT_position")
@@ -488,6 +387,14 @@ positionInput_dir	<- file.path(position_dir, "Position_data")
 dataTypes			<- c("All", "lHGT", "sHGT", "Ver")
 penalty_list		<- as.character(c(3, 4, 5, 6))
 bandwith 			<- 3000
+window_size			<- 500
+
+
+# Get the branches corresponding to subgroups (for lHGT and sHGT data types)
+subgroupData		<- getSubgroupData(genome_dir = genome_dir)
+subgroupBranch_list	<- subgroupData$subgroupBranch_list
+AG_conTime_tree		<- subgroupData$AG_conTime_tree
+AG_binomTime_tree	<- subgroupData$AG_binomTime_tree
 
 perTypeData	<- lapply(dataTypes, function(dataType) {
 
@@ -499,12 +406,9 @@ perTypeData	<- lapply(dataTypes, function(dataType) {
 		return(processInputData(dataType = dataType, inputDir = posInput_dir, bandwith = bandwith))
 	}
 
-	# Get the branches corresponding to subgroups (for lHGT and sHGT data types)
-	subgroupBranches	<- getSubgroupData(genome_dir = genome_dir)
-
 	## For Vertical, lHGT, and sHGT read in the position data per penalty
 	perPenaltyData	<- lapply(penalty_list, function(penalty) {
-		return(processInputData(dataType = dataType, penalty = penalty, inputDir = posInput_dir, bandwith = bandwith, subgroupBranches = subgroupBranches))
+		return(processInputData(dataType = dataType, penalty = penalty, inputDir = posInput_dir, bandwith = bandwith, subgroupBranches = subgroupBranch_list))
 	})
 	# Rename the list to penalty values
 	names(perPenaltyData)	<- penalty_list
@@ -573,7 +477,7 @@ invisible(lapply(list("lHGT", "sHGT"), function(dataType) {
 quartz(width = 21, height = 8)
 par(mfrow = c(1, 3))
 par(mar = c(0, 0, 0, 0))
-penalty	<- "3"
+penalty	<- "4"
 invisible(lapply(list("lHGT", "Group", "Subgroup"), function(type) {
 
 	dataShortcut	<- perTypeData$lHGT[[penalty]]$allPosData
@@ -603,81 +507,368 @@ quartz.save(file = "/Users/aesin/Desktop/Geo_again/HGT_position/lHGT_grp_sub.png
 
 
 
+#### //// Per-branch lHGT position bias //// ####
 
+lHGTpenalty		<- "4"
+bandwith		<- 2000
+minXferNum		<- 100
 
+# Get a list of unique branches
+uniqueBranches			<- unique(perTypeData$lHGT$'3'$allPosData$recepEdge)
+numBranchesInTree		<- nrow(AG_conTime_tree$edge)
+if (!identical(length(uniqueBranches), numBranchesInTree)) {
+	stop("The number of receptor edges in dataset is not equal to number of edges in tree")
+}
 
+# Prepare dataframes to assign transfers to specific branches on the AG_timeTree
+AG_conTime_as4		<- phylo4(AG_conTime_tree)
+edgeLabels_df		<- data.frame(E1 = AG_conTime_tree$edge[,1], E2 = AG_conTime_tree$edge[,2], inNode = NA, stringsAsFactors = FALSE)
+nodeLabels_df		<- data.frame(NodeLabels = labels(AG_conTime_as4, "all"), stringsAsFactors = FALSE)
 
-penalty		<- "4"
-bandwith	<- 2000
-binomials	<- unique(perTypeData$All$allPosData$binomial)
+# Each edge (branch) of the tree gets assigned an "inNode" - the node at which the transfer was predicted to arrive
+for (index in 1:nrow(nodeLabels_df)) {
+	node	<- nodeLabels_df[index, 1]
+	rowID	<- which(nodeLabels_df == node)
+	edgeLabels_df$inNode[which(edgeLabels_df$E2 == rowID)]	<- node
+}
 
-perSpeciesCircStart_list	<- lapply(binomials, function(binomial) {
-	hgtRelStart		<- perTypeData$lHGT[[penalty]]$allPosData$relGeneStart[which(perTypeData$lHGT[[penalty]]$allPosData$binomial == binomial)]
-	hgtCircStart	<- circular(hgtRelStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-	return(hgtCircStart)
+# For each recepEdge (as defined in the lHGT input data), get the transfer data - and circularise the start positions
+perBranchData_list	<- lapply(uniqueBranches, function(branch) {
+	# All transfered genes at this branch
+	perBranchAll	<- perTypeData$lHGT[[lHGTpenalty]]$allPosData[which(perTypeData$lHGT[[lHGTpenalty]]$allPosData$recepEdge == branch),]
+	# Circularise the start positions
+	hgtCircStart	<- circular(perBranchAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+	return(list(allData = perBranchAll, CircStart = hgtCircStart))
 })
-names(perSpeciesCircStart_list)	<- binomials
+names(perBranchData_list)	<- uniqueBranches
+
+## Extract the circular start data, and remove any branches with less than N transfers
+perBranchCircStart		<- lapply(perBranchData_list, function(branch) ifelse(length(branch$CircStart) >= minXferNum, return(branch$CircStart), NA))
+perBranchCircTrim		<- perBranchCircStart[!is.na(perBranchCircStart)]
+
+
+## Apply the summary.circular_AE function to get, amongst other stats, the Mean and Rho values for each branch
+perBranchCircSummary_list	<- lapply(1:length(perBranchCircTrim), function(index) {
+	# Get the branch, and summarise
+	branchCircSum	<- summary.circular_AE(perBranchCircTrim[[index]])
+	# Get the name of the branch
+	branchName		<- names(perBranchCircTrim)[index]
+	# Return data frame
+	BranchCircSum_df	<- cbind(branch = branchName, as.data.frame(t(branchCircSum)), stringsAsFactors = FALSE)
+	return(BranchCircSum_df)
+})
+## Bind the dataframes to make df with all stats per branch
+perBranchCircSummary_df	<- bind_rows(perBranchCircSummary_list)
+
+## Add inNode (to match with the tree labels), Index (to make the tree labels), and log(Number of Transfers) to the dataframe
+perBranchCircSummary_df$inNode	<- str_split(perBranchCircSummary_df$branch, " ", simplify = TRUE)[,2]
+perBranchCircSummary_df$Index	<- rownames(perBranchCircSummary_df)
+perBranchCircSummary_df$logN	<- log(perBranchCircSummary_df$n)
+
+## Adjust Index for the root branch to say "Root"
+perBranchCircSummary_df$Index[which(perBranchCircSummary_df$inNode == 1375)]	<- "Root"
+
+## We will use the edgeLabels_df to label the tree to match the plot, add the Index labels to match the dataframe
+edgeLabels_df$Index		<- NA
+for (i in 1:nrow(perBranchCircSummary_df)) {
+	row		<- perBranchCircSummary_df[i,]
+	edgeLabels_df$Index[which(edgeLabels_df$inNode == row$inNode)]	<- row$Index
+}
+## Add the Included column to color tree branches by whether they are in the Mean/Rho plot
+edgeLabels_df$Included	<- unlist(lapply(edgeLabels_df$Index, function(x) ifelse(is.na(x), 0, 1)))
+
+
+## Prepare the per-Branch average location ggplot
+conPal <- colorRampPalette(wes_palette("Zissou1"))
+perBranchAvHGT_plot	<- ggplot(perBranchCircSummary_df, aes(x = Mean, y = Rho, color = logN, label = Index)) +
+	scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
+	coord_polar() +
+	geom_point(size = 1.5) +
+	scale_colour_gradientn(colors = conPal(20)) +
+	geom_text_repel(aes(label = Index), point.padding = 0.2, min.segment.length = 0.2) +
+	darkTheme +
+	theme(
+		axis.title.x = element_blank(),
+		legend.justification = c(0, 0),
+		legend.position = c(0, 0)
+	)
+
+## Plot the perBranch HGT mean weight side-by-side with the timeTree labelled with the branches
+quartz(width = 20, height = 8, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testBranch.png", dpi = 300)
+plot.new()
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nrow = 1, ncol = 2, widths = c(0.75, 1.25))))
+
+# Draw ggplot
+pushViewport(viewport(layout.pos.col = 1))
+print(perBranchAvHGT_plot, newpage = FALSE)
+popViewport()
+
+# Draw base plot
+pushViewport(viewport(layout.pos.col = 2))
+par(fig = gridFIG(), new = TRUE)
+plotBranchbyTrait_AE(AG_binomTime_tree, edgeLabels_df$Included, method = "edges", legend = FALSE, palette = Royal1Pal, title = "Included", tip.color = "#D9D9D9", cex = 0.8)
+for (rowIndex in 1:nrow(edgeLabels_df)) {
+	row		<- edgeLabels_df[rowIndex,]
+	E2		<- row$E2
+
+	edgeNum	<- which(AG_conTime_tree$edge[,2] == E2)
+
+	if (!is.na(row$Index)) {
+		edgelabels(row$Index, edgeNum, adj = c(0.5, -0.25), bg = "#333233", frame = "none", col = "#D9D9D9", cex = 1)
+	}
+}
+popViewport()
+dev.off()
 
 
 
-perSpeciesCircSummary_list <- lapply(1:length(perSpeciesCircStart_list), function(index) {
-	speciesCircSum	<- summary.circular(perSpeciesCircStart_list[[index]])
-	speciesName		<- names(perSpeciesCircStart_list)[index]
 
-	SpeciesCircSum_df	<- cbind(Species = speciesName, as.data.frame(t(speciesCircSum)), stringsAsFactors = FALSE)
-	return(SpeciesCircSum_df)
+
+
+
+
+plotCOGCircularDistribution	<- function(perCOGData_list, dataType, minCOGNum = 100, ymax = 0.7) {
+
+	perCOGCircStart		<- lapply(perCOGData_list, function(COG) ifelse(length(COG$CircStart) >= minCOGNum, return(COG$CircStart), NA))
+	perCOGCircTrim		<- perCOGCircStart[!is.na(perCOGCircStart)]
+
+
+	## Apply the summary.circular_AE function to get, amongst other stats, the Mean and Rho values for each branch
+	perCOGCircSummary_list	<- lapply(1:length(perCOGCircTrim), function(index) {
+		# Get the branch, and summarise
+		COGCircSum	<- summary.circular_AE(perCOGCircTrim[[index]])
+		# Get the name of the branch
+		COGName		<- names(perCOGCircTrim)[index]
+		# Return data frame
+		COGCircSum_df	<- cbind(COG = COGName, as.data.frame(t(COGCircSum)), stringsAsFactors = FALSE)
+		return(COGCircSum_df)
+	})
+	## Bind the dataframes to make df with all stats per branch
+	perCOGCircSummary_df		<- bind_rows(perCOGCircSummary_list)
+	perCOGCircSummary_df$logN	<- log(perCOGCircSummary_df$n)
+
+
+	conPal <- colorRampPalette(wes_palette("Zissou1"))
+	perCOGAvPos_plot	<- ggplot(perCOGCircSummary_df, aes(x = Mean, y = Rho, color = logN, label = COG)) +
+		scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
+		scale_y_continuous(limits = c(0, ymax)) +
+		ggtitle(paste0("Average COG position for ", dataType, " genes")) +
+		coord_polar() +
+		geom_point(size = 1.5) +
+		scale_colour_gradientn(colors = conPal(20)) +
+		geom_text_repel(aes(label = COG), point.padding = 0.2, min.segment.length = 0.2) +
+		darkTheme +
+		theme(
+			axis.title.x = element_blank(),
+			legend.justification = c(0, 0),
+			legend.position = c(0, 0),
+			panel.grid.major = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
+			panel.grid.minor = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
+		)
+
+	return(list(circSum = perCOGCircSummary_df, plot = perCOGAvPos_plot))
+}
+
+HGTPenalty		<- "4"
+verPenalty		<- "3"
+bandwith		<- 2000
+
+uniqueCOGs		<- unique(unlist(perTypeData$lHGT$'3'$allPosData$COGcat))
+
+
+## Compare COG distributions between different datasets ##
+perTypeCOGAvPos_dataPlots	<- lapply(dataTypes, function(dataType) {
+
+	if (identical(dataType, "All")) {
+		perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
+			# All transfered genes at this branch
+			perCOGAll	<- perTypeData[[dataType]]$allPosData[which(perTypeData[[dataType]]$allPosData$COGcat == COG),]
+			# Circularise the start positions
+			hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+			return(list(allData = perCOGAll, CircStart = hgtCircStart))
+		})
+		names(perCOGData_list)	<- uniqueCOGs
+
+		perCOGAvPos_Sum_Plot	<- plotCOGCircularDistribution(perCOGData_list, dataType)
+		perCOGAvPos_Sum			<- perCOGAvPos_Sum_Plot$circSum
+		perCOGAvPos_Plot		<- perCOGAvPos_Sum_Plot$plot
+		return(list(perCOGdata = perCOGData_list, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
+	} else if (identical(dataType, "Ver")) {
+		penalty		<- verPenalty
+	} else {
+		penalty		<- HGTPenalty
+	}
+
+	## For Vertical, lHGT, and sHGT read in the position data per penalty
+	perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
+		# All transfered genes at this branch
+		perCOGAll	<- perTypeData[[dataType]][[penalty]]$allPosData[which(perTypeData[[dataType]][[penalty]]$allPosData$COGcat == COG),]
+		# Circularise the start positions
+		hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+		return(list(allData = perCOGAll, CircStart = hgtCircStart))
+	})
+	names(perCOGData_list)	<- uniqueCOGs
+	perCOGAvPos_Sum_Plot	<- plotCOGCircularDistribution(perCOGData_list, dataType)
+	perCOGAvPos_Sum			<- perCOGAvPos_Sum_Plot$circSum
+	perCOGAvPos_Plot		<- perCOGAvPos_Sum_Plot$plot
+	return(list(perCOGdata = perCOGData_list, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
+
+})
+names(perTypeCOGAvPos_dataPlots)	<- dataTypes
+
+quartz(width = 24, height = 6, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testCOG.png", dpi = 300)
+plot.new()
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nrow = 1, ncol = 4)))
+
+invisible(lapply(seq(1:4), function(plotIndex) {
+	pushViewport(viewport(layout.pos.col = plotIndex))
+	print(perTypeCOGAvPos_dataPlots[[plotIndex]]$plot, newpage = FALSE)
+	popViewport()
+}))
+
+dev.off()
+
+
+
+## Compare COG distributions by AGE ##
+byAgeCOGAvPos_plots		<- lapply(list("All_lHGT", "Old_lHGT", "Young_lHGT"), function(Age) {
+
+	if (identical(Age, "All_lHGT")) {
+		perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
+			# All transfered genes at this branch
+			perCOGAll	<- perTypeData$lHGT[[penalty]]$allPosData[which(perTypeData$lHGT[[penalty]]$allPosData$COGcat == COG),]
+			# Circularise the start positions
+			hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+			return(list(allData = perCOGAll, CircStart = hgtCircStart))
+		})
+		names(perCOGData_list)	<- uniqueCOGs
+		perCOGAvPos_plot	<- plotCOGCircularDistribution(perCOGData_list, Age, minCOGNum = 20)
+		return(perCOGAvPos_plot)
+
+	} else if (identical(Age, "Old_lHGT")) {
+		subGroup		<- FALSE
+	} else {
+		subGroup		<- TRUE
+	}
+
+	perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
+		byGroupData	<- perTypeData$lHGT[[penalty]]$allPosData[which(perTypeData$lHGT[[penalty]]$allPosData$Subgroup == subGroup),]
+		# All transfered genes at this branch
+		perCOGAll	<- byGroupData[which(byGroupData$COGcat == COG),]
+		# Circularise the start positions
+		hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+		return(list(allData = perCOGAll, CircStart = hgtCircStart))
+	})
+	names(perCOGData_list)	<- uniqueCOGs
+	perCOGAvPos_plot	<- plotCOGCircularDistribution(perCOGData_list, Age, minCOGNum = 20)
+	return(perCOGAvPos_plot)
+
 })
 
-perSpeciesCircSummary_df	<- bind_rows(perSpeciesCircSummary_list)
+quartz(width = 18, height = 6, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testCOGbyAge.png", dpi = 300)
+plot.new()
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(nrow = 1, ncol = 3)))
+
+invisible(lapply(seq(1:3), function(plotIndex) {
+	pushViewport(viewport(layout.pos.col = plotIndex))
+	print(byAgeCOGAvPos_plots[[plotIndex]], newpage = FALSE)
+	popViewport()
+}))
+dev.off()
 
 
 
-ggplot(perSpeciesCircSummary_df, aes(x = Mean, y = Rho, color = Species, label = Species)) +
-    guides(color = FALSE) +
-    scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
-    scale_y_continuous(limits = c(0, 0.25)) +
-    coord_polar() +
-    geom_point() +
-	geom_text(aes(label = ifelse(Rho > 0.1, as.character(Species),'')), hjust = -0.05, vjust = 0.5, angle = -45)
-
-
-
-
-
-perSpeciesCircSummary_mat <- as.matrix(perSpeciesCircSummary_df[,c(6,9)])
-rownames(perSpeciesCircSummary_mat)	<- perSpeciesCircSummary_df$Species
-plot(hclust(dist(perSpeciesCircSummary_mat), method = "ward.D2"), col = "#D9D9D9", col.axis = "#D9D9D9")
-
-
-
-
-perSpecies_plots	<- lapply(binomials, function(binomial) {
-
-	# print(binomial)
-	allCircStart	<- perTypeData$All$allPosData$CircStart[which(perTypeData$All$allPosData$binomial == binomial)]
-	hgtCircStart	<- perTypeData$lHGT[[penalty]]$allPosData$CircStart[which(perTypeData$lHGT[[penalty]]$allPosData$binomial == binomial)]
-	vertCircStart	<- perTypeData$Ver[[penalty]]$allPosData$CircStart[which(perTypeData$Ver[[penalty]]$allPosData$binomial == binomial)]
-	
-	# # Calculate circular density (on the start position)
-	allDensity	<- density.circular(allCircStart, kernel = "vonmises", bw = bandwith)
-	HGTDensity	<- density.circular(hgtCircStart, kernel = "vonmises", bw = bandwith)
-	vertDensity	<- density.circular(vertCircStart, kernel = "vonmises", bw = bandwith)
-
-	# Number of genes for each density plot
-	numGenes	<- length(HGTDensity$data)
-
-	position_plot	<- basicPositionPlot(dataDensityA = HGTDensity, dataDensityB = vertDensity, bgDensity = allDensity, shrink = 0.7, tcl.offset = 0.8, titleName = paste0(binomial, "\nlHGT Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
-	return(position_plot)
+## Plot for root only ##
+perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
+	rootData	<- perTypeData$lHGT$'4'$allPosData[which(perTypeData$lHGT$'4'$allPosData$recepEdge == "1531 1375"),]
+	# All transfered genes at this branch
+	perCOGAll	<- rootData[which(rootData$COGcat == COG),]
+	# Circularise the start positions
+	hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+	return(list(allData = perCOGAll, CircStart = hgtCircStart))
 })
-names(perSpecies_plots)	<- binomials
+names(perCOGData_list)	<- uniqueCOGs
+perCOGAvPos_plot	<- plotCOGCircularDistribution(perCOGData_list, "Root", minCOGNum = 20, ymax = 1)
 
 
-quartz(width = 18, height = 6.5)
-par(mfrow = c(1, 3))
-par(mar = c(0, 0, 0, 0))
-replayPlot(perSpecies_plots$`Geobacillus genomosp. 3`)
-perSpecies_plots$`Anoxybacillus flavithermus`
-perSpecies_plots$`Geobacillus sp. Y412MC61`
+
+
+
+
+## We can see the the "All" gene dataset has uniform spacing
+# rao.spacing.test(perTypeData$All$allPosData$CircStart)
+
+## But this is not the case for vertical or HGT sets
+# rao.spacing.test(perTypeData$Ver$`3`$allPosData$CircStart)
+# rao.spacing.test(perTypeData$lHGT$`4`$allPosData$CircStart)
+
+## Although the polar vector (mean) appears to be the same for the vertical and lHGT sets, dispersion is significantly different 
+# rao.test(perTypeData$Ver$`3`$allPosData$CircStart, perTypeData$lHGT$`4`$allPosData$CircStart)
+
+
+
+sharedCOGs	<- left_join(perTypeCOGAvPos_dataPlots$lHGT$circSummary, perTypeCOGAvPos_dataPlots$Ver$circSummary, by = "COG")$COG
+
+wallraffTest_res	<- lapply(sharedCOGs, function(COG) {
+	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
+	verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
+
+	x <- wallraff.test(list(hgtCOG, verCOG))
+	return(x)
+})
+names(wallraffTest_res)	<- sharedCOGs
+
+
+watson.twoTest	<- lapply(sharedCOGs, function(COG) {
+	message(COG)
+	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
+	verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
+
+	x <- watson.two.test(hgtCOG, verCOG)
+	return(x)
+})
+names(watson.twoTest)	<- sharedCOGs
+
+
+wg.Test	<- lapply(sharedCOGs, function(COG) {
+	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
+	verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
+
+	ndat	<- c(length(hgtCOG), length(verCOG))
+	message(COG)
+	message(paste(ndat, " "))
+	g		<- 2
+
+	CSUScores	<- CosSinUniScores(c(hgtCOG,verCOG))
+	WgObs		<- WgVal(CSUScores, ndat, g)
+	pval		<- pchisq(WgObs, 2*(g-1), lower.tail=F)
+
+	return(list(WgObs, pval))
+})
+names(wg.Test)	<- sharedCOGs
+
+
+allHGT	<- lapply(sharedCOGs, function(COG) {
+	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
+	return(hgtCOG)
+})
+
+
+
+COG = "H"
+hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
+verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
+
+# aov.circular(c(hgtCOG, verCOG), group = c(rep(0, length(hgtCOG)), rep(1, length(verCOG))))
+
+bandwith = 1000
+basicPositionPlot(dataDensityA = density.circular(hgtCOG, bw = bandwith), dataDensityB = density.circular(verCOG, bw = bandwith), bgDensity = perTypeData$All$circDensity, shrink = 1.2, uin = 1)
+
+
+
 
 
 
@@ -1005,6 +1196,7 @@ HGT_byPenaltyEnrichBox_plot <- HGT_byPenaltyEnrich_plot +
 HGT_byPenaltyEnrichBox_grob	<- centerLegendTitle(HGT_byPenaltyEnrichBox_plot)
 
 ## Plot the grob
+quartz(width = 14, heigh = 10)
 grid.newpage()
 grid.draw(HGT_byPenaltyEnrichBox_grob)
 
