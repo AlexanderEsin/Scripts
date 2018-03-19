@@ -190,6 +190,113 @@ basicPositionPlot	<- function(dataDensityA, dataDensityB = NA, bgDensity, shrink
 	return(recordedPlot)
 }
 
+plotCOGCircularDistribution	<- function(perCOGData_list, dataType, minCOGNum = 100, ymax = 0.7) {
+
+	perCOGCircStart		<- lapply(perCOGData_list, function(COG) ifelse(length(COG$CircStart) >= minCOGNum, return(COG$CircStart), NA))
+	perCOGCircTrim		<- perCOGCircStart[!is.na(perCOGCircStart)]
+
+
+	## Apply the summary.circular_AE function to get, amongst other stats, the Mean and Rho values for each branch
+	perCOGCircSummary_list	<- lapply(1:length(perCOGCircTrim), function(index) {
+		# Get the branch, and summarise
+		COGCircSum	<- summary.circular_AE(perCOGCircTrim[[index]])
+		# Get the name of the branch
+		COGName		<- names(perCOGCircTrim)[index]
+		# Return data frame
+		COGCircSum_df	<- cbind(COG = COGName, as.data.frame(t(COGCircSum)), stringsAsFactors = FALSE)
+		return(COGCircSum_df)
+	})
+	## Bind the dataframes to make df with all stats per branch
+	perCOGCircSummary_df		<- bind_rows(perCOGCircSummary_list)
+	perCOGCircSummary_df$logN	<- log(perCOGCircSummary_df$n)
+
+
+	conPal <- colorRampPalette(wes_palette("Zissou1"))
+	perCOGAvPos_plot	<- ggplot(perCOGCircSummary_df, aes(x = Mean, y = Rho, color = logN, label = COG)) +
+		scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
+		scale_y_continuous(limits = c(0, ymax)) +
+		ggtitle(paste0("Average COG position for ", dataType, " genes")) +
+		coord_polar() +
+		geom_point(size = 1.5) +
+		scale_colour_gradientn(colors = conPal(20)) +
+		geom_text_repel(aes(label = COG), point.padding = 0.2, min.segment.length = 0.2) +
+		darkTheme +
+		theme(
+			axis.title.x = element_blank(),
+			legend.justification = c(0, 0),
+			legend.position = c(0, 0),
+			panel.grid.major = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
+			panel.grid.minor = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
+		)
+
+	return(list(circSum = perCOGCircSummary_df, plot = perCOGAvPos_plot))
+}
+
+## // Functional analysis // ##
+
+## For a datatype and penalty (if not "All") extract COG list and total number
+getPropCOG	<- function(dataType, Penalty = NA) {
+
+	if (is.na(Penalty)) {
+		COG			<- unlist(perTypeData[[dataType]]$allPosData$COGcat)
+		colName		<- "Prop_All"
+	} else {
+		COG			<- unlist(perTypeData[[dataType]][[Penalty]]$allPosData$COGcat)
+		colName		<- paste0(dataType, "_T", Penalty)
+	}
+	
+	COG_df			<- as.data.frame(table(COG), stringsAsFactors = FALSE)
+	totalCOGs		<- sum(COG_df$Freq)
+	COG_df$Prop		<- COG_df$Freq / totalCOGs
+
+	names(COG_df)[3]	<- colName
+	return(list(propDF = COG_df[,-2], totalCOGs = totalCOGs))
+}
+
+## Calculate the enrichment of COGs in one Class (and penalty) over another
+## For comparison against Vertical - use penalty 3 as this is the most stringent set
+calcPropEnrich	<- function(data = "lHGT", background = "Ver", penalty = "3") {
+
+	if (identical(data, background)) {
+		stop("Can't compare to itself")
+	} else if (identical(background, "Ver")) {
+		bg_df	<- perTypeCOGprop$Ver$'3'$propCOGdf
+	} else if (identical(background, "All")) {
+		bg_df	<- perTypeCOGprop$All$propCOGdf
+	}
+
+	data_df		<- perTypeCOGprop[[data]][[penalty]]$propCOGdf
+
+	join_df		<- inner_join(data_df, bg_df, by = "COG")
+	join_df$Diff		<- log(join_df[,2] / join_df[,3])
+	names(join_df)[4]	<- paste0("Diff_T", penalty)
+
+	return(join_df[,c(1,4)])
+}
+
+## Calculate the per-COG ranges of enrichment values (across penalties)
+## Produce coordinates to pass to geom_rect
+calcEnrichRangesForPlot	<- function(df, molten_df, box_width = 0.2) {
+	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
+
+	for (i in 1:length(df$COG)) {
+		COG_needed	<- levels(molten_df$COG)[i]
+		row_number	<- which(df$COG == COG_needed)
+
+		## Do not count NAs in identifying min/max values ##
+		data_line	<- df[row_number,-1]
+		data_line_clean	<- data_line[,as.vector(!is.na(data_line))]
+
+		## Calculate the max and min values for the boxes ##
+		max_y	<- max(data_line_clean)
+		min_y	<- min(data_line_clean)
+
+		coordinate_df[nrow(coordinate_df)+1, ]	<- c((i - box_width), (i + box_width), min_y, max_y)
+	}
+	return(coordinate_df)
+}
+
+
 ## // ggplot // ##
 centerLegendTitle	<- function(plot) {
 	## Requires gtools
@@ -628,47 +735,7 @@ dev.off()
 
 
 
-plotCOGCircularDistribution	<- function(perCOGData_list, dataType, minCOGNum = 100, ymax = 0.7) {
 
-	perCOGCircStart		<- lapply(perCOGData_list, function(COG) ifelse(length(COG$CircStart) >= minCOGNum, return(COG$CircStart), NA))
-	perCOGCircTrim		<- perCOGCircStart[!is.na(perCOGCircStart)]
-
-
-	## Apply the summary.circular_AE function to get, amongst other stats, the Mean and Rho values for each branch
-	perCOGCircSummary_list	<- lapply(1:length(perCOGCircTrim), function(index) {
-		# Get the branch, and summarise
-		COGCircSum	<- summary.circular_AE(perCOGCircTrim[[index]])
-		# Get the name of the branch
-		COGName		<- names(perCOGCircTrim)[index]
-		# Return data frame
-		COGCircSum_df	<- cbind(COG = COGName, as.data.frame(t(COGCircSum)), stringsAsFactors = FALSE)
-		return(COGCircSum_df)
-	})
-	## Bind the dataframes to make df with all stats per branch
-	perCOGCircSummary_df		<- bind_rows(perCOGCircSummary_list)
-	perCOGCircSummary_df$logN	<- log(perCOGCircSummary_df$n)
-
-
-	conPal <- colorRampPalette(wes_palette("Zissou1"))
-	perCOGAvPos_plot	<- ggplot(perCOGCircSummary_df, aes(x = Mean, y = Rho, color = logN, label = COG)) +
-		scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
-		scale_y_continuous(limits = c(0, ymax)) +
-		ggtitle(paste0("Average COG position for ", dataType, " genes")) +
-		coord_polar() +
-		geom_point(size = 1.5) +
-		scale_colour_gradientn(colors = conPal(20)) +
-		geom_text_repel(aes(label = COG), point.padding = 0.2, min.segment.length = 0.2) +
-		darkTheme +
-		theme(
-			axis.title.x = element_blank(),
-			legend.justification = c(0, 0),
-			legend.position = c(0, 0),
-			panel.grid.major = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
-			panel.grid.minor = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
-		)
-
-	return(list(circSum = perCOGCircSummary_df, plot = perCOGAvPos_plot))
-}
 
 HGTPenalty		<- "4"
 verPenalty		<- "3"
@@ -952,69 +1019,7 @@ all6	<- dataShortcut$CircStart
 
 
 
-## // Functional analysis // ##
 
-## For a datatype and penalty (if not "All") extract COG list and total number
-getPropCOG	<- function(dataType, Penalty = NA) {
-
-	if (is.na(Penalty)) {
-		COG			<- unlist(perTypeData[[dataType]]$allPosData$COGcat)
-		colName		<- "Prop_All"
-	} else {
-		COG			<- unlist(perTypeData[[dataType]][[Penalty]]$allPosData$COGcat)
-		colName		<- paste0(dataType, "_T", Penalty)
-	}
-	
-	COG_df			<- as.data.frame(table(COG), stringsAsFactors = FALSE)
-	totalCOGs		<- sum(COG_df$Freq)
-	COG_df$Prop		<- COG_df$Freq / totalCOGs
-
-	names(COG_df)[3]	<- colName
-	return(list(propDF = COG_df[,-2], totalCOGs = totalCOGs))
-}
-
-## Calculate the enrichment of COGs in one Class (and penalty) over another
-## For comparison against Vertical - use penalty 3 as this is the most stringent set
-calcPropEnrich	<- function(data = "lHGT", background = "Ver", penalty = "3") {
-
-	if (identical(data, background)) {
-		stop("Can't compare to itself")
-	} else if (identical(background, "Ver")) {
-		bg_df	<- perTypeCOGprop$Ver$'3'$propCOGdf
-	} else if (identical(background, "All")) {
-		bg_df	<- perTypeCOGprop$All$propCOGdf
-	}
-
-	data_df		<- perTypeCOGprop[[data]][[penalty]]$propCOGdf
-
-	join_df		<- inner_join(data_df, bg_df, by = "COG")
-	join_df$Diff		<- log(join_df[,2] / join_df[,3])
-	names(join_df)[4]	<- paste0("Diff_T", penalty)
-
-	return(join_df[,c(1,4)])
-}
-
-## Calculate the per-COG ranges of enrichment values (across penalties)
-## Produce coordinates to pass to geom_rect
-calcEnrichRangesForPlot	<- function(df, molten_df, box_width = 0.2) {
-	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
-
-	for (i in 1:length(df$COG)) {
-		COG_needed	<- levels(molten_df$COG)[i]
-		row_number	<- which(df$COG == COG_needed)
-
-		## Do not count NAs in identifying min/max values ##
-		data_line	<- df[row_number,-1]
-		data_line_clean	<- data_line[,as.vector(!is.na(data_line))]
-
-		## Calculate the max and min values for the boxes ##
-		max_y	<- max(data_line_clean)
-		min_y	<- min(data_line_clean)
-
-		coordinate_df[nrow(coordinate_df)+1, ]	<- c((i - box_width), (i + box_width), min_y, max_y)
-	}
-	return(coordinate_df)
-}
 
 
 #### //// Functional analysis //// ####
