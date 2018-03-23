@@ -1,32 +1,32 @@
----
-title: HGT Density Plotting
-date: 5 Oct 2017
-output:
-  html_document:
-	toc: true
-	toc_depth: 3
-	toc_float: true
-	number_sections: true
-	code_folding: hide
-	theme: cosmo
----
+# ---
+# title: HGT Density Plotting
+# date: 5 Oct 2017
+# output:
+#   html_document:
+# 	toc: true
+# 	toc_depth: 3
+# 	toc_float: true
+# 	number_sections: true
+# 	code_folding: hide
+# 	theme: cosmo
+# ---
 
-```{r global_options, include = FALSE}
-knitr::opts_chunk$set(	fig.width	= 10, 
-						fig.height	= 7, 
-						fig.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Figures/", 
-						fig.align	= 'center', 
-						dpi			= 300, 
-						cache.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Cache/", 
-						warning		= TRUE, 
-						message		= TRUE,
-						tidy		= TRUE)
+# ```{r global_options, include = FALSE}
+# knitr::opts_chunk$set(	fig.width	= 10, 
+# 						fig.height	= 7, 
+# 						fig.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Figures/", 
+# 						fig.align	= 'center', 
+# 						dpi			= 300, 
+# 						cache.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Cache/", 
+# 						warning		= TRUE, 
+# 						message		= TRUE,
+# 						tidy		= TRUE)
 
-```
+# ```
 
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "wesanderson", "ggrepel", "phytools")
+pacman::p_load("ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "ggdendro", "GGally", "ggpubr", "wesanderson", "ggrepel", "phytools")
 
 
 sourceScriptDir	<- "/Users/aesin/Documents/Scripts/Geo_again/HGT_position"
@@ -77,7 +77,6 @@ getSubgroupData		<- function(genome_dir = NA) {
 		# Add to list of subgroup branches
 		subgroup_branches	<- c(subgroup_branches, unlist(subgroupEdges_list))
 	}
-
 	return(list(subgroupBranch_list = subgroup_branches, AG_conTime_tree = AG_conTime_tree, AG_binomTime_tree = AG_binomTime_tree))
 }
 
@@ -122,6 +121,51 @@ processInputData	<- function(dataType = "All", penalty = NA, inputDir, bandwith,
 
 	return(list(Penalty = penalty, allPosData = genePos_data, circDensity = genePosDens))
 }
+
+## // Subdivision functions // ##
+
+# Split data by subdivision (e.g. occurence - for branch) or COG number
+# bySubdivision_split	<- function(data, subDivisions, variable = NA) {
+
+# 	data$Mod_dist	<- data$relGeneStart
+# 	data$Mod_dist[which(data$Mod_dist > 0.5)]	<- 1 - data$Mod_dist[which(data$Mod_dist > 0.5)]
+
+# 	bysubdiv_data	<- lapply(1:length(subDivisions), function(index) {
+
+# 		subdiv		<- subDivisions[[index]]
+# 		subdiv_name	<- names(subDivisions[index])
+
+# 		if (!identical(index, length(subDivisions))) {
+# 			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist < subdiv[2]),]	
+# 		} else {
+# 			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
+# 		}
+		
+# 		if (is.na(variable)) {
+# 			return(data.frame(subDiv = subdiv_name, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))
+# 		} else if (identical(variable, "COGcat")) {
+# 			subdiv_vars			<- unlist(subdiv_data[[variable]])
+# 		} else {
+# 			subdiv_vars			<- subdiv_data[[variable]]
+# 		}
+
+# 		subdiv_var_tab			<- data.frame(table(bysubdiv_raw_COGs))
+# 		subdiv_var_tab$Fract	<- subdiv_var_tab$Freq / sum(subdiv_var_tab$Freq)
+# 		names(subdiv_var_tab)	<- c(variable, paste0("Freq_", subdiv_name), paste0("Fract_", subdiv_name))
+
+# 		return(list(data = subdiv_data, cog_tab = subdiv_var_tab))
+# 	})
+
+# 	if (is.na(variable)) {
+# 		subdivCombine_df	<- bind_rows(bysubdiv_data)
+# 		return(subdivCombine_df)
+# 	} else {
+# 		subdivCombine_tabs		<- lapply(bysubdiv_data, function(subdiv) return(subdiv$cog_tab))
+# 		subdivCombine_df		<- Reduce(function(df1, df2) full_join(df1, df2, by = variable), subdivCombine_tabs)
+# 		subdivCombine_df[is.na(subdivCombine_df)]	<- 0
+# 		return(list(full_data = bysubdiv_data, tab_df = subdivCombine_df))
+# 	}
+# }
 
 
 ## // Circular plots // ##
@@ -277,6 +321,7 @@ calcPropEnrich	<- function(data = "lHGT", background = "Ver", penalty = "3") {
 ## Calculate the per-COG ranges of enrichment values (across penalties)
 ## Produce coordinates to pass to geom_rect
 calcEnrichRangesForPlot	<- function(df, molten_df, box_width = 0.2) {
+
 	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
 
 	for (i in 1:length(df$COG)) {
@@ -485,6 +530,10 @@ darkTheme	<- theme(
 )
 
 
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+
+
 master_dir			<- "/Users/aesin/Desktop/Geo_again"
 genome_dir			<- file.path(master_dir, "Genomes")
 position_dir		<- file.path(master_dir, "HGT_position")
@@ -495,6 +544,8 @@ dataTypes			<- c("All", "lHGT", "sHGT", "Ver")
 penalty_list		<- as.character(c(3, 4, 5, 6))
 bandwith 			<- 3000
 window_size			<- 500
+
+# ------------------------------------------------------------------------------------ #
 
 
 # Get the branches corresponding to subgroups (for lHGT and sHGT data types)
@@ -579,7 +630,6 @@ invisible(lapply(list("lHGT", "sHGT"), function(dataType) {
 }))
 
 
-
 ## Compare group vs subgroup lHGT density at a given penalty
 quartz(width = 21, height = 8)
 par(mfrow = c(1, 3))
@@ -614,10 +664,101 @@ quartz.save(file = "/Users/aesin/Desktop/Geo_again/HGT_position/lHGT_grp_sub.png
 
 
 
+
+
+
+
+
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
 #### //// Per-branch lHGT position bias //// ####
 
+
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+
+# GGpairs function to plot correlation subplots
+cor_fun <- function(data, mapping, method = "pearson", ndp = 2, sz = 5, stars = TRUE, color = "red", ...) {
+
+	data <- na.omit(data[,c(as.character(mapping$x), as.character(mapping$y))])
+
+	x <- data[,as.character(mapping$x)]
+	y <- data[,as.character(mapping$y)]
+
+	corr <- cor.test(x, y, method = method)
+	est <- corr$estimate
+
+	if (stars) {
+	  stars <- c("***", "**", "*", "")[findInterval(corr$p.value, c(0, 0.001, 0.01, 0.05, 1))]
+	  lbl <- paste0(round(est, ndp), stars)
+	} else {
+	  lbl <- round(est, ndp)
+	}
+
+	ggplot(data = data, mapping = mapping) + 
+	  annotate("text", x = mean(x), y = mean(y), label = lbl, size = sz, color = color, ...)+
+	  theme(panel.grid = element_blank())
+}
+
+# GGpairs function to plot geom_smooth with points
+smooth_lm_fun	<- function (data, mapping, smooth.colour = "black", ..., method = "lm") {
+	p <- ggplot(data = data, mapping)
+	p <- p + geom_point(...)
+	if (!is.null(mapping$color) || !is.null(mapping$colour)) {
+		p <- p + geom_smooth(method = method)
+	}
+	else {
+		p <- p + geom_smooth(method = method, colour = smooth.colour, fill = alpha(smooth.colour, alpha = 0.05))
+	}
+	p
+}
+
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+
+## Define compartments
+subDivision_list	<- list(Ori = c(0, 0.05), nearOri = c(0.05, 0.15), farOri = c(0.15, 0.25), farTer = c(0.25, 0.35), nearTer = c(0.35, 0.45), Ter = c(0.45, 0.5))
+
+## Colours for the compartments
+conPal				<- colorRampPalette(wes_palette("Zissou1"))
+subDivison_cols		<- rev(conPal(6))
+
+# ------------------------------------------------------------------------------------ #
+
+## /// Make a key for the subdivision analysis /// ##
+subDivisionKey_df	<- bind_rows(lapply(1:length(subDivision_list), function(half_boundaryIndex) {
+	half_boundaries	<- subDivision_list[[half_boundaryIndex]]
+	subdiv_name		<- names(subDivision_list)[half_boundaryIndex]
+	half_1	<- pi * 2 * half_boundaries
+	half_2	<- pi * 2 * (1 - half_boundaries)
+	return(data.frame(xmin = c(half_1[1], half_2[1]), xmax = c(half_1[2], half_2[2]), ymin = rep(0, 2), ymax = rep(1, 2), col = rep(subdiv_name, 2), stringsAsFactors = FALSE))
+}))
+
+subDivisionKey_df$col	<- factor(subDivisionKey_df$col, levels = names(subDivision_list))
+subDivisionKey_plot		<- ggplot(data = subDivisionKey_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = col, col = NA)) +
+	coord_polar("x") +
+	scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
+	scale_y_continuous(limits = c(0, 1)) +
+	geom_rect(col = NA, size = 0) +
+	scale_fill_manual(values = subDivison_cols) +
+	darkTheme +
+	theme(
+		panel.grid = element_blank(),
+		panel.grid.major = element_blank(),
+		panel.grid.minor = element_blank(),
+		axis.ticks = element_blank(),
+		axis.text.y = element_blank(),
+		axis.text.x = element_text(size = 18),
+		panel.border = element_blank(),
+		legend.key.size = unit(1, "cm"),
+		legend.title = element_blank()
+	)
+
+# ------------------------------------------------------------------------------------ #
+
+# Important variables
 lHGTpenalty		<- "4"
-bandwith		<- 2000
 minXferNum		<- 100
 
 # Get a list of unique branches
@@ -627,17 +768,7 @@ if (!identical(length(uniqueBranches), numBranchesInTree)) {
 	stop("The number of receptor edges in dataset is not equal to number of edges in tree")
 }
 
-# Prepare dataframes to assign transfers to specific branches on the AG_timeTree
-AG_conTime_as4		<- phylo4(AG_conTime_tree)
-edgeLabels_df		<- data.frame(E1 = AG_conTime_tree$edge[,1], E2 = AG_conTime_tree$edge[,2], inNode = NA, stringsAsFactors = FALSE)
-nodeLabels_df		<- data.frame(NodeLabels = labels(AG_conTime_as4, "all"), stringsAsFactors = FALSE)
-
-# Each edge (branch) of the tree gets assigned an "inNode" - the node at which the transfer was predicted to arrive
-for (index in 1:nrow(nodeLabels_df)) {
-	node	<- nodeLabels_df[index, 1]
-	rowID	<- which(nodeLabels_df == node)
-	edgeLabels_df$inNode[which(edgeLabels_df$E2 == rowID)]	<- node
-}
+# ------------------------------------------------------------------------------------ #
 
 # For each recepEdge (as defined in the lHGT input data), get the transfer data - and circularise the start positions
 perBranchData_list	<- lapply(uniqueBranches, function(branch) {
@@ -649,10 +780,12 @@ perBranchData_list	<- lapply(uniqueBranches, function(branch) {
 })
 names(perBranchData_list)	<- uniqueBranches
 
-## Extract the circular start data, and remove any branches with less than N transfers
-perBranchCircStart		<- lapply(perBranchData_list, function(branch) ifelse(length(branch$CircStart) >= minXferNum, return(branch$CircStart), NA))
-perBranchCircTrim		<- perBranchCircStart[!is.na(perBranchCircStart)]
+## Ignore any branches with less than N transfers
+perBranchMinCutoff	<- lapply(perBranchData_list, function(branch) ifelse(length(branch$CircStart) >= minXferNum, return(branch), NA))
+perBranchTrim		<- perBranchMinCutoff[!is.na(perBranchMinCutoff)]
 
+## Extract the circular start data
+perBranchCircTrim	<- lapply(perBranchTrim, function(branch) return(branch$CircStart))
 
 ## Apply the summary.circular_AE function to get, amongst other stats, the Mean and Rho values for each branch
 perBranchCircSummary_list	<- lapply(1:length(perBranchCircTrim), function(index) {
@@ -664,8 +797,10 @@ perBranchCircSummary_list	<- lapply(1:length(perBranchCircTrim), function(index)
 	BranchCircSum_df	<- cbind(branch = branchName, as.data.frame(t(branchCircSum)), stringsAsFactors = FALSE)
 	return(BranchCircSum_df)
 })
+
 ## Bind the dataframes to make df with all stats per branch
 perBranchCircSummary_df	<- bind_rows(perBranchCircSummary_list)
+
 
 ## Add inNode (to match with the tree labels), Index (to make the tree labels), and log(Number of Transfers) to the dataframe
 perBranchCircSummary_df$inNode	<- str_split(perBranchCircSummary_df$branch, " ", simplify = TRUE)[,2]
@@ -675,46 +810,133 @@ perBranchCircSummary_df$logN	<- log(perBranchCircSummary_df$n)
 ## Adjust Index for the root branch to say "Root"
 perBranchCircSummary_df$Index[which(perBranchCircSummary_df$inNode == 1375)]	<- "Root"
 
+## Plot the per-Branch compartment population of lHGT genes. These are clustered by distribution
+perBranchAvHGT_plot	<- ggplot(perBranchCircSummary_df, aes(x = Mean, y = Rho, color = logN, label = Index)) +
+	scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
+	coord_polar("x") +
+	geom_point(size = 1.5) +
+	scale_color_gradientn(colours = conPal(20)) +
+	geom_text_repel(aes(label = Index), point.padding = 0.2, min.segment.length = 0.2) +
+	darkTheme +
+	theme(
+		axis.title.x = element_blank(),
+	)
+
+# ------------------------------------------------------------------------------------ #
+
+# Prepare dataframes to assign transfers to specific branches on the AG_timeTree
+AG_conTime_as4		<- phylo4(AG_conTime_tree)
+edgeLabels_df		<- data.frame(E1 = AG_conTime_tree$edge[,1], E2 = AG_conTime_tree$edge[,2], branchLength = AG_conTime_tree$edge.length, inNode = NA, stringsAsFactors = FALSE)
+nodeLabels_df		<- data.frame(NodeLabels = labels(AG_conTime_as4, "all"), stringsAsFactors = FALSE)
+
+# Each edge (branch) of the tree gets assigned an "inNode" - the node at which the transfer was predicted to arrive
+for (index in 1:nrow(nodeLabels_df)) {
+	node	<- nodeLabels_df[index, 1]
+	rowID	<- which(nodeLabels_df == node)
+	edgeLabels_df$inNode[which(edgeLabels_df$E2 == rowID)]	<- node
+}
+
 ## We will use the edgeLabels_df to label the tree to match the plot, add the Index labels to match the dataframe
 edgeLabels_df$Index		<- NA
 for (i in 1:nrow(perBranchCircSummary_df)) {
 	row		<- perBranchCircSummary_df[i,]
 	edgeLabels_df$Index[which(edgeLabels_df$inNode == row$inNode)]	<- row$Index
 }
+
 ## Add the Included column to color tree branches by whether they are in the Mean/Rho plot
 edgeLabels_df$Included	<- unlist(lapply(edgeLabels_df$Index, function(x) ifelse(is.na(x), 0, 1)))
 
 
-## Prepare the per-Branch average location ggplot
-conPal <- colorRampPalette(wes_palette("Zissou1"))
-perBranchAvHGT_plot	<- ggplot(perBranchCircSummary_df, aes(x = Mean, y = Rho, color = logN, label = Index)) +
-	scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
-	coord_polar() +
-	geom_point(size = 1.5) +
-	scale_colour_gradientn(colors = conPal(20)) +
-	geom_text_repel(aes(label = Index), point.padding = 0.2, min.segment.length = 0.2) +
+# ------------------------------------------------------------------------------------ #
+
+
+perBranchSubDivision_list <- lapply(1:length(perBranchTrim), function(branchData_index) {
+
+	branchData		<- perBranchTrim[[branchData_index]]
+	branch_name		<- names(perBranchTrim)[branchData_index]
+	branch_Index	<- perBranchCircSummary_df$Index[which(perBranchCircSummary_df$branch == branch_name)]
+
+	numSubdivisions			<- length(subDivision_list)
+	bySubDivision_branch	<- bySubdivision_split(data = branchData$allData, subDivisions = subDivision_list, variable = NA)
+	bySubDivision_df		<- cbind(Branch = rep(branch_name, numSubdivisions), Index = rep(branch_Index, numSubdivisions), bySubDivision_branch, stringsAsFactors = FALSE)
+	return(bySubDivision_df)
+})
+
+perBranchSubDivision_df <- bind_rows(perBranchSubDivision_list)
+
+## Prepare data to cluster 
+clusterRecast_data				<- dcast(perBranchSubDivision_df, Index ~ subDiv, value.var = "numObsv")
+rownames(clusterRecast_data)	<- clusterRecast_data$Index
+clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
+clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
+
+clusterCompartments_dendro		<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
+
+## Plot the clustering dendrogram
+perBranchCompartment_cluster	<- ggplot() +
+	geom_segment(data = clusterCompartments_dendro$segments, aes(x = x, y = y, xend = xend, yend = yend), col = "#D9D9D9", size = 1) + 
 	darkTheme +
 	theme(
-		axis.title.x = element_blank(),
-		legend.justification = c(0, 0),
-		legend.position = c(0, 0)
+		plot.margin = unit(c(0, 1.2, 0, 1.2), "cm"),
+		panel.grid.major = element_blank(),
+		panel.grid.minor = element_blank(),
+		axis.text = element_blank(),
+		axis.title = element_blank(),
+		axis.ticks = element_blank()
 	)
 
-## Plot the perBranch HGT mean weight side-by-side with the timeTree labelled with the branches
-quartz(width = 20, height = 8, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testBranch.png", dpi = 300)
-plot.new()
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 1, ncol = 2, widths = c(0.75, 1.25))))
+# Factorise subDivision and Index for plotting.
+# For the Index - this means we plot in the same order as the cluster dendrogram
+perBranchSubDivision_df$subDiv	<- factor(perBranchSubDivision_df$subDiv, levels = names(subDivision_list))
+perBranchSubDivision_df$Index	<- factor(perBranchSubDivision_df$Index, levels = clusterCompartments_dendro$labels$label)
 
-# Draw ggplot
-pushViewport(viewport(layout.pos.col = 1))
-print(perBranchAvHGT_plot, newpage = FALSE)
+## Plot the proportional barplots. Each barplot = a single branch, showing proportion of lHGTs in each genome compartment/
+perBranchCompartment_barplot	<- ggplot(data = perBranchSubDivision_df, aes(x = Index, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
+	geom_bar(stat = "identity", position = "fill") +
+	geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
+	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
+	darkTheme +
+	theme(
+		plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
+		panel.grid.major.y = element_blank(),
+		panel.grid.major.x = element_line(size = 1, color = "#D9D9D9"),
+		panel.grid.minor.y = element_blank(),
+		axis.text.y = element_blank(),
+		axis.title.y = element_blank(),
+		axis.ticks = element_blank()
+	)
+
+# ------------------------------------------------------------------------------------ #
+
+###  /// Write out data plots /// ###
+
+## Plot the Compartment (Subdivision) key wheel
+quartz(width = 5, height = 4, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/subDiv_key.pdf")
+print(subDivisionKey_plot)
+dev.off()
+
+##  Plot the dendro tree together with the barplots showing lHGT proportion in different genomic compartments
+quartz(width = 20, height = 14, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/byBranch_subdiv.pdf")
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
+
+pushViewport(viewport(layout.pos.row = 1))
+print(perBranchCompartment_cluster, newpage = FALSE)
 popViewport()
 
-# Draw base plot
-pushViewport(viewport(layout.pos.col = 2))
-par(fig = gridFIG(), new = TRUE)
+pushViewport(viewport(layout.pos.row = 2))
+print(perBranchCompartment_barplot, newpage = FALSE)
+popViewport()
+dev.off()
+
+## Plot the perBranch HGT mean weight side-by-side with the timeTree labelled with the branches
+quartz(width = 9, height = 8, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/byBranch_circAV.pdf")
+print(perBranchAvHGT_plot)
+dev.off()
+
+## Plot reference tree - colour branches that are used in analysis in red, otherwise grey. Label included branches with the Index number
+quartz(width = 12, height = 8, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/indexTree.pdf")
 plotBranchbyTrait_AE(AG_binomTime_tree, edgeLabels_df$Included, method = "edges", legend = FALSE, palette = Royal1Pal, title = "Included", tip.color = "#D9D9D9", cex = 0.8)
+# Annotate tree with Index
 for (rowIndex in 1:nrow(edgeLabels_df)) {
 	row		<- edgeLabels_df[rowIndex,]
 	E2		<- row$E2
@@ -725,10 +947,185 @@ for (rowIndex in 1:nrow(edgeLabels_df)) {
 		edgelabels(row$Index, edgeNum, adj = c(0.5, -0.25), bg = "#333233", frame = "none", col = "#D9D9D9", cex = 1)
 	}
 }
-popViewport()
 dev.off()
 
 
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+
+
+## Boxplot of fraction of HGT into a given category
+perBranchSubdiv_forStats	<- dcast(perBranchSubDivision_df, Index ~ subDiv, value.var = "numObsv")
+perBranchSubdiv_forStats	<- cbind(Index = as.character(perBranchSubdiv_forStats$Index), sweep(perBranchSubdiv_forStats[,-1], 1, rowSums(perBranchSubdiv_forStats[,-1]), "/"), stringsAsFactors = FALSE)
+perBranchSubdiv_forStats	<- recast(perBranchSubdiv_forStats, variable ~ Index)
+perBranchSubdiv_forStats	<- melt(perBranchSubdiv_forStats, id.vars = "variable")
+names(perBranchSubdiv_forStats)	<- c("SubDivision", "Index", "Proportion")
+
+## Add branch length to this dataframe
+perBranchSubdiv_forStats	<- bind_rows(lapply(unique(perBranchSubdiv_forStats$Index), function(branchIndex) {
+	subset_df		<- perBranchSubdiv_forStats[which(perBranchSubdiv_forStats$Index == branchIndex),]
+	branchLength	<- ifelse(identical(as.character(branchIndex), "Root"), NA, edgeLabels_df$branchLength[which(edgeLabels_df$Index == branchIndex)]) 
+	subset_df$branchLength	<- branchLength
+	return(subset_df)
+}))
+
+## Factorise the Subdivisions
+levels(perBranchSubdiv_forStats$SubDivision)	<- c("Ori", "Near Ori", "Far Ori", "Far Ter", "Near Ter", "Ter")
+
+## Prepare a boxplot showing the relative distribution of lHGT genes across Genome compartments
+perBranchBySubdiv_boxplot	<- ggplot(data = perBranchSubdiv_forStats, aes(x = SubDivision, y = Proportion, fill = SubDivision)) +
+	geom_boxplot(color = "#D9D9D9") +
+	scale_y_continuous(name = "Proportion of lHGT per branch", limits = c(0, 0.5)) +
+	scale_x_discrete(name = "Genome Subdivision") +
+	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
+	stat_compare_means(size = 6, color = "#D9D9D9", geom = "label", fill = "#333233", label.size = 0.3) + 
+	darkTheme + 
+	theme(panel.grid.minor.y = element_blank())
+
+
+## Correlating lHGT population in each compartments (per branch) against the length of that branch
+perBranchBySubdiv_cor		<- ggplot(data = perBranchSubdiv_forStats, aes(x = Proportion, y = branchLength, color = SubDivision, group = SubDivision)) +
+	scale_y_continuous(name = "Branch Length", limits = c(0, 0.2)) +
+	scale_x_continuous(name = "Proportion of lHGT per branch", limits = c(0, 0.5)) +
+	geom_point(size = 2) +
+	scale_color_manual(values = subDivison_cols, guide = FALSE) +
+	facet_wrap(~SubDivision) + 
+	stat_cor(method = "spearman", geom = "text", label.x.npc = "right", label.y.npc = "top", size = 4) +
+	darkTheme +
+	theme(
+		panel.spacing = unit(2, "lines"),
+		strip.background = element_rect(fill = "transparent", color = "#D9D9D9", size = 1),
+		strip.text = element_text(color = "#D9D9D9", size = 12)
+		)
+
+# ------------------------------------------------------------------------------------ #
+
+## Pairwise comparison of lHGT increase / decrease per compartment against other compartments
+
+# Recast data to have the compartments as individual columns
+perBranchSubdiv_forPairwise	<- dcast(perBranchSubdiv_forStats, Index ~ SubDivision, value.var = "Proportion")
+
+# Plot pairwise correlations
+SubDivisionPairwise_plot <- ggpairs(data = perBranchSubdiv_forPairwise, columns = 2:ncol(perBranchSubdiv_forPairwise),
+	
+	upper = list(continuous = function(data, mapping, ...) {
+		cor_fun(data = data, mapping = mapping, method = "pearson", ndp = 2, sz = 6, color = "#D9D9D9")
+	}),
+
+	lower = list(continuous = function(data, mapping, ...) {
+		smooth_lm_fun(data = data, mapping = mapping, smooth.colour = "green", color = "#D9D9D9") +
+		scale_y_continuous(limits = c(0, 0.5)) +
+		scale_x_continuous(limits = c(0, 0.5)) +
+		theme(
+			panel.grid.major = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.5)),
+			panel.grid.minor = element_blank()
+		)
+	}),
+	
+	diag = list(continuous = function(data, mapping, ...) {
+		ggally_densityDiag(data = data, mapping = mapping, color = "#D9D9D9") +
+		scale_x_continuous(limits = c(0, 0.5)) +
+		theme(
+			panel.grid.major = element_blank(),
+			panel.grid.minor = element_blank()
+		)
+	})
+)
+
+# Recolour the diagonals to the subdivision colours
+for (i in 1:6) {
+	SubDivisionPairwise_plot[i,i]$layers[[1]]$aes_params$colour <- subDivison_cols[i]
+}
+
+# Apply a variant of darkTheme
+SubDivisionPairwise_plot	<- SubDivisionPairwise_plot + 
+	theme(
+		plot.background = element_rect(fill = "#333233", color = NA),
+		panel.background = element_rect(fill = "transparent", color = NA),
+		axis.ticks = element_line(size = 0.2, color = "#D9D9D9"),
+		plot.title = element_text(size = 16, hjust = 0.5, color = "#D9D9D9"),
+		axis.title = element_text(size = 14, color = "#D9D9D9"),
+		axis.text = element_text(size = 14, colour = "#D9D9D9"),
+		panel.spacing = unit(2, "lines"),
+		strip.background = element_rect(fill = "transparent", color = "#D9D9D9", size = 1),
+		strip.text = element_text(color = "#D9D9D9", size = 14)
+	)
+
+
+# ------------------------------------------------------------------------------------ #
+
+###  /// Write out the stats plots /// ###
+
+quartz(width = 12, height = 8, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/Stats/bySubdiv_boxplot.pdf")
+print(perBranchBySubdiv_boxplot)
+dev.off()
+
+quartz(width = 16, height = 10, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/Stats/bySubdiv_branchVslHGTCor.pdf")
+print(perBranchBySubdiv_cor)
+dev.off()
+
+quartz(width = 16, height = 16, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/Stats/bySubdiv_pairwiseCor.pdf")
+print(SubDivisionPairwise_plot)
+dev.off()
+
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+
+
+
+
+
+
+
+
+
+
+bySubdivision_split	<- function(data, subDivisions, variable = NA) {
+
+	data$Mod_dist	<- data$relGeneStart
+	data$Mod_dist[which(data$Mod_dist > 0.5)]	<- 1 - data$Mod_dist[which(data$Mod_dist > 0.5)]
+	varName			<- unique(unlist(data[[variable]]))
+
+	bysubdiv_data	<- lapply(1:length(subDivisions), function(index) {
+
+		subdiv		<- subDivisions[[index]]
+		subdivName	<- names(subDivisions[index])
+
+
+		if (!identical(index, length(subDivisions))) {
+			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist < subdiv[2]),]	
+		} else {
+			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
+		}
+		
+		if (is.na(variable)) {
+			return(data.frame(subDiv = subdivName, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))
+		} else if (identical(variable, "COGcat")) {
+			subdiv_vars			<- unlist(subdiv_data[[variable]])
+			subdiv_var_tab		<- data.frame(COGcat = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
+		} else {
+			subdiv_vars			<- subdiv_data[[variable]]
+			subdiv_var_tab		<- data.frame(Variable = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
+		}
+		return(list(data = subdiv_data, cog_tab = subdiv_var_tab))
+	})
+
+	if (is.na(variable)) {
+		subdivCombine_df	<- bind_rows(bysubdiv_data)
+		return(subdivCombine_df)
+	} else {
+		# Extract the tables and bind them into one dataframe
+		subdivCombine_tabs		<- lapply(bysubdiv_data, function(subdiv) return(subdiv$cog_tab))
+		subdivCombine_df		<- bind_rows(subdivCombine_tabs)
+		# Any missing values to 0
+		subdivCombine_df[is.na(subdivCombine_df)]	<- 0
+		# Add proportion column
+		subdivCombine_df$Proportion	<- subdivCombine_df$numObsv / sum(subdivCombine_df$numObsv)
+
+		return(list(full_data = bysubdiv_data, tab_df = subdivCombine_df))
+	}
+}
 
 
 
@@ -739,28 +1136,47 @@ dev.off()
 
 HGTPenalty		<- "4"
 verPenalty		<- "3"
-bandwith		<- 2000
 
-uniqueCOGs		<- unique(unlist(perTypeData$lHGT$'3'$allPosData$COGcat))
 
+
+
+uniqueCOGs		<- unique(unlist(perTypeData$All$allPosData$COGcat))
 
 ## Compare COG distributions between different datasets ##
 perTypeCOGAvPos_dataPlots	<- lapply(dataTypes, function(dataType) {
 
+	print(dataType)
+
 	if (identical(dataType, "All")) {
 		perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
-			# All transfered genes at this branch
+
 			perCOGAll	<- perTypeData[[dataType]]$allPosData[which(perTypeData[[dataType]]$allPosData$COGcat == COG),]
+			if (nrow(perCOGAll) == 0) {
+				return(NA)
+			}
+			
 			# Circularise the start positions
-			hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-			return(list(allData = perCOGAll, CircStart = hgtCircStart))
+			circStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+
+			# By compartment (Subdivision)
+			perCOGbySubdiv	<- bySubdivision_split(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
+			return(list(allData = perCOGAll, CircStart = circStart, perCOGbySubdiv_df = perCOGbySubdiv$tab_df))
 		})
 		names(perCOGData_list)	<- uniqueCOGs
 
+		# Remove any COGs that don't have any observations
+		perCOGData_list			<- perCOGData_list[!is.na(perCOGData_list)]
+
+		# Produce the circular plots
 		perCOGAvPos_Sum_Plot	<- plotCOGCircularDistribution(perCOGData_list, dataType)
 		perCOGAvPos_Sum			<- perCOGAvPos_Sum_Plot$circSum
 		perCOGAvPos_Plot		<- perCOGAvPos_Sum_Plot$plot
-		return(list(perCOGdata = perCOGData_list, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
+
+		# Produce the by-Compartment dataframe
+		byCOGbySubdiv_df		<- bind_rows(lapply(perCOGData_list, function(COG) return(COG$perCOGbySubdiv_df)))
+		byCOGbySubdiv_df$Set	<- dataType
+
+		return(list(perCOGdata = perCOGData_list, bySubdivision = byCOGbySubdiv_df, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
 	} else if (identical(dataType, "Ver")) {
 		penalty		<- verPenalty
 	} else {
@@ -769,20 +1185,173 @@ perTypeCOGAvPos_dataPlots	<- lapply(dataTypes, function(dataType) {
 
 	## For Vertical, lHGT, and sHGT read in the position data per penalty
 	perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
-		# All transfered genes at this branch
+		
 		perCOGAll	<- perTypeData[[dataType]][[penalty]]$allPosData[which(perTypeData[[dataType]][[penalty]]$allPosData$COGcat == COG),]
+		if (nrow(perCOGAll) == 0) {
+			return(NA)
+		}
 		# Circularise the start positions
-		hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-		return(list(allData = perCOGAll, CircStart = hgtCircStart))
+		circStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+		# By compartment (Subdivision)
+		perCOGbySubdiv	<- bySubdivision_split(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
+		return(list(allData = perCOGAll, CircStart = circStart, perCOGbySubdiv_df = perCOGbySubdiv$tab_df))
 	})
 	names(perCOGData_list)	<- uniqueCOGs
+	# Remove any COGs that don't have any observations
+	perCOGData_list			<- perCOGData_list[!is.na(perCOGData_list)]
+
+	# Produce the circular plots
 	perCOGAvPos_Sum_Plot	<- plotCOGCircularDistribution(perCOGData_list, dataType)
 	perCOGAvPos_Sum			<- perCOGAvPos_Sum_Plot$circSum
 	perCOGAvPos_Plot		<- perCOGAvPos_Sum_Plot$plot
-	return(list(perCOGdata = perCOGData_list, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
+
+	# Produce the by-Compartment dataframe
+	byCOGbySubdiv_df		<- bind_rows(lapply(perCOGData_list, function(COG) return(COG$perCOGbySubdiv_df)))
+	byCOGbySubdiv_df$Set	<- dataType
+
+	return(list(perCOGdata = perCOGData_list, bySubdivision = byCOGbySubdiv_df, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
 
 })
 names(perTypeCOGAvPos_dataPlots)	<- dataTypes
+
+
+
+
+
+test_x	<- bind_rows(perTypeCOGAvPos_dataPlots$Ver$bySubdivision, perTypeCOGAvPos_dataPlots$lHGT$bySubdivision)
+test_x$subDiv	<- factor(test_x$subDiv, levels = names(subDivision_list))
+
+minCutOffCOGs	<- unlist(lapply(unique(test_x$COGcat), function(COG) {
+	sets	<- unique(test_x$Set)
+	subsets	<- unlist(lapply(sets, function(set) ifelse(sum(test_x$numObsv[which(test_x$Set == set & test_x$COGcat == COG)]) >= 50, 1, 0)))
+	result	<- ifelse(sum(subsets) != length(sets), NA, COG)
+	return(result)
+}))
+minCutOffCOGs	<- minCutOffCOGs[!is.na(minCutOffCOGs)]
+
+minCutOffPrune <- test_x[which(test_x$COGcat %in% minCutOffCOGs),]
+
+plot_x	<- ggplot(data = minCutOffPrune, aes(x = Set, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
+	geom_bar(stat = "identity", position = "fill") +
+	facet_wrap(~COGcat) +
+	geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
+	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
+	darkTheme +
+	theme(
+		plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
+		panel.grid.major.y = element_blank(),
+		panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
+		panel.grid.minor.y = element_blank(),
+		axis.text.y = element_blank(),
+		axis.title.y = element_blank(),
+		axis.title.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
+		strip.text = element_text(color =  "#D9D9D9", size = 12)
+	)
+
+
+
+verOnly	<- minCutOffPrune[which(minCutOffPrune$Set == "Ver"),]
+hgtOnly	<- minCutOffPrune[which(minCutOffPrune$Set == "lHGT"),]
+
+## Prepare data to cluster 
+clusterRecast_data				<- dcast(verOnly, COGcat ~ subDiv, value.var = "numObsv")
+rownames(clusterRecast_data)	<- clusterRecast_data$COGcat
+clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
+clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
+
+clusterCompartments_dendroVer	<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
+verTree	<- as.phylo(hclust(clusterRecastProp_dist, method = "ward.D2"))
+
+
+clusterRecast_data				<- dcast(hgtOnly, COGcat ~ subDiv, value.var = "numObsv")
+rownames(clusterRecast_data)	<- clusterRecast_data$COGcat
+clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
+clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
+
+clusterCompartments_dendroHGT	<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
+hgtTree	<- as.phylo(hclust(clusterRecastProp_dist, method = "ward.D2"))
+
+
+## Plot the clustering dendrogram
+perBranchCompartment_cluster	<- ggplot() +
+	geom_segment(data = clusterCompartments_dendro$segments, aes(x = x, y = y, xend = xend, yend = yend), col = "#D9D9D9", size = 1) + 
+	darkTheme +
+	theme(
+		plot.margin = unit(c(0, 1.4, 0, 1.4), "cm"),
+		panel.grid.major = element_blank(),
+		panel.grid.minor = element_blank(),
+		axis.text = element_blank(),
+		axis.title = element_blank(),
+		axis.ticks = element_blank()
+	)
+
+
+verOnly$COGcat		<- factor(verOnly$COGcat, levels = clusterCompartments_dendro$labels$label)
+statComparisons		<- lapply(combn(unique(verOnly$COGcat), 2, simplify = FALSE), paste0)
+
+plot_verOnly	<- ggplot(data = verOnly, aes(x = COGcat, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
+	geom_bar(stat = "identity", position = "fill") +
+	geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
+	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
+	darkTheme +
+	theme(
+		plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
+		panel.grid.major.y = element_blank(),
+		panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
+		panel.grid.minor.y = element_blank(),
+		axis.text.y = element_blank(),
+		axis.title.y = element_blank(),
+		axis.title.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
+		strip.text = element_text(color =  "#D9D9D9", size = 12)
+	)
+
+
+
+
+
+
+quartz(width = 18, height = 10, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testCategorical.png")
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
+
+pushViewport(viewport(layout.pos.row = 1))
+print(perBranchCompartment_cluster, newpage = FALSE)
+popViewport()
+
+pushViewport(viewport(layout.pos.row = 2))
+print(plot_verOnly, newpage = FALSE)
+popViewport()
+dev.off()
+
+
+a	<- minCutOffPrune$numObsv[which(minCutOffPrune$COGcat == "O" & minCutOffPrune$Set == "Ver")]
+b	<- minCutOffPrune$numObsv[which(minCutOffPrune$COGcat == "P" & minCutOffPrune$Set == "Ver")]
+c	<- cbind(a, b)
+chisq.test(c)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 quartz(width = 24, height = 6, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testCOG.png", dpi = 300)
 plot.new()
@@ -796,6 +1365,20 @@ invisible(lapply(seq(1:4), function(plotIndex) {
 }))
 
 dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -944,56 +1527,6 @@ basicPositionPlot(dataDensityA = density.circular(hgtCOG, bw = bandwith), dataDe
 
 
 
-
-
-
-
-
-
-
-
-## Test whether the lHGT Group & lHGT subGroup distributions vary at any penalty
-
-testGrpSubgrpDistrib	<- lapply(penalty_list, function(penalty) {
-
-	dataShortcut	<- perTypeData$lHGT[[penalty]]$allPosData
-
-	groupCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
-	subgrCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
-
-	ksResult	<- ks.test(groupCircStart, subgrCircStart)
-	return(list(Penalty = penalty, ksResult = ksResult, numGrp = length(groupCircStart), numSubgrp = length(subgrCircStart)))
-})
-
-
-## Test the spacing uniformity - e.g. the "All" set is significantly uniform
-# rao.spacing.test
-
-## Consider rao.test
-
-## Consider wallraff.test
-
-## Consider watson.two.test
-
-## Consider watson.wheeler.test 
-
-## Consider watson.williams.test
-
-wallraff.test(list(group3, sub3))
-
-
-
-dataShortcut	<- perTypeData$lHGT$'3'$allPosData
-
-group3	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
-sub3	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
-all3	<- dataShortcut$CircStart
-
-dataShortcut	<- perTypeData$lHGT$'6'$allPosData
-
-group6	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
-sub6	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
-all6	<- dataShortcut$CircStart
 
 
 
