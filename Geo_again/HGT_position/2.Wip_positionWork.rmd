@@ -26,10 +26,11 @@
 
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load("ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "ggdendro", "GGally", "ggpubr", "wesanderson", "ggrepel", "phytools")
+pacman::p_load("ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "ggdendro", "GGally", "ggpubr", "wesanderson", "ggrepel", "phytools", "zoo")
 
 
 sourceScriptDir	<- "/Users/aesin/Documents/Scripts/Geo_again/HGT_position"
+#sourceScriptDir	<- "/Users/Sasha/Documents/Scripts/Geo_again/HGT_position"
 # Source circular functions
 source(file.path(sourceScriptDir, "includeCircularFunctions.R"))
 
@@ -125,47 +126,52 @@ processInputData	<- function(dataType = "All", penalty = NA, inputDir, bandwith,
 ## // Subdivision functions // ##
 
 # Split data by subdivision (e.g. occurence - for branch) or COG number
-# bySubdivision_split	<- function(data, subDivisions, variable = NA) {
+bySubdivision_split	<- function(data, subDivisions, variable = NA) {
 
-# 	data$Mod_dist	<- data$relGeneStart
-# 	data$Mod_dist[which(data$Mod_dist > 0.5)]	<- 1 - data$Mod_dist[which(data$Mod_dist > 0.5)]
+	data$Mod_dist	<- data$relGeneStart
+	data$Mod_dist[which(data$Mod_dist > 0.5)]	<- 1 - data$Mod_dist[which(data$Mod_dist > 0.5)]
+	varName			<- unique(unlist(data[[variable]]))
 
-# 	bysubdiv_data	<- lapply(1:length(subDivisions), function(index) {
+	bysubdiv_data	<- lapply(1:length(subDivisions), function(index) {
 
-# 		subdiv		<- subDivisions[[index]]
-# 		subdiv_name	<- names(subDivisions[index])
+		subdiv		<- subDivisions[[index]]
+		subdivName	<- names(subDivisions[index])
 
-# 		if (!identical(index, length(subDivisions))) {
-# 			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist < subdiv[2]),]	
-# 		} else {
-# 			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
-# 		}
+
+		if (!identical(index, length(subDivisions))) {
+			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist < subdiv[2]),]	
+		} else {
+			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
+		}
 		
-# 		if (is.na(variable)) {
-# 			return(data.frame(subDiv = subdiv_name, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))
-# 		} else if (identical(variable, "COGcat")) {
-# 			subdiv_vars			<- unlist(subdiv_data[[variable]])
-# 		} else {
-# 			subdiv_vars			<- subdiv_data[[variable]]
-# 		}
+		if (is.na(variable)) {
+			return(data.frame(subDiv = subdivName, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))
+		} else if (identical(variable, "COGcat")) {
+			subdiv_vars			<- unlist(subdiv_data[[variable]])
+			subdiv_var_tab		<- data.frame(COGcat = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
+		} else {
+			subdiv_vars			<- subdiv_data[[variable]]
+			subdiv_var_tab		<- data.frame(Variable = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
+		}
+		return(list(data = subdiv_data, cog_tab = subdiv_var_tab))
+	})
 
-# 		subdiv_var_tab			<- data.frame(table(bysubdiv_raw_COGs))
-# 		subdiv_var_tab$Fract	<- subdiv_var_tab$Freq / sum(subdiv_var_tab$Freq)
-# 		names(subdiv_var_tab)	<- c(variable, paste0("Freq_", subdiv_name), paste0("Fract_", subdiv_name))
+	if (is.na(variable)) {
+		subdivCombine_df	<- bind_rows(bysubdiv_data)
+		return(subdivCombine_df)
+	} else {
+		# Extract the tables and bind them into one dataframe
+		subdivCombine_tabs		<- lapply(bysubdiv_data, function(subdiv) return(subdiv$cog_tab))
+		subdivCombine_df		<- bind_rows(subdivCombine_tabs)
+		# Any missing values to 0
+		subdivCombine_df[is.na(subdivCombine_df)]	<- 0
+		# Add proportion column
+		subdivCombine_df$Proportion	<- subdivCombine_df$numObsv / sum(subdivCombine_df$numObsv)
 
-# 		return(list(data = subdiv_data, cog_tab = subdiv_var_tab))
-# 	})
+		return(list(full_data = bysubdiv_data, tab_df = subdivCombine_df))
+	}
+}
 
-# 	if (is.na(variable)) {
-# 		subdivCombine_df	<- bind_rows(bysubdiv_data)
-# 		return(subdivCombine_df)
-# 	} else {
-# 		subdivCombine_tabs		<- lapply(bysubdiv_data, function(subdiv) return(subdiv$cog_tab))
-# 		subdivCombine_df		<- Reduce(function(df1, df2) full_join(df1, df2, by = variable), subdivCombine_tabs)
-# 		subdivCombine_df[is.na(subdivCombine_df)]	<- 0
-# 		return(list(full_data = bysubdiv_data, tab_df = subdivCombine_df))
-# 	}
-# }
 
 
 ## // Circular plots // ##
@@ -533,8 +539,8 @@ darkTheme	<- theme(
 # ------------------------------------------------------------------------------------ #
 # ------------------------------------------------------------------------------------ #
 
-
 master_dir			<- "/Users/aesin/Desktop/Geo_again"
+# master_dir			<- "/Users/Sasha/Desktop/Geo_again2"
 genome_dir			<- file.path(master_dir, "Genomes")
 position_dir		<- file.path(master_dir, "HGT_position")
 positionInput_dir	<- file.path(position_dir, "Position_data")
@@ -577,7 +583,7 @@ names(perTypeData)	<- dataTypes
 
 
 ## Check the Vertical density across different penalty values
-quartz(width = 12, height = 12)
+windows(width = 14, height = 14)
 par(mfrow = c(2, 2))
 par(mar = c(0, 0, 0, 0))
 invisible(lapply(penalty_list, function(penalty) {
@@ -588,7 +594,7 @@ invisible(lapply(penalty_list, function(penalty) {
 	# Number of genes for each density plot
 	numGenes	<- length(vertDensity$data)
 
-	position_plot	<- basicPositionPlot(dataDensityA = vertDensity, bgDensity = allDensity, shrink = 0.7, tcl.offset = 0.8, titleName = paste0("Vertical Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
+	position_plot	<- basicPositionPlot(dataDensityA = vertDensity, bgDensity = allDensity, shrink = 0.9, tcl.offset = 0.8, titleName = paste0("Vertical Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes))
 	replayPlot(position_plot)
 }))
 
@@ -664,14 +670,10 @@ quartz.save(file = "/Users/aesin/Desktop/Geo_again/HGT_position/lHGT_grp_sub.png
 
 
 
-
-
-
-
-
 # ------------------------------------------------------------------------------------ #
 # ------------------------------------------------------------------------------------ #
 # ------------------------------------------------------------------------------------ #
+
 #### //// Per-branch lHGT position bias //// ####
 
 
@@ -1068,6 +1070,10 @@ quartz(width = 16, height = 16, bg = "#333233", type = "pdf", file = "/Users/aes
 print(SubDivisionPairwise_plot)
 dev.off()
 
+
+
+
+
 # ------------------------------------------------------------------------------------ #
 # ------------------------------------------------------------------------------------ #
 # ------------------------------------------------------------------------------------ #
@@ -1078,125 +1084,158 @@ dev.off()
 
 
 
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
 
 
-
-bySubdivision_split	<- function(data, subDivisions, variable = NA) {
-
-	data$Mod_dist	<- data$relGeneStart
-	data$Mod_dist[which(data$Mod_dist > 0.5)]	<- 1 - data$Mod_dist[which(data$Mod_dist > 0.5)]
-	varName			<- unique(unlist(data[[variable]]))
-
-	bysubdiv_data	<- lapply(1:length(subDivisions), function(index) {
-
-		subdiv		<- subDivisions[[index]]
-		subdivName	<- names(subDivisions[index])
-
-
-		if (!identical(index, length(subDivisions))) {
-			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist < subdiv[2]),]	
-		} else {
-			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
-		}
-		
-		if (is.na(variable)) {
-			return(data.frame(subDiv = subdivName, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))
-		} else if (identical(variable, "COGcat")) {
-			subdiv_vars			<- unlist(subdiv_data[[variable]])
-			subdiv_var_tab		<- data.frame(COGcat = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
-		} else {
-			subdiv_vars			<- subdiv_data[[variable]]
-			subdiv_var_tab		<- data.frame(Variable = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
-		}
-		return(list(data = subdiv_data, cog_tab = subdiv_var_tab))
-	})
-
-	if (is.na(variable)) {
-		subdivCombine_df	<- bind_rows(bysubdiv_data)
-		return(subdivCombine_df)
+perCOGData_extract			<- function(COG, dataType, penalty, byAge = FALSE, subgroup = NA) {
+	if (is.na(penalty)) {
+		perCOGAll	<- perTypeData[[dataType]]$allPosData[which(perTypeData[[dataType]]$allPosData$COGcat == COG),]
+	} else if (!byAge) {
+		perCOGAll	<- perTypeData[[dataType]][[penalty]]$allPosData[which(perTypeData[[dataType]][[penalty]]$allPosData$COGcat == COG),]
 	} else {
-		# Extract the tables and bind them into one dataframe
-		subdivCombine_tabs		<- lapply(bysubdiv_data, function(subdiv) return(subdiv$cog_tab))
-		subdivCombine_df		<- bind_rows(subdivCombine_tabs)
-		# Any missing values to 0
-		subdivCombine_df[is.na(subdivCombine_df)]	<- 0
-		# Add proportion column
-		subdivCombine_df$Proportion	<- subdivCombine_df$numObsv / sum(subdivCombine_df$numObsv)
-
-		return(list(full_data = bysubdiv_data, tab_df = subdivCombine_df))
+		perCOGAll	<- perTypeData$lHGT[[penalty]]$allPosData[which(perTypeData$lHGT[[penalty]]$allPosData$COGcat == COG & perTypeData$lHGT[[penalty]]$allPosData$Subgroup == subgroup),]
 	}
+
+	if (nrow(perCOGAll) == 0) {
+		return(NA)
+	}
+
+	circStart		<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+	perCOGbySubdiv	<- bySubdivision_split(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
+	return(list(allData = perCOGAll, CircStart = circStart, perCOGbySubdiv_df = perCOGbySubdiv$tab_df))
+}
+
+compareCOGs_bySubdivision	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, subDivision_list, clusterBy = "A", cogMinCutOff = 50) {
+
+	combine_dataTypes			<- bind_rows(bySuvdiv_dataType_A, bySuvdiv_dataType_B)
+	combine_dataTypes$subDiv	<- factor(combine_dataTypes$subDiv, levels = names(subDivision_list))
+
+	## Remove all COG categories where there are fewer than 50 genes per COG in either dataType
+	minCutOffCOGs	<- unlist(lapply(unique(combine_dataTypes$COGcat), function(COG) {
+		sets	<- unique(combine_dataTypes$Set)
+		subsets	<- unlist(lapply(sets, function(set) ifelse(sum(combine_dataTypes$numObsv[which(combine_dataTypes$Set == set & combine_dataTypes$COGcat == COG)]) >= cogMinCutOff, 1, 0)))
+		result	<- ifelse(sum(subsets) != length(sets), NA, COG)
+		return(result)
+	}))
+	minCutOffCOGs	<- minCutOffCOGs[!is.na(minCutOffCOGs)]
+	minCutOffPrune	<- combine_dataTypes[which(combine_dataTypes$COGcat %in% minCutOffCOGs),]
+
+
+	## Cluster one of the comparisons - this will be used to order the data
+	if (identical(clusterBy, "A")) {
+		clusterBySet		<- unique(bySuvdiv_dataType_A$Set)
+	} else if (identical(clusterBy, "B")) {
+		clusterBySet		<- unique(bySuvdiv_dataType_B$Set)
+	} else {
+		stop("Must cluster by either dataset A or dataset B")
+	}
+	dataForCluster					<- minCutOffPrune[which(minCutOffPrune$Set == clusterBySet),]
+
+	## Prepare data to cluster 
+	clusterRecast_data				<- dcast(dataForCluster, COGcat ~ subDiv, value.var = "numObsv")
+	rownames(clusterRecast_data)	<- clusterRecast_data$COGcat
+	clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
+	clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
+
+	clusterCompartments_dendro		<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
+
+	## Plot the clustering dendrogram
+	perBranchCompartment_cluster	<- ggplot() +
+		geom_segment(data = clusterCompartments_dendro$segments, aes(x = x, y = y, xend = xend, yend = yend), col = "#D9D9D9", size = 1) + 
+		darkTheme +
+		theme(
+			plot.margin = unit(c(0, 1.4, 0, 1.4), "cm"),
+			panel.grid.major = element_blank(),
+			panel.grid.minor = element_blank(),
+			axis.text = element_blank(),
+			axis.title = element_blank(),
+			axis.ticks = element_blank()
+		)
+
+	## Refactor the COG categories to match the clustering
+	minCutOffPrune$COGcat		<- factor(minCutOffPrune$COGcat, levels = clusterCompartments_dendro$labels$label)
+
+	## Plot the comparison barplot
+	compBySubDiv_barplot		<- ggplot(data = minCutOffPrune, aes(x = Set, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
+		geom_bar(stat = "identity", position = "fill") +
+		facet_wrap(~COGcat, nrow = 1) +
+		geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
+		scale_fill_manual(values = subDivison_cols, guide = FALSE) +
+		darkTheme +
+		theme(
+			plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
+			panel.grid.major.y = element_blank(),
+			panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
+			panel.grid.minor.y = element_blank(),
+			axis.text.y = element_blank(),
+			axis.title.y = element_blank(),
+			axis.title.x = element_blank(),
+			axis.ticks = element_blank(),
+			strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
+			strip.text = element_text(color =  "#D9D9D9", size = 12)
+		)
+
+
+	## Perform the ChisSQ tests
+	chisqByCOG_list	<- lapply(minCutOffCOGs, function(COG) {
+		# subset data by COG
+		subsetByCOG		<- minCutOffPrune[which(minCutOffPrune$COGcat == COG),]
+		# recast data
+		recastForChisq	<- dcast(subsetByCOG, subDiv ~ Set, value.var = "numObsv")
+		# remove the category (subdiv) column leaving a two column matrix
+		matrixForChisq	<- as.matrix(recastForChisq[,-1])
+		# perform chisq
+		chisq.pval		<- chisq.test(x = matrixForChisq)$p.value
+		return(data.frame(COG = COG, chisqPval = chisq.pval, stringsAsFactors = FALSE))
+	})
+	chisqByCOG_df		<- bind_rows(chisqByCOG_list)
+
+	## Return both the cluster dendrogram and barplot
+	return(list(ClusterDendro = perBranchCompartment_cluster, ComparisonBarplot = compBySubDiv_barplot, perCOGstat = chisqByCOG_df))
 }
 
 
 
-
-
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
 
 
 
 HGTPenalty		<- "4"
 verPenalty		<- "3"
+cogMinCutOff	<- 50
+
+uniqueCOGs			<- unique(unlist(perTypeData$All$allPosData$COGcat))
+dataTypes_withAge	<- c(dataTypes, "Old", "Recent")
 
 
+# ------------------------------------------------------------------------------------ #
 
-
-uniqueCOGs		<- unique(unlist(perTypeData$All$allPosData$COGcat))
 
 ## Compare COG distributions between different datasets ##
-perTypeCOGAvPos_dataPlots	<- lapply(dataTypes, function(dataType) {
+perTypeCOG_data	<- lapply(dataTypes_withAge, function(dataType) {
 
 	print(dataType)
+	byAge		<- FALSE
+	subgroup	<- NA 
 
 	if (identical(dataType, "All")) {
-		perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
-
-			perCOGAll	<- perTypeData[[dataType]]$allPosData[which(perTypeData[[dataType]]$allPosData$COGcat == COG),]
-			if (nrow(perCOGAll) == 0) {
-				return(NA)
-			}
-			
-			# Circularise the start positions
-			circStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-
-			# By compartment (Subdivision)
-			perCOGbySubdiv	<- bySubdivision_split(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
-			return(list(allData = perCOGAll, CircStart = circStart, perCOGbySubdiv_df = perCOGbySubdiv$tab_df))
-		})
-		names(perCOGData_list)	<- uniqueCOGs
-
-		# Remove any COGs that don't have any observations
-		perCOGData_list			<- perCOGData_list[!is.na(perCOGData_list)]
-
-		# Produce the circular plots
-		perCOGAvPos_Sum_Plot	<- plotCOGCircularDistribution(perCOGData_list, dataType)
-		perCOGAvPos_Sum			<- perCOGAvPos_Sum_Plot$circSum
-		perCOGAvPos_Plot		<- perCOGAvPos_Sum_Plot$plot
-
-		# Produce the by-Compartment dataframe
-		byCOGbySubdiv_df		<- bind_rows(lapply(perCOGData_list, function(COG) return(COG$perCOGbySubdiv_df)))
-		byCOGbySubdiv_df$Set	<- dataType
-
-		return(list(perCOGdata = perCOGData_list, bySubdivision = byCOGbySubdiv_df, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
+		penalty		<- NA
 	} else if (identical(dataType, "Ver")) {
 		penalty		<- verPenalty
 	} else {
 		penalty		<- HGTPenalty
+		if (identical(dataType, "Old") || identical(dataType, "Recent")) {
+			byAge		<- TRUE
+			subgroup	<- ifelse(identical(dataType, "Old"), FALSE, TRUE)
+		}
 	}
 
-	## For Vertical, lHGT, and sHGT read in the position data per penalty
-	perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
-		
-		perCOGAll	<- perTypeData[[dataType]][[penalty]]$allPosData[which(perTypeData[[dataType]][[penalty]]$allPosData$COGcat == COG),]
-		if (nrow(perCOGAll) == 0) {
-			return(NA)
-		}
-		# Circularise the start positions
-		circStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-		# By compartment (Subdivision)
-		perCOGbySubdiv	<- bySubdivision_split(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
-		return(list(allData = perCOGAll, CircStart = circStart, perCOGbySubdiv_df = perCOGbySubdiv$tab_df))
-	})
+	# For each COG, extract the relevant data - see the "perCOGData_extract" function for exact outputs
+	perCOGData_list	<- lapply(uniqueCOGs, perCOGData_extract, dataType = dataType, penalty = penalty, byAge = byAge, subgroup = subgroup)
 	names(perCOGData_list)	<- uniqueCOGs
+	
 	# Remove any COGs that don't have any observations
 	perCOGData_list			<- perCOGData_list[!is.na(perCOGData_list)]
 
@@ -1209,330 +1248,269 @@ perTypeCOGAvPos_dataPlots	<- lapply(dataTypes, function(dataType) {
 	byCOGbySubdiv_df		<- bind_rows(lapply(perCOGData_list, function(COG) return(COG$perCOGbySubdiv_df)))
 	byCOGbySubdiv_df$Set	<- dataType
 
+	# Return all the raw datam as well as COGs per compartment, the circular summary of gene positions, and the circular weighted mean position plot
 	return(list(perCOGdata = perCOGData_list, bySubdivision = byCOGbySubdiv_df, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
-
 })
-names(perTypeCOGAvPos_dataPlots)	<- dataTypes
+names(perTypeCOG_data)	<- dataTypes_withAge
 
 
+# ------------------------------------------------------------------------------------ #
 
 
+## Compare the COG distributions between the lHGT and Vertical datasets
+lHGTvsVer_COGcompare	<- compareCOGs_bySubdivision(bySuvdiv_dataType_A = perTypeCOG_data$lHGT$bySubdivision, bySuvdiv_dataType_B = perTypeCOG_data$Ver$bySubdivision, subDivision_list = subDivision_list, clusterBy = "A")
 
-test_x	<- bind_rows(perTypeCOGAvPos_dataPlots$Ver$bySubdivision, perTypeCOGAvPos_dataPlots$lHGT$bySubdivision)
-test_x$subDiv	<- factor(test_x$subDiv, levels = names(subDivision_list))
-
-minCutOffCOGs	<- unlist(lapply(unique(test_x$COGcat), function(COG) {
-	sets	<- unique(test_x$Set)
-	subsets	<- unlist(lapply(sets, function(set) ifelse(sum(test_x$numObsv[which(test_x$Set == set & test_x$COGcat == COG)]) >= 50, 1, 0)))
-	result	<- ifelse(sum(subsets) != length(sets), NA, COG)
-	return(result)
-}))
-minCutOffCOGs	<- minCutOffCOGs[!is.na(minCutOffCOGs)]
-
-minCutOffPrune <- test_x[which(test_x$COGcat %in% minCutOffCOGs),]
-
-plot_x	<- ggplot(data = minCutOffPrune, aes(x = Set, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
-	geom_bar(stat = "identity", position = "fill") +
-	facet_wrap(~COGcat) +
-	geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
-	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
-	darkTheme +
-	theme(
-		plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
-		panel.grid.major.y = element_blank(),
-		panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
-		panel.grid.minor.y = element_blank(),
-		axis.text.y = element_blank(),
-		axis.title.y = element_blank(),
-		axis.title.x = element_blank(),
-		axis.ticks = element_blank(),
-		strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
-		strip.text = element_text(color =  "#D9D9D9", size = 12)
-	)
+## Compare the COG distributions between the lHGT Old and Recent datasets
+OldvsRcent_COGcompare	<- compareCOGs_bySubdivision(bySuvdiv_dataType_A = perTypeCOG_data$Old$bySubdivision, bySuvdiv_dataType_B = perTypeCOG_data$Recent$bySubdivision, subDivision_list = subDivision_list, clusterBy = "A")
 
 
-
-verOnly	<- minCutOffPrune[which(minCutOffPrune$Set == "Ver"),]
-hgtOnly	<- minCutOffPrune[which(minCutOffPrune$Set == "lHGT"),]
-
-## Prepare data to cluster 
-clusterRecast_data				<- dcast(verOnly, COGcat ~ subDiv, value.var = "numObsv")
-rownames(clusterRecast_data)	<- clusterRecast_data$COGcat
-clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
-clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
-
-clusterCompartments_dendroVer	<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
-verTree	<- as.phylo(hclust(clusterRecastProp_dist, method = "ward.D2"))
+# ------------------------------------------------------------------------------------ #
 
 
-clusterRecast_data				<- dcast(hgtOnly, COGcat ~ subDiv, value.var = "numObsv")
-rownames(clusterRecast_data)	<- clusterRecast_data$COGcat
-clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
-clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
-
-clusterCompartments_dendroHGT	<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
-hgtTree	<- as.phylo(hclust(clusterRecastProp_dist, method = "ward.D2"))
-
-
-## Plot the clustering dendrogram
-perBranchCompartment_cluster	<- ggplot() +
-	geom_segment(data = clusterCompartments_dendro$segments, aes(x = x, y = y, xend = xend, yend = yend), col = "#D9D9D9", size = 1) + 
-	darkTheme +
-	theme(
-		plot.margin = unit(c(0, 1.4, 0, 1.4), "cm"),
-		panel.grid.major = element_blank(),
-		panel.grid.minor = element_blank(),
-		axis.text = element_blank(),
-		axis.title = element_blank(),
-		axis.ticks = element_blank()
-	)
-
-
-verOnly$COGcat		<- factor(verOnly$COGcat, levels = clusterCompartments_dendro$labels$label)
-statComparisons		<- lapply(combn(unique(verOnly$COGcat), 2, simplify = FALSE), paste0)
-
-plot_verOnly	<- ggplot(data = verOnly, aes(x = COGcat, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
-	geom_bar(stat = "identity", position = "fill") +
-	geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
-	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
-	darkTheme +
-	theme(
-		plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
-		panel.grid.major.y = element_blank(),
-		panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
-		panel.grid.minor.y = element_blank(),
-		axis.text.y = element_blank(),
-		axis.title.y = element_blank(),
-		axis.title.x = element_blank(),
-		axis.ticks = element_blank(),
-		strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
-		strip.text = element_text(color =  "#D9D9D9", size = 12)
-	)
-
-
-
-
-
-
-quartz(width = 18, height = 10, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testCategorical.png")
+## Plot the lHGT vs Vertical data - clustered by the lHGT distributions
+png(width = 20, height = 10, units = "in", res = 300, bg = "#333233", filename = "/Users/Sasha/Desktop/Geo_again/HGT_position/Temp_figures/Compare_bySubdiv/lHGTvVer_clusterBylHGT.png")
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
-print(perBranchCompartment_cluster, newpage = FALSE)
+print(lHGTvsVer_COGcompare$ClusterDendro, newpage = FALSE)
 popViewport()
 
 pushViewport(viewport(layout.pos.row = 2))
-print(plot_verOnly, newpage = FALSE)
+print(lHGTvsVer_COGcompare$ComparisonBarplot, newpage = FALSE)
 popViewport()
 dev.off()
 
 
-a	<- minCutOffPrune$numObsv[which(minCutOffPrune$COGcat == "O" & minCutOffPrune$Set == "Ver")]
-b	<- minCutOffPrune$numObsv[which(minCutOffPrune$COGcat == "P" & minCutOffPrune$Set == "Ver")]
-c	<- cbind(a, b)
-chisq.test(c)
+## Plot the lHGT Old vs Recent data - clustered by the Old distributions
+# Interestingly, in the old vs recent, we find that the distribution of 
+# metabolic genes (towards origin) - G, C, E (and "-") are not
+# significantly different between the age classes.
+png(width = 20, height = 10, units = "in", res = 300, bg = "#333233", filename = "/Users/Sasha/Desktop/Geo_again/HGT_position/Temp_figures/Compare_bySubdiv/lHGT_OldvRecent_clusterBylHGT.png")
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
+pushViewport(viewport(layout.pos.row = 1))
+print(OldvsRcent_COGcompare$ClusterDendro, newpage = FALSE)
+popViewport()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-quartz(width = 24, height = 6, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testCOG.png", dpi = 300)
-plot.new()
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 1, ncol = 4)))
-
-invisible(lapply(seq(1:4), function(plotIndex) {
-	pushViewport(viewport(layout.pos.col = plotIndex))
-	print(perTypeCOGAvPos_dataPlots[[plotIndex]]$plot, newpage = FALSE)
-	popViewport()
-}))
-
+pushViewport(viewport(layout.pos.row = 2))
+print(OldvsRcent_COGcompare$ComparisonBarplot, newpage = FALSE)
+popViewport()
 dev.off()
 
 
 
+## Extracting and plotting just the circular weight position plots
+# invisible(lapply(seq(1:6), function(plotIndex) {
+# 	pushViewport(viewport(layout.pos.col = plotIndex))
+# 	print(perTypeCOGAvPos_dataPlots[[plotIndex]]$plot, newpage = FALSE)
+# 	popViewport()
+# }))
 
 
 
 
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+# ------------------------------------------------------------------------------------ #
+
+binomial_list			<- unique(perTypeData$All$allPosData$binomial)
+
+byTypeStrandBias_list	<- lapply(dataTypes_withAge, function(dataType) {
+	message(paste0("Calculating strand bias profiles for: ", dataType))
 
 
+	byAge		<- FALSE
+	subgroup	<- NA 
 
-
-
-
-
-
-
-
-## Compare COG distributions by AGE ##
-byAgeCOGAvPos_plots		<- lapply(list("All_lHGT", "Old_lHGT", "Young_lHGT"), function(Age) {
-
-	if (identical(Age, "All_lHGT")) {
-		perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
-			# All transfered genes at this branch
-			perCOGAll	<- perTypeData$lHGT[[penalty]]$allPosData[which(perTypeData$lHGT[[penalty]]$allPosData$COGcat == COG),]
-			# Circularise the start positions
-			hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-			return(list(allData = perCOGAll, CircStart = hgtCircStart))
-		})
-		names(perCOGData_list)	<- uniqueCOGs
-		perCOGAvPos_plot	<- plotCOGCircularDistribution(perCOGData_list, Age, minCOGNum = 20)
-		return(perCOGAvPos_plot)
-
-	} else if (identical(Age, "Old_lHGT")) {
-		subGroup		<- FALSE
+	if (identical(dataType, "All")) {
+		penalty		<- NA
+	} else if (identical(dataType, "Ver")) {
+		penalty		<- "3"
 	} else {
-		subGroup		<- TRUE
+		penalty		<- "4"
+		if (identical(dataType, "Old") || identical(dataType, "Recent")) {
+			byAge		<- TRUE
+			subgroup	<- ifelse(identical(dataType, "Old"), FALSE, TRUE)
+		}
 	}
 
-	perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
-		byGroupData	<- perTypeData$lHGT[[penalty]]$allPosData[which(perTypeData$lHGT[[penalty]]$allPosData$Subgroup == subGroup),]
-		# All transfered genes at this branch
-		perCOGAll	<- byGroupData[which(byGroupData$COGcat == COG),]
-		# Circularise the start positions
-		hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-		return(list(allData = perCOGAll, CircStart = hgtCircStart))
+	byTypebySpeciesStrandBias	<- lapply(binomial_list, function(binomial) {
+
+		binLength			<- 100
+		byBinStrandBias		<- lapply(seq(1:binLength), function(genome_bin) {
+
+			bin_start		<- (genome_bin - 1) / binLength
+			bin_end			<- genome_bin / binLength
+
+			if (is.na(penalty)) {
+				perBinStrand	<- perTypeData$All$allPosData$relStrand[which(perTypeData$All$allPosData$binomial == binomial & perTypeData$All$allPosData$relGeneStart > bin_start & perTypeData$All$allPosData$relGeneStart <= bin_end)]
+			} else if (!byAge) {
+				perBinStrand	<- perTypeData[[dataType]][[penalty]]$allPosData$relStrand[which(perTypeData[[dataType]][[penalty]]$allPosData$binomial == binomial & perTypeData[[dataType]][[penalty]]$allPosData$relGeneStart > bin_start & perTypeData[[dataType]][[penalty]]$allPosData$relGeneStart <= bin_end)]
+			} else {
+				perBinStrand	<- perTypeData$lHGT[[penalty]]$allPosData$relStrand[which(perTypeData$lHGT[[penalty]]$allPosData$binomial == binomial & perTypeData$lHGT[[penalty]]$allPosData$Subgroup == subgroup & perTypeData$lHGT[[penalty]]$allPosData$relGeneStart > bin_start & perTypeData$lHGT[[penalty]]$allPosData$relGeneStart <= bin_end)]
+			}
+
+			if (length(perBinStrand) == 0) {
+				return(data.frame(BinIndex = genome_bin, StrandBias = NA, stringsAsFactors = FALSE))
+			}
+
+			numSameStrand	<- length(which(perBinStrand == "same"))
+			numDiffStrand	<- length(which(perBinStrand == "diff"))
+
+			sameOvDiff		<- (numSameStrand - numDiffStrand) / sum(c(numSameStrand, numDiffStrand))
+			return(data.frame(BinIndex = genome_bin, StrandBias = sameOvDiff, stringsAsFactors = FALSE))
+		})
+		byBinStrandBias_df	<- bind_rows(byBinStrandBias)
+		byBinStrandBias_df$Species	<- binomial
+
+		## Add a rolling mean value to identify outlier patterns in the "All" dataType
+		if (identical(dataType, "All"))  {
+			byBinStrandBias_df$rollMean	<- as.vector(rollapply(zoo(byBinStrandBias_df$StrandBias), width = 20, mean, by = 1, fill = NA))
+		}
+		return(byBinStrandBias_df)
 	})
-	names(perCOGData_list)	<- uniqueCOGs
-	perCOGAvPos_plot	<- plotCOGCircularDistribution(perCOGData_list, Age, minCOGNum = 20)
-	return(perCOGAvPos_plot)
-
+	byTypebySpeciesStrandBias		<- bind_rows(byTypebySpeciesStrandBias)
+	byTypebySpeciesStrandBias$Type	<- dataType
+	return(byTypebySpeciesStrandBias)
 })
+names(byTypeStrandBias_list)	<- dataTypes_withAge
 
-quartz(width = 18, height = 6, canvas = "#333233", bg = "#333233", type = "png", file = "/Users/aesin/Desktop/testCOGbyAge.png", dpi = 300)
-plot.new()
-grid.newpage()
-pushViewport(viewport(layout = grid.layout(nrow = 1, ncol = 3)))
+## Extract the roll mean values (for outlier ID), and then adjust the All dataframe to remove the extra column
+outlierID_rollmean			<- byTypeStrandBias_list$All
+byTypeStrandBias_list$All	<- byTypeStrandBias_list$All[, !(names(byTypeStrandBias_list$All) == "rollMean")]
 
-invisible(lapply(seq(1:3), function(plotIndex) {
-	pushViewport(viewport(layout.pos.col = plotIndex))
-	print(byAgeCOGAvPos_plots[[plotIndex]], newpage = FALSE)
-	popViewport()
-}))
-dev.off()
+## Subset outliers
+outlierSpecies		<- subset(outlierID_rollmean, BinIndex == 50 & (rollMean > 0.25 | rollMean < -0.25))$Species
+outlierLineTypes	<- c("dotted", "dashed", "twodash")
+if (length(outlierSpecies) != length(outlierLineTypes)) {
+	stop(paste0("Change number of linetypes available to: ", length(outlierSpecies)))
+}
 
-
-
-## Plot for root only ##
-perCOGData_list	<- lapply(uniqueCOGs, function(COG) {
-	rootData	<- perTypeData$lHGT$'4'$allPosData[which(perTypeData$lHGT$'4'$allPosData$recepEdge == "1531 1375"),]
-	# All transfered genes at this branch
-	perCOGAll	<- rootData[which(rootData$COGcat == COG),]
-	# Circularise the start positions
-	hgtCircStart	<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-	return(list(allData = perCOGAll, CircStart = hgtCircStart))
-})
-names(perCOGData_list)	<- uniqueCOGs
-perCOGAvPos_plot	<- plotCOGCircularDistribution(perCOGData_list, "Root", minCOGNum = 20, ymax = 1)
-
-
-
-
-
-
-## We can see the the "All" gene dataset has uniform spacing
-# rao.spacing.test(perTypeData$All$allPosData$CircStart)
-
-## But this is not the case for vertical or HGT sets
-# rao.spacing.test(perTypeData$Ver$`3`$allPosData$CircStart)
-# rao.spacing.test(perTypeData$lHGT$`4`$allPosData$CircStart)
-
-## Although the polar vector (mean) appears to be the same for the vertical and lHGT sets, dispersion is significantly different 
-# rao.test(perTypeData$Ver$`3`$allPosData$CircStart, perTypeData$lHGT$`4`$allPosData$CircStart)
-
-
-
-sharedCOGs	<- left_join(perTypeCOGAvPos_dataPlots$lHGT$circSummary, perTypeCOGAvPos_dataPlots$Ver$circSummary, by = "COG")$COG
-
-wallraffTest_res	<- lapply(sharedCOGs, function(COG) {
-	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
-	verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
-
-	x <- wallraff.test(list(hgtCOG, verCOG))
-	return(x)
-})
-names(wallraffTest_res)	<- sharedCOGs
-
-
-watson.twoTest	<- lapply(sharedCOGs, function(COG) {
-	message(COG)
-	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
-	verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
-
-	x <- watson.two.test(hgtCOG, verCOG)
-	return(x)
-})
-names(watson.twoTest)	<- sharedCOGs
-
-
-wg.Test	<- lapply(sharedCOGs, function(COG) {
-	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
-	verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
-
-	ndat	<- c(length(hgtCOG), length(verCOG))
-	message(COG)
-	message(paste(ndat, " "))
-	g		<- 2
-
-	CSUScores	<- CosSinUniScores(c(hgtCOG,verCOG))
-	WgObs		<- WgVal(CSUScores, ndat, g)
-	pval		<- pchisq(WgObs, 2*(g-1), lower.tail=F)
-
-	return(list(WgObs, pval))
-})
-names(wg.Test)	<- sharedCOGs
-
-
-allHGT	<- lapply(sharedCOGs, function(COG) {
-	hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
-	return(hgtCOG)
+## Define a new column - in which we only have the outlier Species names (to use as linetype aesthetic below)
+byTypeStrandBias_list	<- lapply(byTypeStrandBias_list, function(dataType) {
+	dataType$lineType	<- NA
+	dataType$lineType[which(dataType$Species %in% outlierSpecies)]	<- dataType$Species[which(dataType$Species %in% outlierSpecies)]
+	return(dataType)
 })
 
 
+StrandBias_AllvsVer			<- bind_rows(list(byTypeStrandBias_list$All, byTypeStrandBias_list$Ver))
+StrandBias_AllvsVer$Type	<- factor(StrandBias_AllvsVer$Type, levels = c("All", "Ver", "lHGT", "sHGT", "Old", "Recent"))
 
-COG = "H"
-hgtCOG	<- perTypeCOGAvPos_dataPlots$lHGT$perCOGdata[[COG]]$CircStart
-verCOG	<- perTypeCOGAvPos_dataPlots$Ver$perCOGdata[[COG]]$CircStart
+allVsVer_cols	<- wes_palette("Darjeeling1")[1:2]
 
-# aov.circular(c(hgtCOG, verCOG), group = c(rep(0, length(hgtCOG)), rep(1, length(verCOG))))
-
-bandwith = 1000
-basicPositionPlot(dataDensityA = density.circular(hgtCOG, bw = bandwith), dataDensityB = density.circular(verCOG, bw = bandwith), bgDensity = perTypeData$All$circDensity, shrink = 1.2, uin = 1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+StrandBias_AllvsVer_plot	<- ggplot(StrandBias_AllvsVer, aes(x = BinIndex, y = StrandBias, color = Type)) +
+	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+	scale_y_continuous(name = "Enrichment for genes on same strand as DnaA") +
+	geom_hline(yintercept = 0, col = alpha("#D9D9D9", 0.75), size = 1) + 
+	geom_smooth(data = subset(StrandBias_AllvsVer, Type == "All" & !(Species %in% outlierSpecies)), aes(group = Species), col = alpha(allVsVer_cols[1], 0.5), size = 0.2, se = FALSE) +
+	geom_smooth(data = subset(StrandBias_AllvsVer, Type == "Ver" & !(Species %in% outlierSpecies)), aes(group = Species), col = alpha(allVsVer_cols[2], 0.5), size = 0.2, se = FALSE) +
+	geom_smooth(data = subset(StrandBias_AllvsVer, Type == "All" & (Species %in% outlierSpecies)), aes(linetype = lineType), col = alpha(allVsVer_cols[1], 1), size = 0.3, se = FALSE) +
+	geom_smooth(data = subset(StrandBias_AllvsVer, Type == "Ver" & (Species %in% outlierSpecies)), aes(linetype = lineType), col = alpha(allVsVer_cols[2], 1), size = 0.3, se = FALSE) +
+	geom_smooth(aes(color = Type), method = "loess", size = 1.5, se = FALSE) +
+	scale_color_manual(values = allVsVer_cols, guide = guide_legend(title = "Gene Type")) +
+	scale_linetype_manual(values = outlierLineTypes, guide = guide_legend(title = "Outliers")) +
+	darkTheme +
+	theme(
+		legend.justification = c(1, 1),
+		legend.position = c(0.9, 0.9),
+		legend.background = element_rect(fill = "#333233", color = "#D9D9D9")
+	)
 
 
+StrandBias_VervsHGT			<- bind_rows(list(byTypeStrandBias_list$Ver, byTypeStrandBias_list$lHGT))
+StrandBias_VervsHGT$Type	<- factor(StrandBias_VervsHGT$Type, levels = c("All", "Ver", "lHGT", "sHGT", "Old", "Recent"))
+
+StrandBias_VervslHGT_plot	<- ggplot(StrandBias_VervsHGT, aes(x = BinIndex, y = StrandBias, color = Type)) +
+	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+	geom_hline(yintercept = 0, col = alpha("#D9D9D9", 0.75), size = 1) + 
+	scale_y_continuous(name = "Enrichment for genes on same strand as DnaA") +
+	geom_smooth(data = subset(StrandBias_VervsHGT, Type == "Ver"), aes(group = Species), color = alpha(wes_palette("Darjeeling1")[2], 0.5), size = 0.2, se = FALSE) +
+	geom_smooth(data = subset(StrandBias_VervsHGT, Type == "lHGT"), aes(group = Species), color = alpha(wes_palette("Darjeeling1")[3], 0.5), size = 0.2, se = FALSE) +
+	geom_smooth(aes(color = Type, fill = Type), method = "loess", size = 1.5, se = FALSE) +
+	stat_density(
+		geom = "line",
+		position = "identity",
+		data = subset(StrandBias_VervsHGT, Type == "Ver" & is.na(StrandBias)),
+		aes(x = BinIndex, y = ..scaled../4),
+		adjust = 0.25,
+		color = wes_palette("Darjeeling1")[2],
+		linetype = "longdash",
+		size = 0.5,
+		inherit.aes = FALSE) +
+	stat_density(
+		geom = "line",
+		position = "identity",
+		data = subset(StrandBias_VervsHGT, Type == "lHGT" & is.na(StrandBias)),
+		aes(x = BinIndex, y = -..scaled../4),
+		adjust = 0.25,
+		color = wes_palette("Darjeeling1")[3],
+		linetype = "longdash",
+		size = 0.5,
+		inherit.aes = FALSE) +
+	scale_color_manual(values = alpha(wes_palette("Darjeeling1")[2:4])) +
+	scale_fill_manual(values = alpha(wes_palette("Darjeeling1")[2:4], alpha = 0.3), guide = FALSE) +
+	darkTheme +
+	theme(
+		legend.justification = c(1, 1),
+		legend.position = c(0.9, 0.9),
+		legend.background = element_rect(fill = "#333233", color = "#D9D9D9")
+	)
+
+
+
+
+# ------------------------------------------------------------------------------------ #
+
+
+perBinBias_ver		<- byTypeStrandBias_list$Ver[!is.na(byTypeStrandBias_list$Ver$StrandBias),]
+
+perBinBias_Recent	<- byTypeStrandBias_list$Recent[!is.na(byTypeStrandBias_list$Recent$StrandBias),]
+
+perBinBiasMean_ver		<- dcast(perBinBias_ver, BinIndex ~ Type, mean, value.var = "StrandBias")
+perBinBiasMean_recent	<- dcast(perBinBias_Recent, BinIndex ~ Type, mean, value.var = "StrandBias")
+
+
+StrandBias_OldvsNew			<- bind_rows(list(byTypeStrandBias_list$Old, byTypeStrandBias_list$Recent))
+StrandBias_OldvsNew$Type	<- factor(StrandBias_OldvsNew$Type, levels = c("All", "Ver", "lHGT", "sHGT", "Old", "Recent"))
+
+StrandBias_OldvsNew_plot	<- ggplot(StrandBias_OldvsNew, aes(x = BinIndex, y = StrandBias, color = Type)) +
+	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+	geom_hline(yintercept = 0, col = alpha("#D9D9D9", 0.75), size = 1) + 
+	scale_y_continuous(name = "Enrichment for genes on same strand as DnaA") +
+	# geom_smooth(data = subset(StrandBias_VervsHGT, Type == "Ver"), aes(group = Species), color = alpha(wes_palette("Darjeeling1")[2], 0.5), size = 0.2, se = FALSE) +
+	geom_smooth(data = subset(StrandBias_OldvsNew, Type == "Recent"), aes(group = Species), color = alpha(wes_palette("Darjeeling1")[3], 0.5), size = 0.2, se = FALSE) +
+	geom_smooth(aes(color = Type), method = "loess", size = 1.5, se = FALSE) +
+	stat_density(
+		geom = "line",
+		position = "identity",
+		data = subset(StrandBias_OldvsNew, Type == "Old" & is.na(StrandBias)),
+		aes(x = BinIndex, y = ..scaled../4),
+		adjust = 0.25,
+		color = wes_palette("Darjeeling1")[2],
+		linetype = "longdash",
+		size = 0.5,
+		inherit.aes = FALSE) +
+	stat_density(
+		geom = "line",
+		position = "identity",
+		data = subset(StrandBias_OldvsNew, Type == "Recent" & is.na(StrandBias)),
+		aes(x = BinIndex, y = -..scaled../4),
+		adjust = 0.25,
+		color = wes_palette("Darjeeling1")[3],
+		linetype = "longdash",
+		size = 0.5,
+		inherit.aes = FALSE) +
+	scale_color_manual(values = alpha(wes_palette("Darjeeling1")[2:4])) +
+	darkTheme +
+	theme(
+		legend.justification = c(1, 1),
+		legend.position = c(0.9, 0.9),
+		legend.background = element_rect(fill = "#333233", color = "#D9D9D9")
+	)
+
+x <- subset(StrandBias_OldvsNew, Type == "Recent" & !(is.na(StrandBias)), drop = FALSE)
+ggplot(x, aes(x = BinIndex)) + geom_histogram(binwidth = 100)
 
 
 
