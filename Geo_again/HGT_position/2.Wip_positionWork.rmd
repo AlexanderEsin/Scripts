@@ -29,8 +29,8 @@ if (!require("pacman")) install.packages("pacman")
 pacman::p_load("RSQLite", "Biostrings", "ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "ggdendro", "GGally", "ggpubr", "wesanderson", "ggrepel", "phytools", "zoo", "ggtree")
 
 
-# sourceScriptDir	<- "/Users/aesin/Documents/Scripts/Geo_again/HGT_position"
-sourceScriptDir	<- "/Users/Sasha/Documents/Scripts/Geo_again/HGT_position"
+sourceScriptDir	<- "/Users/aesin/Documents/Scripts/Geo_again/HGT_position"
+# sourceScriptDir	<- "/Users/Sasha/Documents/Scripts/Geo_again/HGT_position"
 # Source circular functions
 source(file.path(sourceScriptDir, "includeCircularFunctions.R"))
 
@@ -623,7 +623,7 @@ names(perTypeData)	<- dataTypes
 
 
 ## Check the Vertical density across different penalty values
-windows(width = 14, height = 14)
+windows(width = 14, height = 14, canvas = "#333233", bg = "#333233")
 par(mfrow = c(2, 2))
 par(mar = c(0, 0, 0, 0))
 invisible(lapply(penalty_list, function(penalty) {
@@ -638,11 +638,11 @@ invisible(lapply(penalty_list, function(penalty) {
 	replayPlot(position_plot)
 }))
 
-
+dev.copy2pdf(file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/circDensity/VerbyPenalty.pdf")
 # ------------------------------------------------------------------------------------- #
 
 ## Check lHGT density across different penalty values
-quartz(width = 12, height = 12)
+quartz(width = 12, height = 12, canvas = "#333233", bg = "#333233")
 par(mfrow = c(2, 2))
 par(mar = c(0, 0, 0, 0))
 invisible(lapply(penalty_list, function(penalty) {
@@ -658,11 +658,11 @@ invisible(lapply(penalty_list, function(penalty) {
 	replayPlot(position_plot)
 }))
 
-
+dev.copy2pdf(file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/circDensity/lHGTbyPenalty.pdf")
 # ------------------------------------------------------------------------------------- #
 
 ## Compare lHGT and sHGT density at a given penalty
-quartz(width = 12, height = 6.5)
+quartz(width = 12, height = 6.5, canvas = "#333233", bg = "#333233")
 par(mfrow = c(1, 2))
 par(mar = c(0, 0, 0, 0))
 penalty	<- "4"
@@ -679,11 +679,13 @@ invisible(lapply(list("lHGT", "sHGT"), function(dataType) {
 	replayPlot(position_plot)
 }))
 
+dev.copy2pdf(file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/circDensity/lHGTvssHGT.pdf")
+
 # ------------------------------------------------------------------------------------- #
 
 
 ## Compare group vs subgroup lHGT density at a given penalty
-quartz(width = 21, height = 8)
+quartz(width = 21, height = 8, canvas = "#333233", bg = "#333233")
 par(mfrow = c(1, 3))
 par(mar = c(0, 0, 0, 0))
 penalty	<- "4"
@@ -711,7 +713,7 @@ invisible(lapply(list("lHGT", "Group", "Subgroup"), function(type) {
 	replayPlot(position_plot)
 }))
 
-quartz.save(file = "/Users/aesin/Desktop/Geo_again/HGT_position/lHGT_grp_sub.png")
+dev.copy2pdf(file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/circDensity/OldVsRecent.pdf")
 
 
 # ------------------------------------------------------------------------------------- #
@@ -922,6 +924,9 @@ for (i in 1:nrow(perBranchCircSummary_df)) {
 ## Add the Included column to color tree branches by whether they are in the Mean/Rho plot
 edgeLabels_df$Included	<- unlist(lapply(edgeLabels_df$Index, function(x) ifelse(is.na(x), 0, 1)))
 
+# Color for the binomial tree
+Royal1Pal	<- colorRampPalette(rev(wes_palette("Royal1")[1:2]))
+
 
 # ------------------------------------------------------------------------------------- #
 
@@ -987,12 +992,12 @@ perBranchCompartment_barplot	<- ggplot(data = perBranchSubDivision_df, aes(x = I
 ###  /// Write out data plots /// ###
 
 ## Plot the Compartment (Subdivision) key wheel
-quartz(width = 5, height = 4, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/subDiv_key.pdf")
+quartz(width = 5, height = 4, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/byBranch/subDiv_key.pdf")
 print(subDivisionKey_plot)
 dev.off()
 
 ##  Plot the dendro tree together with the barplots showing lHGT proportion in different genomic compartments
-quartz(width = 20, height = 14, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/byBranch_subdiv.pdf")
+quartz(width = 20, height = 14, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/byBranch/byBranch_subdiv.pdf")
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
@@ -1005,12 +1010,12 @@ popViewport()
 dev.off()
 
 ## Plot the perBranch HGT mean weight side-by-side with the timeTree labelled with the branches
-quartz(width = 9, height = 8, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/byBranch_circAV.pdf")
+quartz(width = 9, height = 8, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/byBranch/byBranch_circAV.pdf")
 print(perBranchAvHGT_plot)
 dev.off()
 
 ## Plot reference tree - colour branches that are used in analysis in red, otherwise grey. Label included branches with the Index number
-quartz(width = 12, height = 8, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/indexTree.pdf")
+quartz(width = 12, height = 8, canvas = "#333233", bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/byBranch/indexTree.pdf")
 plotBranchbyTrait_AE(AG_binomTime_tree, edgeLabels_df$Included, method = "edges", legend = FALSE, palette = Royal1Pal, title = "Included", tip.color = "#D9D9D9", cex = 0.8)
 # Annotate tree with Index
 for (rowIndex in 1:nrow(edgeLabels_df)) {
@@ -1132,15 +1137,15 @@ SubDivisionPairwise_plot	<- SubDivisionPairwise_plot +
 
 ###  /// Write out the stats plots /// ###
 
-quartz(width = 12, height = 8, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/Stats/bySubdiv_boxplot.pdf")
+quartz(width = 12, height = 8, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/bySubdiv/bySubdiv_boxplot.pdf")
 print(perBranchBySubdiv_boxplot)
 dev.off()
 
-quartz(width = 16, height = 10, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/Stats/bySubdiv_branchVslHGTCor.pdf")
+quartz(width = 16, height = 10, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/bySubdiv/bySubdiv_branchVslHGTCor.pdf")
 print(perBranchBySubdiv_cor)
 dev.off()
 
-quartz(width = 16, height = 16, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Temp_figures/Stats/bySubdiv_pairwiseCor.pdf")
+quartz(width = 16, height = 16, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/bySubdiv/bySubdiv_pairwiseCor.pdf")
 print(SubDivisionPairwise_plot)
 dev.off()
 
@@ -1156,6 +1161,10 @@ dev.off()
 
 
 
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# 									---- COG VS SPACE ----								#
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
@@ -1217,6 +1226,21 @@ compareCOGs_bySubdivision	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, 
 
 	clusterCompartments_dendro		<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
 
+	## Perform the ChisSQ tests
+	chisqByCOG_list	<- lapply(minCutOffCOGs, function(COG) {
+		# subset data by COG
+		subsetByCOG		<- minCutOffPrune[which(minCutOffPrune$COGcat == COG),]
+		# recast data
+		recastForChisq	<- dcast(subsetByCOG, subDiv ~ Set, value.var = "numObsv")
+		# remove the category (subdiv) column leaving a two column matrix
+		matrixForChisq	<- as.matrix(recastForChisq[,-1])
+		# perform chisq
+		chisq.pval		<- signif(chisq.test(x = matrixForChisq)$p.value, digits = 3)
+		chisq.format	<- paste0("Chisq:\n", chisq.pval)
+		return(data.frame(COGcat = COG, chisqPval = chisq.pval, chisqForm = chisq.format, stringsAsFactors = FALSE))
+	})
+	chisqByCOG_df		<- bind_rows(chisqByCOG_list)
+
 	## Plot the clustering dendrogram
 	perBranchCompartment_cluster	<- ggplot() +
 		geom_segment(data = clusterCompartments_dendro$segments, aes(x = x, y = y, xend = xend, yend = yend), col = "#D9D9D9", size = 1) + 
@@ -1232,12 +1256,15 @@ compareCOGs_bySubdivision	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, 
 
 	## Refactor the COG categories to match the clustering
 	minCutOffPrune$COGcat		<- factor(minCutOffPrune$COGcat, levels = clusterCompartments_dendro$labels$label)
+	chisqByCOG_df$COGcat		<- factor(chisqByCOG_df$COGcat, levels = clusterCompartments_dendro$labels$label)
+
 
 	## Plot the comparison barplot
 	compBySubDiv_barplot		<- ggplot(data = minCutOffPrune, aes(x = Set, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
 		geom_bar(stat = "identity", position = "fill") +
-		facet_wrap(~COGcat, nrow = 1) +
 		geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
+		geom_label(data = chisqByCOG_df, aes(x = 1.5, y = 0.5, label = chisqForm), position = position_dodge(width = 0.5), size = 4, color = "#D9D9D9", fill = "#333233", inherit.aes = FALSE) +
+		facet_wrap(~COGcat, nrow = 1) +
 		scale_fill_manual(values = subDivison_cols, guide = FALSE) +
 		darkTheme +
 		theme(
@@ -1252,21 +1279,6 @@ compareCOGs_bySubdivision	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, 
 			strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
 			strip.text = element_text(color =  "#D9D9D9", size = 12)
 		)
-
-
-	## Perform the ChisSQ tests
-	chisqByCOG_list	<- lapply(minCutOffCOGs, function(COG) {
-		# subset data by COG
-		subsetByCOG		<- minCutOffPrune[which(minCutOffPrune$COGcat == COG),]
-		# recast data
-		recastForChisq	<- dcast(subsetByCOG, subDiv ~ Set, value.var = "numObsv")
-		# remove the category (subdiv) column leaving a two column matrix
-		matrixForChisq	<- as.matrix(recastForChisq[,-1])
-		# perform chisq
-		chisq.pval		<- chisq.test(x = matrixForChisq)$p.value
-		return(data.frame(COG = COG, chisqPval = chisq.pval, stringsAsFactors = FALSE))
-	})
-	chisqByCOG_df		<- bind_rows(chisqByCOG_list)
 
 	## Return both the cluster dendrogram and barplot
 	return(list(ClusterDendro = perBranchCompartment_cluster, ComparisonBarplot = compBySubDiv_barplot, perCOGstat = chisqByCOG_df))
@@ -1339,7 +1351,7 @@ OldvsRcent_COGcompare	<- compareCOGs_bySubdivision(bySuvdiv_dataType_A = perType
 
 
 ## Plot the lHGT vs Vertical data - clustered by the lHGT distributions
-png(width = 20, height = 10, units = "in", res = 300, bg = "#333233", filename = "/Users/Sasha/Desktop/Geo_again/HGT_position/Temp_figures/Compare_bySubdiv/lHGTvVer_clusterBylHGT.png")
+quartz(width = 18, height = 10, dpi = 300, type = "png", canvas = "#333233", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/Space_COGs/VerticalvslHGT_clusterBylHGT.png")
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
@@ -1356,7 +1368,7 @@ dev.off()
 # Interestingly, in the old vs recent, we find that the distribution of 
 # metabolic genes (towards origin) - G, C, E (and "-") are not
 # significantly different between the age classes.
-png(width = 20, height = 10, units = "in", res = 300, bg = "#333233", filename = "/Users/Sasha/Desktop/Geo_again/HGT_position/Temp_figures/Compare_bySubdiv/lHGT_OldvRecent_clusterBylHGT.png")
+quartz(width = 18, height = 10, dpi = 300, type = "png", canvas = "#333233", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/Space_COGs/OldvsRecent_clusterByOld.png")
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
@@ -1373,7 +1385,7 @@ dev.off()
 ## Extracting and plotting just the circular weight position plots
 # invisible(lapply(seq(1:6), function(plotIndex) {
 # 	pushViewport(viewport(layout.pos.col = plotIndex))
-# 	print(perTypeCOGAvPos_dataPlots[[plotIndex]]$plot, newpage = FALSE)
+# 	print(perTypeCOG_data[[plotIndex]]$plot, newpage = FALSE)
 # 	popViewport()
 # }))
 
@@ -1385,9 +1397,12 @@ dev.off()
 
 
 
+
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
-# Strand Bias																			#
+# ------------------------------------------------------------------------------------- #
+# 									---- STRAND BIAS ----								#
+# ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 
@@ -1629,7 +1644,7 @@ SB_OldvsNew_plot	<- ggplot(SB_OldvsNew, aes(x = BinIndex, y = StrandBias, color 
 	geom_rect(data =  subDivisionKeyLinear_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), inherit.aes = FALSE) +
 	# Histogram for Old genes: show per-Bin population (relative)
 	geom_histogram(
-		data = subset(StrandBias_OldvsNew, Type == "Old" & !(is.na(StrandBias))),
+		data = subset(SB_OldvsNew, Type == "Old" & !(is.na(StrandBias))),
 		aes(x = BinIndex,y = (..ncount.. / 4)),
 		binwidth = 1,
 		fill = alpha(oldVsNew_cols[1], 0.4),
@@ -1638,7 +1653,7 @@ SB_OldvsNew_plot	<- ggplot(SB_OldvsNew, aes(x = BinIndex, y = StrandBias, color 
 		inherit.aes = FALSE) +
 	# Histogram for Recent genes: show per-Bin population (relative)
 	geom_histogram(
-		data = subset(StrandBias_OldvsNew, Type == "Recent" & !(is.na(StrandBias))),
+		data = subset(SB_OldvsNew, Type == "Recent" & !(is.na(StrandBias))),
 		aes(x = BinIndex,y = -(..ncount.. / 4)),
 		binwidth = 1,
 		fill = alpha(oldVsNew_cols[2], 0.4),
@@ -1659,6 +1674,32 @@ SB_OldvsNew_plot	<- ggplot(SB_OldvsNew, aes(x = BinIndex, y = StrandBias, color 
 	)
 
 # ------------------------------------------------------------------------------------- #
+### Write plots
+quartz(width = 16, height = 8, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/Strand_bias/All_genes.png")
+print(SB_AllGenes_plot)
+dev.off()
+quartz(width = 16, height = 8, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/Strand_bias/AllvsVertical.png")
+print(SB_AllvsVer_plot)
+dev.off()
+quartz(width = 16, height = 8, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/Strand_bias/VerticalvslHGT.png")
+print(SB_VervsHGT_plot)
+dev.off()
+quartz(width = 16, height = 8, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/Strand_bias/OldvsRecent_HGT.png")
+print(SB_OldvsNew_plot)
+dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1669,7 +1710,9 @@ SB_OldvsNew_plot	<- ggplot(SB_OldvsNew, aes(x = BinIndex, y = StrandBias, color 
 
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
-# GC Content																			#
+# ------------------------------------------------------------------------------------- #
+# 									---- GC CONTENT	----								#
+# ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 
@@ -1680,11 +1723,70 @@ binomial_list	<- unique(perTypeData$All$allPosData$binomial)
 conn			<- dbConnect(RSQLite::SQLite(), allProtDB_path)
 
 # ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ---	Prepare phylogenies for plotting output - need tip order for plotting later	--- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
 
-byTypebySpeciesGC_data	<- lapply(dataTypes_withAge, function(dataType) {
+# Here we translate the taxid tips of the time tree to the corresponding binomials as stored in the Database
+speciesTaxids	<- AG_taxidTime_tree$tip.label
 
-	message(paste0("Calculating GC content profiles for: ", dataType))
+# Query the database to return binomials
+treeTipNames	<- dbSendQuery(conn, 'SELECT binomial FROM t1 WHERE taxid = :taxids LIMIT 1')
+dbBind(treeTipNames, param = list(taxids = speciesTaxids))
+binomials_df	<- dbFetch(treeTipNames)
+dbClearResult(treeTipNames)
 
+# Relabel the tree
+AG_realBinomTime_tree			<- AG_taxidTime_tree
+AG_realBinomTime_tree$tip.label	<- binomials_df$binomial
+
+# Plot with and without branch.lenght to get phylo and clado trees
+binomTree_phylo <- ggtree(tr = AG_realBinomTime_tree, ladderize = FALSE, col =  "#D9D9D9", size = 1.5) +
+	geom_tiplab(angle = -90, hjust = -0.05, col =  "#D9D9D9") +
+	scale_x_reverse(limits = c(0.5, 0)) +
+	coord_flip() +
+	darkTheme +
+	theme(
+		panel.grid.major = element_blank(),
+		panel.grid.minor = element_blank()
+	)
+binomTree_clado <- ggtree(tr = AG_realBinomTime_tree, branch.length = "none", ladderize = FALSE, col =  "#D9D9D9", size = 1.5) +
+	geom_tiplab(angle = -90, hjust = -0.05, col =  "#D9D9D9") +
+	scale_x_reverse(limits = c(20, 0)) +
+	coord_flip() +
+	darkTheme +
+	theme(
+		panel.grid.major = element_blank(),
+		panel.grid.minor = element_blank()
+	)
+
+# Prepare tree as dataframe to extract tip order
+treeAsDf	<- subset(fortify(AG_realBinomTime_tree, ladderize = FALSE), isTip)
+tipOrder	<- with(treeAsDf, label[order(y, decreasing = T)])
+
+# Write trees out to PDF for combination plots
+quartz(width = 22, height = 12, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/BinomialTree_phylo.pdf")
+print(binomTree_phylo)
+dev.off()
+quartz(width = 16, height = 8, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/BinomialTree_clado.pdf")
+print(binomTree_clado)
+dev.off()
+
+
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ---	Prepare GC-content data structure - this is done over N (100) genomic bins	--- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+numCores	<- 20
+clust		<- makeCluster(numCores, type = "FORK")
+
+binNumber	<- 100
+message("Calculating GC content profiles for all dataTypes in parallel")
+byTypebySpeciesGC_data	<- parLapply(clust, dataTypes_withAge, function(dataType) {
+
+	## Set up variables depending on the dataType
 	byAge		<- FALSE
 	subgroup	<- NA 
 
@@ -1700,18 +1802,17 @@ byTypebySpeciesGC_data	<- lapply(dataTypes_withAge, function(dataType) {
 		}
 	}
 
-
+	# Iterate over species, each genome divided into N equally sized bins
 	bySpeciesGC_list	<- lapply(binomial_list, function(species) {
 
-		binLength		<- 100
-
-		byBinGC_list	<- lapply(seq(1:binLength), function(genome_bin) {
+		# For each bin, isolate genes in that bin and calculate their GC content
+		byBinGC_list	<- lapply(seq(1:binNumber), function(genome_bin) {
 
 			# Define bin position
-			bin_start		<- (genome_bin - 1) / binLength
-			bin_end			<- genome_bin / binLength
+			bin_start		<- (genome_bin - 1) / binNumber
+			bin_end			<- genome_bin / binNumber
 
-			# Decide the data we need for this dataType
+			# Isolate the data we need for this dataType
 			if (is.na(penalty)) {
 				subsetData		<- perTypeData$All$allPosData
 			} else if (!byAge) {
@@ -1726,6 +1827,7 @@ byTypebySpeciesGC_data	<- lapply(dataTypes_withAge, function(dataType) {
 				genelocTags	<<- locusTag[which(binomial == species & relGeneStart > bin_start & relGeneStart <= bin_end)]
 			})
 
+			# If the number of genes of this dataType in this Bin is 0 - return
 			if (length(geneProtIDs) == 0) {
 				return(data.frame(BinIndex = genome_bin, GC_content = NA, stringsAsFactors = FALSE))
 			}
@@ -1745,163 +1847,49 @@ byTypebySpeciesGC_data	<- lapply(dataTypes_withAge, function(dataType) {
 			return(data.frame(BinIndex = genome_bin, GC_content = GeneGC_cont, stringsAsFactors = FALSE))
 		})
 
+		# Combine the per-Bin data
 		byBinGC_df			<- bind_rows(byBinGC_list)
 		byBinGC_df$Species	<- species
-	
+
+
 		return(byBinGC_df)
 	})
 
+	# Combine the per-Species data
 	bySpeciesGC_df		<- bind_rows(bySpeciesGC_list)
 	bySpeciesGC_df$Type	<- dataType
 	return(bySpeciesGC_df)
 })
+# Rename list after dataTypes
 names(byTypebySpeciesGC_data)	<- dataTypes_withAge
+stopCluster(clust)
 
 
+byTypeSpeciesGCNorm		<- lapply(byTypebySpeciesGC_data, function(GC_byType) {
 
-# ------------------------------------------------------------------------------------- #
-
-GC_allGenes			<- byTypebySpeciesGC_data$All
-GC_allGenes$Type	<- factor(GC_allGenes$Type, levels = dataTypes_withAge)
-
-GC_VerVsHGT			<- bind_rows(list(byTypebySpeciesGC_data$Ver, byTypebySpeciesGC_data$lHGT))
-GC_VerVsHGT$Type	<- factor(GC_VerVsHGT$Type, levels = dataTypes_withAge)
-
-
-allGenes_col		<- "#D9D9D9"
-verVsHGT_cols		<- wes_palette("Darjeeling1")[1:2]
-
-# ------------------------------------------------------------------------------------- #
-
-## Re-assign ymin/ymax for the subdivision bars for the GC content scale
-
-verVsHGT_subdivs	<- lapply(binomial_list, function(speciesName) {
-	bySpecies	<- subset(GC_VerVsHGT, Species == speciesName)
-	subDivisionKeyLinear_df$ymin	<- min(bySpecies$GC_content, na.rm = TRUE)
-	subDivisionKeyLinear_df$ymax	<- max(bySpecies$GC_content, na.rm = TRUE)
-	subDivisionKeyLinear_df$Species	<- speciesName
-	return(subDivisionKeyLinear_df)
+	bySpeciesNorm_list	<- lapply(binomial_list, function(speciesName) {
+		speciesMeanGC	<- mean(subset(byTypebySpeciesGC_data$All, Species == speciesName)$GC_content, na.rm = TRUE)
+		bySpecies_data	<- subset(GC_byType, Species == speciesName)
+		bySpecies_data$GC_norm	<- bySpecies_data$GC_content - speciesMeanGC
+		return(bySpecies_data)
+	})
+	bySpeciesNorm_df	<- bind_rows(bySpeciesNorm_list)
 })
 
-verVsHGT_subdivs_df	<- bind_rows(verVsHGT_subdivs)
 
 # ------------------------------------------------------------------------------------- #
-
-GCbyBin_all_plot	<- ggplot(GCbyBin_all, aes(x = BinIndex, y = GC_content, color = Type)) +
-	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
-	scale_y_continuous(name = "GC content") +
-	# geom_hline(yintercept = 0, col = alpha("#D9D9D9", 0.75), size = 1) +
-	geom_rect(data =  subDivisionKeyLinear_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), inherit.aes = FALSE) +
-	geom_smooth(
-		data = GCbyBin_all,
-		aes(group = Species),
-		method = "loess",
-		span = 0.1,
-		col = alpha(allGenes_col, 0.5),
-		size = 0.2,
-		se = FALSE) +
-	# Overall smooth line (cross-species)
-	# geom_smooth(aes(color = Type, fill = Type), size = 1.5, se = TRUE, span = 0.25) +
-	scale_color_manual(values = allGenes_col, guide = guide_legend(title = "Gene Type")) +
-	scale_fill_manual(values = alpha(allGenes_col, 0.7), guide = FALSE) +
-	darkTheme +
-	theme(
-		legend.justification = c(1, 1),
-		legend.position = c(1, 0.825),
-		legend.background = element_rect(fill = "#333233", color = "#D9D9D9")
-	)
-
-
-GC_VerVsHGT_plot	<- ggplot(GC_VerVsHGT, aes(x = BinIndex, y = GC_content, color = Type)) +
-	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = NULL, minor_breaks = NULL) +
-	scale_y_continuous(name = "GC content") +
-	geom_rect(data =  verVsHGT_subdivs_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, group = Species), fill = rep(alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), 25), inherit.aes = FALSE) +
-	geom_smooth(
-		data = subset(GC_VerVsHGT, Type == "lHGT"),
-		aes(group = Species),
-		method = "loess",
-		span = 0.2,
-		color = alpha(verVsHGT_cols[1], 1),
-		size = 0.2,
-		se = FALSE) +
-	geom_smooth(
-		data = subset(GC_VerVsHGT, Type == "Ver"),
-		aes(group = Species),
-		method = "loess",
-		span = 0.2,
-		color = alpha(verVsHGT_cols[2], 1),
-		size = 0.2,
-		se = FALSE) +
-	facet_wrap(~Species, scales = "free") +
-	# Overall smooth line (cross-species)
-	# geom_smooth(aes(color = Type, fill = Type), method = "loess", size = 1.5, se = TRUE, span = 0.2) +
-	# scale_color_manual(values = verVsHGT_cols, guide = guide_legend(title = "Gene Type")) +
-	scale_color_manual(values = verVsHGT_cols, guide = FALSE) +
-	scale_fill_manual(values = alpha(verVsHGT_cols, 0.7), guide = FALSE) +
-	darkTheme +
-	theme(
-		panel.spacing = unit(2, "lines"),
-		panel.grid.minor = element_blank(),
-		# legend.justification = c(1, 1),
-		# legend.position = c(0.5, 0.2),
-		# legend.background = element_rect(fill = "#333233", color = "#D9D9D9"),
-		strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),		
-		strip.text = element_text(color =  "#D9D9D9")
-	)
-
-
+# ------------------------------------------------------------------------------------- #
+# ---	Examine overall GC-content trends per-Species - compare Ver/HGT + New/Old	--- #
+# ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 
 
-## Set up tree
-# Here we translate the taxid tips of the time tree to the corresponding binomials as stored in the Database
-speciesTaxids	<- AG_taxidTime_tree$tip.label
-
-# Query the database to return binomials
-treeTipNames	<- dbSendQuery(conn, 'SELECT binomial FROM t1 WHERE taxid = :taxids LIMIT 1')
-dbBind(treeTipNames, param = list(taxids = speciesTaxids))
-binomials_df	<- dbFetch(treeTipNames)
-dbClearResult(treeTipNames)
-
-# Relabel the tree
-AG_binomTime_tree2				<- AG_taxidTime_tree
-AG_binomTime_tree2$tip.label	<- binomials_df$binomial
-
-binomTree_phylo <- ggtree(tr = AG_binomTime_tree2, ladderize = FALSE, col =  "#D9D9D9", size = 1.5) +
-	geom_tiplab(angle = -90, hjust = -0.05, col =  "#D9D9D9") +
-	scale_x_reverse(limits = c(0.5, 0)) +
-	coord_flip() +
-	darkTheme +
-	theme(
-		panel.grid.major = element_blank(),
-		panel.grid.minor = element_blank()
-	)
-
-binomTree_clado <- ggtree(tr = AG_binomTime_tree2, branch.length = "none", ladderize = FALSE, col =  "#D9D9D9", size = 1.5) +
-	geom_tiplab(angle = -90, hjust = -0.05, col =  "#D9D9D9") +
-	scale_x_reverse(limits = c(20, 0)) +
-	coord_flip() +
-	darkTheme +
-	theme(
-		panel.grid.major = element_blank(),
-		panel.grid.minor = element_blank()
-	)
-
-treeAsDf	<- subset(fortify(AG_binomTime_tree2, ladderize = FALSE), isTip)
-tipOrder	<- with(treeAsDf, label[order(y, decreasing = T)])
-
-quartz(width = 22, height = 12, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/BinomialTree_phylo.pdf")
-print(binomTree_phylo)
-dev.off()
-
-quartz(width = 16, height = 8, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/BinomialTree_clado.pdf")
-print(binomTree_clado)
-dev.off()
-
-
 # ------------------------------------------------------------------------------------- #
+# ---	Plot overall (all gene) GC content for each species to compare phylogeny	--- #
+# ------------------------------------------------------------------------------------- #
+
 ## All genome GC
-GC_all					<- byTypebySpeciesGC_data$All
+GC_all					<- byTypeSpeciesGCNorm$All
 GC_all$Species			<- factor(GC_all$Species, levels = rev(tipOrder))
 
 perSpecies_cols	<- colorRampPalette(wes_palette("Darjeeling1"))(length(binomial_list))
@@ -1915,14 +1903,15 @@ GC_all_plot		<- ggplot(data = GC_all, aes(x = Species, y = GC_content, color = S
 		axis.text.x = element_blank()
 	)
 
-quartz(width = 16, height = 8, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/GC_allBySpecies.pdf")
+quartz(width = 16, height = 8, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/bySpecies/GC_allBySpecies.pdf")
 print(GC_all_plot)
 dev.off()
 
 # ------------------------------------------------------------------------------------- #
-## lHGT vs Vertical GC
+# ---	Is there a difference in GC content between All lHGTs and Vertical genes?	--- #
+# ------------------------------------------------------------------------------------- #
 
-GC_VervsHGT			<- bind_rows(list(byTypebySpeciesGC_data$Ver, byTypebySpeciesGC_data$lHGT))
+GC_VervsHGT			<- bind_rows(list(byTypeSpeciesGCNorm$Ver, byTypeSpeciesGCNorm$lHGT))
 GC_VervsHGT$Type	<- factor(GC_VervsHGT$Type, levels = dataTypes_withAge)
 GC_VervsHGT$Species	<- factor(GC_VervsHGT$Species, levels = rev(tipOrder))
 verVsHGT_cols		<- wes_palette("Darjeeling1")[1:2]
@@ -1945,38 +1934,37 @@ GC_VervsHGT_plot	<- ggplot(data = GC_VervsHGT, aes(x = Type, y = GC_content, col
 	)
 
 
-quartz(width = 22, height = 6, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/GC_VervsHGTbySpecies.pdf")
+quartz(width = 22, height = 6, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/bySpecies/GC_VervsHGTbySpecies.pdf")
 print(GC_VervsHGT_plot)
 dev.off()
 
 
 # ------------------------------------------------------------------------------------- #
-## Old vs Recent
+# ---	Is there a difference in GC content between OLD lHGTs and RECENT lHGTs?		--- #
+# ------------------------------------------------------------------------------------- #
 
+# NB - we get some "Recent" values for species that don't have Recent ancestor branches
+# This is due to secondary AG2AG transfers from other (recent) branches into these taxa
 
-### NB - we get some "Recent" values for species that don't have Recent ancestor branches
-### This is very likely due to secondary AG2AG transfers from other (recent) branches into these taxa
-### This needs to be confirmed, eg:
-# binomial <- "Geobacillus sp. WCH70"
-# perTypeData$lHGT$`4`$allPosData[which(perTypeData$lHGT$`4`$allPosData$binomial == binomial & perTypeData$lHGT$`4`$allPosData$Subgroup == TRUE),]
-
-GC_OldvsNew			<- bind_rows(list(byTypebySpeciesGC_data$Old, byTypebySpeciesGC_data$Recent))
+GC_OldvsNew			<- bind_rows(list(byTypeSpeciesGCNorm$Old, byTypeSpeciesGCNorm$Recent))
 GC_OldvsNew$Type	<- factor(GC_OldvsNew$Type, levels = dataTypes_withAge)
+GC_OldvsNew$Species	<- factor(GC_OldvsNew$Species, levels = rev(tipOrder))
 oldVsNew_cols		<- wes_palette("Darjeeling1")[4:5]
 
-bySpecies_count		<- lapply(binomial_list, function(binomial) {
+# Here we count the number of observations for old and recent HGTs per species
+bySpecies_count		<- lapply(binomial_list, function(speciesName) {
 	byType_count	<- lapply(unique(GC_OldvsNew$Type), function(dataType) {
-		max			<- max(with(GC_OldvsNew, GC_content[which(Species == binomial & Type == dataType)]))
-		count		<- length(with(GC_OldvsNew, GC_content[which(Species == binomial & Type == dataType)]))
-		return(data.frame(Type = dataType, Species = binomial, Count = count, MaxVal = max, stringsAsFactors = FALSE))
+		byTypeData	<- subset(GC_OldvsNew, Species == speciesName & Type == dataType)
+		max			<- max(byTypeData$GC_content, na.rm = TRUE)
+		count		<- length(which(!is.na(byTypeData$GC_content)))
+		return(data.frame(Type = dataType, Species = speciesName, Count = count, MaxVal = max, stringsAsFactors = FALSE))
 	})
 	return(bind_rows(byType_count))
 })
 bySpecies_count_df	<- bind_rows(bySpecies_count)
-
-GC_OldvsNew$Species			<- factor(GC_OldvsNew$Species, levels = rev(tipOrder))
 bySpecies_count_df$Species	<- factor(bySpecies_count_df$Species, levels = rev(tipOrder))
 
+# Plot
 GC_OldvsNew_plot	<- ggplot(data = GC_OldvsNew, aes(x = Type, y = GC_content, color = Type, fill = Type)) +
 	geom_boxplot() +
 	scale_y_continuous(limits = c(0.2, 0.7)) +
@@ -1996,17 +1984,264 @@ GC_OldvsNew_plot	<- ggplot(data = GC_OldvsNew, aes(x = Type, y = GC_content, col
 		strip.text = element_text(color =  "#D9D9D9")		
 	)
 
-quartz(width = 22, height = 6, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/GC_OldvsNewbySpecies.pdf")
+# Write plot
+quartz(width = 22, height = 6, bg = "#333233", type = "pdf", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/bySpecies/GC_OldvsNewbySpecies.pdf")
 print(GC_OldvsNew_plot)
+dev.off()
+
+# ------------------------------------------------------------------------------------- #
+# ---	Is there a difference in GC content between OLD lHGTs and Vertical genes?	--- #
+# ------------------------------------------------------------------------------------- #
+
+GC_VervsOld			<- bind_rows(list(byTypeSpeciesGCNorm$Ver, byTypeSpeciesGCNorm$Old))
+GC_VervsOld$Type	<- factor(GC_VervsOld$Type, levels = dataTypes_withAge)
+GC_VervsOld$Species	<- factor(GC_VervsOld$Species, levels = rev(tipOrder))
+VervsOld_cols		<- wes_palette("Darjeeling1")[c(1,4)]
+
+bySpecies_count		<- lapply(binomial_list, function(speciesName) {
+	byType_count	<- lapply(unique(GC_VervsOld$Type), function(dataType) {
+		byTypeData	<- subset(GC_VervsOld, Species == speciesName & Type == dataType)
+		max			<- max(byTypeData$GC_content, na.rm = TRUE)
+		count		<- length(which(!is.na(byTypeData$GC_content)))
+		return(data.frame(Type = dataType, Species = speciesName, Count = count, MaxVal = max, stringsAsFactors = FALSE))
+	})
+	return(bind_rows(byType_count))
+})
+bySpecies_count_df	<- bind_rows(bySpecies_count)
+bySpecies_count_df$Species	<- factor(bySpecies_count_df$Species, levels = rev(tipOrder))
+
+
+GC_VervsOld_plot	<- ggplot(data = GC_VervsOld, aes(x = Type, y = GC_content, color = Type, fill = Type)) +
+	geom_boxplot() +
+	scale_y_continuous(limits = c(0.2, 0.7)) +
+	facet_wrap(~Species) +
+	geom_text(data = bySpecies_count_df, aes(y = MaxVal, label = Count), vjust = -1) +
+	stat_compare_means(method = "t.test", col = "#D9D9D9", label = "p.signif", label.x.npc = "centre", label.y.npc = "bottom", size = 8) +
+	scale_fill_manual(values = alpha(VervsOld_cols, 0.5)) +
+	scale_color_manual(values = VervsOld_cols) +
+	darkTheme + 
+	theme(
+		panel.spacing = unit(2, "lines"),
+		axis.text.x = element_blank(),
+		panel.grid.minor = element_blank(),
+		panel.grid.major.x = element_blank(),
+		axis.ticks.x = element_blank(),
+		strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),		
+		strip.text = element_text(color =  "#D9D9D9")		
+	)
+
+
+
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ---	Examine GC-content across the genome by looking at perBin GC differences	--- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+
+
+
+# ------------------------------------------------------------------------------------- #
+# ---	Compare all-Gene GC-content change per-Species across the genome Ori-to-Ori	--- #
+# ------------------------------------------------------------------------------------- #
+
+# Get the relevant data
+GC_allGenes			<- byTypeSpeciesGCNorm$All
+GC_allGenes$Type	<- factor(GC_allGenes$Type, levels = dataTypes_withAge)
+
+# Reassign ymin/ymax for subdivision bars for the allGenes set
+allGenes_subdivs	<- subDivisionKeyLinear_df
+allGenes_subdivs$ymin	<- round_any(min(GC_allGenes$GC_content, na.rm = TRUE), accuracy = 0.1, f = ceiling)
+allGenes_subdivs$ymax	<- round_any(max(GC_allGenes$GC_content, na.rm = TRUE), accuracy = 0.1, f = floor)
+
+# Color palette for allGenes
+allGenes_col		<- "#D9D9D9"
+
+# Plot. This plot is not very informative, as there is a lot of intraGenome fluctuations and the two GC-distinct groups complicate viewing
+GCbyBin_all_plot	<- ggplot(GC_allGenes, aes(x = BinIndex, y = GC_content, color = Type)) +
+	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+	scale_y_continuous(name = "GC content") +
+	geom_rect(data =  allGenes_subdivs, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), inherit.aes = FALSE) +
+	geom_smooth(
+		data = GC_allGenes,
+		aes(group = Species),
+		method = "loess",
+		span = 0.2,
+		col = alpha(allGenes_col, 0.8),
+		size = 0.2,
+		se = FALSE) +
+	# Overall smooth line (cross-species)
+	scale_color_manual(values = allGenes_col, guide = guide_legend(title = "Gene Type")) +
+	scale_fill_manual(values = alpha(allGenes_col, 0.7), guide = FALSE) +
+	darkTheme
+
+# Write plot
+quartz(width = 12, height = 8, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/byBin/perSpeciesAll_raw.png")
+print(GCbyBin_all_plot)
+dev.off()
+
+
+# ------------------------------------------------------------------------------------- #
+# ---		Compare normalised GC-content change per-Species across the genome 		--- #
+# ------------------------------------------------------------------------------------- #
+
+# ------------------------------------------------------------------------------------- #
+
+# Set the new subdivision dimensions
+allGenesNorm_subdivs		<- subDivisionKeyLinear_df
+allGenesNorm_subdivs$ymin	<- -0.1
+allGenesNorm_subdivs$ymax	<- 0.1
+
+# Plot with normalised per-Bin GC values. Have to use GAM smoothhing method (loess memory fail), k=25 looks like happy medium.
+GCbyBin_allNorm_plot	<- ggplot(GC_allGenes, aes(x = BinIndex, y = GC_norm, color = Type)) +
+	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+	scale_y_continuous(name = "GC content") +
+	geom_rect(data =  allGenesNorm_subdivs, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), inherit.aes = FALSE) +
+	geom_smooth(
+		data = GC_allGenes,
+		aes(group = Species),
+		method = "loess",
+		span = 0.2,
+		col = alpha(allGenes_col, 0.6),
+		size = 0.2,
+		se = FALSE) +
+	# Overall smooth line (cross-species)
+	geom_smooth(method = "gam", formula = y ~ s(x, k = 25), size = 1.5, se = TRUE, span = 0.2, color = "red") +
+	scale_color_manual(values = allGenes_col, guide = guide_legend(title = "Gene Type")) +
+	scale_fill_manual(values = alpha(allGenes_col, 0.7), guide = FALSE) +
+	darkTheme
+
+# Write plot
+quartz(width = 12, height = 8, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/byBin/perSpeciesAll_normalised.png")
+print(GCbyBin_allNorm_plot)
+dev.off()
+
+
+# ------------------------------------------------------------------------------------- #
+
+# Get the relevant data
+GC_VerVsHGT			<- bind_rows(list(byTypeSpeciesGCNorm$Ver, byTypeSpeciesGCNorm$lHGT))
+GC_VerVsHGT$Type	<- factor(GC_VerVsHGT$Type, levels = dataTypes_withAge)
+GC_VerVsHGT$Species	<- factor(GC_VerVsHGT$Species, levels = rev(tipOrder))
+
+# Color palette for allGenes
+verVsHGT_cols		<- wes_palette("Darjeeling1")[1:2]
+
+# Plot with normalised per-Bin GC values. Have to use GAM smoothhing method (loess memory fail), k=20 looks most like loess.
+GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT, aes(x = BinIndex, y = GC_norm, color = Type), fill = Type) +
+	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+	scale_y_continuous(name = "Normalised GC content") +
+	geom_rect(data =  allGenesNorm_subdivs, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), inherit.aes = FALSE) +
+	geom_smooth(
+		data = subset(GC_VerVsHGT, Type == "Ver"),
+		aes(group = Species),
+		method = "loess",
+		span = 0.2,
+		col = alpha(verVsHGT_cols[2], 0.4),
+		size = 0.2,
+		se = FALSE) +
+	geom_smooth(
+		data = subset(GC_VerVsHGT, Type == "lHGT"),
+		aes(group = Species),
+		method = "loess",
+		span = 0.2,
+		col = alpha(verVsHGT_cols[1], 0.4),
+		size = 0.2,
+		se = FALSE) +
+	# Overall smooth line (cross-species)
+	geom_smooth(aes(color = Type, fill = Type), method = "gam", formula = y ~ s(x, k = 20), size = 1.5, se = TRUE, span = 0.2) +
+	scale_color_manual(values = verVsHGT_cols, guide = guide_legend(title = "Gene Type")) +
+	scale_fill_manual(values = alpha(verVsHGT_cols, 0.7), guide = FALSE) +
+	darkTheme +
+	theme(
+		legend.justification = c(1, 1),
+		legend.position = c(0.9, 0.9),
+		legend.background = element_rect(fill = "#333233", color = "#D9D9D9")
+	)
+
+# Write plot
+quartz(width = 14, height = 8, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/byBin/perSpeciesVerHGT_normalised.png")
+print(GCbyBin_VerHGT_norm_plot)
 dev.off()
 
 
 
 # ------------------------------------------------------------------------------------- #
-
+# ---	Compare Vertical v lHGT GC-content per-Species across the genome Ori-to-Ori	--- #
 # ------------------------------------------------------------------------------------- #
 
+# Get the relevant data + factor
+GC_VerVsHGT			<- bind_rows(list(byTypeSpeciesGCNorm$Ver, byTypeSpeciesGCNorm$lHGT))
+GC_VerVsHGT$Type	<- factor(GC_VerVsHGT$Type, levels = dataTypes_withAge)
+GC_VerVsHGT$Species	<- factor(GC_VerVsHGT$Species, levels = rev(tipOrder))
+
+# Reassign ymin/ymax for the subdivision bars for the GC content scale. NB loess warnings are unimportant
+verVsHGT_subdivs	<- lapply(binomial_list, function(speciesName) {
+	bySpecies		<- subset(GC_VerVsHGT, Species == speciesName)
+	byType_list		<- lapply(list("Ver", "lHGT"), function(dataType) {
+		byType		<- subset(bySpecies, Type == dataType)
+		byTypeLoess	<- loess.smooth(byType$BinIndex, byType$GC_content, span = 0.1, degree = 1)
+		return(data.frame(min = min(byTypeLoess$y), max = max(byTypeLoess$y)))
+	})
+	byType_df		<- bind_rows(byType_list)
+	
+	subDivisionKeyLinear_df$ymin	<- round_any(min(byType_df$min), accuracy = 0.1, f = floor)
+	subDivisionKeyLinear_df$ymax	<- round_any(max(byType_df$max), accuracy = 0.1, f = ceiling)
+	subDivisionKeyLinear_df$Species	<- speciesName
+	return(subDivisionKeyLinear_df)
+})
+verVsHGT_subdivs_df	<- bind_rows(verVsHGT_subdivs)
+
+# Color palette for verVslHGT
+verVsHGT_cols		<- wes_palette("Darjeeling1")[1:2]
+
+
+# Plot
+GCbySpecies_VerVsHGT_plot	<- ggplot(GC_VerVsHGT, aes(x = BinIndex, y = GC_content, color = Type)) +
+	scale_x_continuous(name = "Bin along genome", limits = c(0, 100), breaks = NULL, minor_breaks = NULL) +
+	scale_y_continuous(name = "GC content") +
+	geom_rect(data =  verVsHGT_subdivs_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, group = Species), fill = rep(alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), 25), inherit.aes = FALSE) +
+	geom_smooth(
+		data = subset(GC_VerVsHGT, Type == "lHGT"),
+		aes(group = Species),
+		method = "loess",
+		span = 0.2,
+		color = alpha(verVsHGT_cols[1], 1),
+		size = 0.2,
+		se = FALSE) +
+	geom_smooth(
+		data = subset(GC_VerVsHGT, Type == "Ver"),
+		aes(group = Species),
+		method = "loess",
+		span = 0.2,
+		color = alpha(verVsHGT_cols[2], 1),
+		size = 0.2,
+		se = FALSE) +
+	facet_wrap(~Species, scales = "free") +
+	scale_color_manual(values = verVsHGT_cols, guide = FALSE) +
+	scale_fill_manual(values = alpha(verVsHGT_cols, 0.7), guide = FALSE) +
+	darkTheme +
+	theme(
+		panel.spacing = unit(2, "lines"),
+		panel.grid.minor = element_blank(),
+		strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),		
+		strip.text = element_text(color =  "#D9D9D9")
+	)
+
+# Write plot
+quartz(width = 24, height = 14, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/byBin/bySpeciesVerHGT_facet.png")
+print(GCbySpecies_VerVsHGT_plot)
+dev.off()
+
+
+# ------------------------------------------------------------------------------------- #
+# ---	Correlate Vertical & lHGT GC-content by Species over the genome Ori-to-Ori	--- #
+# ------------------------------------------------------------------------------------- #
+
+# Choose correlation method
 corrMethod	<- "pearson"
+
+# For each species, for each bin, calculate the mean GC content for the present Vertical and lHGT genes
+# Correlate these genome wide - to see whether there is an association
 bySpecies_meanGC_list	<- lapply(binomial_list, function(speciesName) {
 	message(speciesName)
 
@@ -2029,8 +2264,11 @@ bySpecies_meanGC_list	<- lapply(binomial_list, function(speciesName) {
 	corVal		<- signif(calcCorr$r[1,2], digits = 2)
 	pVal		<- signif(calcCorr$P[1,2], digits = 2)
 
+	# Cutoff for significance
+	pval_lab	<- ifelse(pVal <= 0.05, paste0("~italic(p) == ", pVal), paste0("~NS"))
+
 	# Values for plotting the correlation
-	label		<- ifelse (identical(corrMethod, "pearson"), paste("italic(r) == ", corVal, "~italic(p) == ", pVal), paste("italic(rs) == ", corVal, "~italic(p) == ", pVal))
+	label		<- ifelse(identical(corrMethod, "pearson"), paste("italic(r) == ", corVal, pval_lab), paste("italic(rs) == ", corVal, pval_lab))
 	pos.x		<- mean(range(nonMissing$Ver_GC))
 	pos.y		<- max(nonMissing$lHGT_GC) - (0.05 * max(nonMissing$lHGT_GC))
 	pDf			<- data.frame(x = pos.x, y = pos.y, nBinsIncl = nrow(nonMissing), corVal = corVal, pVal = pVal, Species = speciesName, plotLabel = label, stringsAsFactors = FALSE)		
@@ -2038,12 +2276,15 @@ bySpecies_meanGC_list	<- lapply(binomial_list, function(speciesName) {
 	return(list(GCobs = byBinMeanGC_df, cor = pDf))
 })
 
+# Prepare the correlation and label data
 bySpecies_meanGC_df	<- bind_rows(lapply(bySpecies_meanGC_list, function(l) l$GCobs))
 bySpecies_PCorr_df	<- bind_rows(lapply(bySpecies_meanGC_list, function(l) l$cor))
 
+# Factor the data and labels for the correlation plot
 bySpecies_meanGC_df$Species	<- factor(bySpecies_meanGC_df$Species, levels = rev(tipOrder))
 bySpecies_PCorr_df$Species	<- factor(bySpecies_PCorr_df$Species, levels = rev(tipOrder))
 
+# Plot the correlation plot
 VervHGT_GCCorr_plot	<- ggplot(data = bySpecies_meanGC_df, aes(x = Ver_GC, y = lHGT_GC, group = Species)) + 
 	geom_point(size = 1, color = "#D9D9D9") +
 	geom_smooth(method = "lm", color = "red") +
@@ -2058,26 +2299,30 @@ VervHGT_GCCorr_plot	<- ggplot(data = bySpecies_meanGC_df, aes(x = Ver_GC, y = lH
 		strip.text = element_text(color =  "#D9D9D9")
 	)
 
-## Which species have significantly correlated Ver and HGT content across genomic bins?
+# Which species have significantly correlated Ver and HGT content across genomic bins?
 VerHGT_corrSpecies	<- bySpecies_PCorr_df[which(bySpecies_PCorr_df$pVal < 0.01),]
 
+# Write plot
+quartz(width = 24, height = 14, bg = "#333233", dpi = 300, type = "png", file = "/Users/aesin/Desktop/Geo_again/HGT_position/Figures/GC_content/byBin/correlateBySpecies_VerHGT_facet.png")
+print(VervHGT_GCCorr_plot)
+dev.off()
 
 
 # ------------------------------------------------------------------------------------- #
 
-
-
-
-
-
-
-
-
-
-
-
-
 dbDisconnect(conn)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
