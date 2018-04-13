@@ -6,7 +6,7 @@ package require sqlite3
 set direct 			/Users/aesin/Desktop/Geo_again
 
 ## Define and open all prot DB
-set all_db_file		$direct/All_prot_db
+set all_db_file		$direct/All_prot_db_new
 sqlite3 all_prot_db $all_db_file
 
 ## Define the directory with final group fasta files

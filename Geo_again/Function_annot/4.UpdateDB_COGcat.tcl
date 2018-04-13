@@ -12,13 +12,18 @@ set inputAnnot_files	[glob $annotInput_dir/*emapper.annotations]
 set inputAnnot_files	[lsort -dictionary $inputAnnot_files]
 
 # Define and open all prot DB
-set all_db_file		$master_dir/All_prot_db
+set all_db_file		$master_dir/All_prot_db_new
 sqlite3 all_prot_db $all_db_file
 
 # Add a column to database to hold orthologous group number
-puts	"Adding new column to database ..."
-all_prot_db eval {ALTER TABLE t1 ADD COLUMN COGcat text}
-puts -nonewline	"\rAdding new column to database ... done \n"
+set table_info		[all_prot_db eval {PRAGMA table_info(t1)}]
+if {[lsearch $table_info "COGcat"] == -1} {
+	puts	"Adding COGcat column to database ..."
+	all_prot_db eval {ALTER TABLE t1 ADD COLUMN COGcat text}
+	puts -nonewline	"\rAdding COGcat column to database ... done \n"
+} else {
+	puts	"COGcat column already exists in database!"
+}
 
 set total_counter	1
 set noCOG_counter	0

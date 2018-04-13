@@ -17,12 +17,12 @@ set direct				/users/aesin/Desktop/Geo_again
 ## Directories
 set prot_clean_dir		$direct/Proteomes/Proteome_clean_fastas
 set prot_dupl_dir		$direct/Proteomes/Proteome_dup_fastas
-set plasmid_tag_file	$direct/Genomes/All_plasmid_tags.tsv
+set plasmid_tag_dir		$direct/Genomes/Plasmid_per_genome
 set genome_length_file	$direct/Genomes/Genome_lengths.tsv
 set refseq_file			$direct/Genomes/assembly_summary_refseq_131117.txt
 set anogeo_acc_ass_file	$direct/Genomes/Genome_lists/AG_acc_ass_names.txt
 
-set anogeo_prot_db		$direct/All_prot_db
+set anogeo_prot_db		$direct/All_prot_db_new
 
 ## Open the database and define settings
 sqlite3 db1 $anogeo_prot_db
@@ -54,7 +54,6 @@ db1 eval {
 
 ## Process the global datasets:
 ##		plasmid tags / genome lengths / refseq annotation / Anogeo acc_ass
-set plasmid_tag_list	[split [string trim [openfile $plasmid_tag_file]] \n]
 set genome_length_list	[split [string trim [openfile $genome_length_file]] \n]
 # String trim removes trailing tabs (representing the last few empty columns of the last entry)
 set refseq_data_list	[split [openfile $refseq_file] \n]
@@ -81,6 +80,15 @@ foreach clean_proteome $clean_proteomes {
 
 	## Use accession_assembly to find genome length
 	set genome_length	[lindex [split [lsearch -inline $genome_length_list "$acc_ass\t*"] \t] 1]
+	
+	## Open list of plasmid for this genome, if the plasmid file exists
+	set plasmid_tag_file	$plasmid_tag_dir/$acc_ass\_plasmid_tags.tsv
+	if {[file exists $plasmid_tag_file] == 1} {
+		set checkPlasmid		TRUE
+		set plasmid_tag_list	[split [string trim [openfile $plasmid_tag_file]] \n]
+	} else {
+		set checkPlasmid		FALSE
+	}
 
 	## Use accession_assembly to find the taxid / binomial / strain IDs
 	set refseq_entry	[lsearch -all -inline $refseq_data_list "*$acc_ass\t*"]
@@ -132,16 +140,13 @@ foreach clean_proteome $clean_proteomes {
 		## because some plasmid tags refer to genes that don't
 		## have an associated protein sequence. E.g. see
 		## GK_RS00045 in GCF_000009785.1_ASM978v1
-		if {$is_ag == 1} {
-			set plasmid		"F"
+		set plasmid "F"
+		if {$checkPlasmid == TRUE} {
 			set is_plasmid		[lsearch $plasmid_tag_list $locus]
 			if {$is_plasmid != -1} {
 				set plasmid "T"
 			}
-		} else {
-			set plasmid		"NA"
 		}
-		
 
 		## Get the AA sequence
 		set sequence	[string trim [string range $protein [string first \n $protein] end]]
@@ -173,6 +178,7 @@ puts "\nMaking index on the protID and taxid columns ..."
 ## Make an index on the protID
 db1 eval {create index protID_index on t1 (protID)}
 db1 eval {create index taxid_index on t1 (taxid)}
+db1 eval {create index locTag_index on t1 (taxid)}
 ## Close the database
 db1 close
 puts "\nAll database entry complete: see $anogeo_prot_db"

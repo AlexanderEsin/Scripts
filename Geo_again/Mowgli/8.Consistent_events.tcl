@@ -64,11 +64,15 @@ foreach orig_penalty $long_HGT_penalty_l {
 	set lHGT_group_l {}
 	set sHGT_group_l {}
 
-	set per_penalty_lHGT_out [list "Group\tDonor_nodes\tReceptor_nodes\tTips"]
-	set per_penalty_sHGT_out [list "Group\tDonor_nodes\tReceptor_nodes\tTips"]
+	set per_penalty_lHGT_out [list "Event_index\tGroup\tDonor_nodes\tReceptor_nodes\tTips"]
+	set per_penalty_sHGT_out [list "Event_index\tGroup\tDonor_nodes\tReceptor_nodes\tTips"]
 
 	set per_penalty_inconsistent {}
 	set per_penalty_loss {}
+
+	# Index the consistent events (for sorting by event later on)
+	set lHGTconsist_index 1
+	set sHGTconsist_index 1
 
 	foreach HGT_group $HGT_groups_l {
 
@@ -118,11 +122,13 @@ foreach orig_penalty $long_HGT_penalty_l {
 
 					# Append the output to the relevant short or long transfer list
 					if {$HGT_type eq "internal"} {
-						lappend per_penalty_sHGT_out $out_line_str
+						lappend per_penalty_sHGT_out [join [list $sHGTconsist_index $out_line_str] \t]
 						lappend sHGT_group_l $HGT_group
+						incr sHGTconsist_index
 					} else {
-						lappend per_penalty_lHGT_out $out_line_str
+						lappend per_penalty_lHGT_out [join [list $lHGTconsist_index $out_line_str] \t]
 						lappend lHGT_group_l $HGT_group
+						incr lHGTconsist_index
 					}
 				}
 			} else {
@@ -155,12 +161,16 @@ foreach orig_penalty $long_HGT_penalty_l {
 
 				# Append the output to the relevant short or long transfer list
 				if {$HGT_type eq "internal"} {
-					lappend per_penalty_sHGT_out $out_line_str
+					lappend per_penalty_sHGT_out [join [list $sHGTconsist_index $out_line_str] \t]
 					lappend sHGT_group_l $HGT_group
+					incr sHGTconsist_index
 				} else {
-					lappend per_penalty_lHGT_out $out_line_str
+					lappend per_penalty_lHGT_out [join [list $lHGTconsist_index $out_line_str] \t]
 					lappend lHGT_group_l $HGT_group
+					incr lHGTconsist_index
 				}
+
+				incr consist_event_index
 			}
 		}
 

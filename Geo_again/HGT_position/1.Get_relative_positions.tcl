@@ -110,7 +110,7 @@ foreach hgtType $hgtType_list {
 			# Trim the header out < Group	Donor_nodes	Receptor_nodes	Tips >
 			set inputEvents_data	[lrange $inputEvents_data 1 end]
 			# Add extra column headers for the HGT data
-			set penaltyOut_head		[concat $penaltyOut_head [list "donorEdge" "recepEdge"]]
+			set penaltyOut_head		[concat $penaltyOut_head [list "donorEdge" "recepEdge" "eventIndex"]]
 		} elseif {$hgtType eq "Ver"} {
 			set inputEvents_file	[glob $verClean_dir/$hgtType\_const_t$penalty*.tsv]
 			set inputEvents_data	[split [string trim [openfile $inputEvents_file]] \n]
@@ -135,10 +135,11 @@ foreach hgtType $hgtType_list {
 
 			if {$hgtType eq "lHGT" || $hgtType eq "sHGT"} {
 				set eventSplit		[split $event \t]
-				set orthGroup		[lindex $eventSplit 0]
-				set donorEdge		[lindex $eventSplit 1]
-				set recepEdge		[lindex $eventSplit 2]
-				set tipIDs			[lindex $eventSplit 3]
+				set eventIndex		[lindex $eventSplit 0]
+				set orthGroup		[lindex $eventSplit 1]
+				set donorEdge		[lindex $eventSplit 2]
+				set recepEdge		[lindex $eventSplit 3]
+				set tipIDs			[lindex $eventSplit 4]
 
 				# Open the key file to translate tipID to protID
 				set key_file	$tipKey_dir/$orthGroup/$orthGroup\_KEY_tips.txt
@@ -197,7 +198,7 @@ foreach hgtType $hgtType_list {
 				set colsToAdd		[list $relStart $relEnd $relStrand]
 				# Add extra columns for the HGT sets
 				if {$hgtType eq "lHGT" || $hgtType eq "sHGT"} {
-					set colsToAdd	[concat $colsToAdd [list $donorEdge $recepEdge]]
+					set colsToAdd	[concat $colsToAdd [list $donorEdge $recepEdge $eventIndex]]
 				}
 
 				## Add the columns

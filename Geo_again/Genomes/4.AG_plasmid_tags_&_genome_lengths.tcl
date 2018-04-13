@@ -20,7 +20,7 @@ set AG_acc_asses	[split [string trim [openfile $direct/Genome_lists/AG_acc_Ass_n
 set input_zipped		[glob -nocomplain $gbff_dir/*gz]
 if {[llength $input_zipped] != 0} {
 	puts stdout "Unzipping gbff files ..."
-	catch {exec gunzip -r $gbff_dir}
+	catch {exec gunzip -r -f $gbff_dir}
 	puts stdout "Unzipping gbff files ... DONE"
 }
 set input_gbffs		[glob $gbff_dir/*gbff]
@@ -44,8 +44,7 @@ foreach gbff_file $input_gbffs {
 
 	puts stdout "Processing $acc_ass - $counter // $num_input_gbffs"
 
-	## See whether this genome is an AG genome - only AG plasmid-based genes
-	## need to be found
+	## See whether this genome is an AG genome
 	if {[lsearch $AG_acc_asses $acc_ass] != -1} {
 		set ag_genome	1
 	} else {
@@ -82,7 +81,7 @@ foreach gbff_file $input_gbffs {
 		## make it tab-separated
 		set LOCUS_line [string range $partition 0 [string first \n $partition]]
 		regsub -all {\s+} $LOCUS_line "\t" LOCUS_line
-	
+
 
 		## Trim away the LOCUS line and get the next line
 		## This is the "DEFINITION" annotation and contains the name
@@ -113,9 +112,7 @@ foreach gbff_file $input_gbffs {
 			## Remove any duplicates - though we don't expect any
 			set clean_partition_tags	[lsort -unique $clean_partition_tags]
 			set plasmid_stats_file		[concat $plasmid_stats_file	$clean_partition_tags]
-			if {$ag_genome == 1} {
-				set total_clean_tags		[concat $total_clean_tags $clean_partition_tags]
-			}	
+			set total_clean_tags		[concat $total_clean_tags $clean_partition_tags]
 		} else {
 			set total_length [expr $total_length + [lindex [split $LOCUS_line \t] 2]]
 		}

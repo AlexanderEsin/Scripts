@@ -14,7 +14,7 @@ set nuclGenomes_files	[glob $nuclGenomes_dir/*fasta]
 set taxid_accAss_trans	[split [string trim [openfile $genome_dir/Genome_lists/Acc_ass_taxid_table.tsv]] \n]
 
 # Define and open all_prot database
-set all_db_file			$master_dir/All_prot_db
+set all_db_file			$master_dir/All_prot_db_new
 sqlite3 all_prot_db 	$all_db_file
 
 # # Add a new column to the database to hold the nucleotide sequence
@@ -31,7 +31,6 @@ if {[lsearch $table_info "NuclSeq"] == -1} {
 set genomeCounter 	1
 set genomeTotal		[llength $taxid_accAss_trans]
 
-# set taxid_accAss_trans	[lrange $taxid_accAss_trans 53 53]
 foreach genomeEntry $taxid_accAss_trans {
 	set acc_ass		[lindex $genomeEntry 0]
 	set taxid		[lindex $genomeEntry 1]

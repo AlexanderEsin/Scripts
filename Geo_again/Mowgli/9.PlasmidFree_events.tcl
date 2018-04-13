@@ -65,7 +65,7 @@ foreach hgtType $hgtType_list {
 
 			if {$hgtType ne "Ver"} {
 				set columns		[split $event \t]
-				set groupNum	[lindex $columns 0]
+				set groupNum	[lindex $columns 1]
 				set tipID_list	[split [lindex $columns end] " "]
 				
 				# Open the key to translate tipID to protID

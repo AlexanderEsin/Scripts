@@ -149,7 +149,10 @@ bySubdivision_split	<- function(data, subDivisions, variable = NA) {
 		} else {
 			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
 		}
-		
+
+		## Add a column to the raw data being written back out
+		subdiv_data$SubDivision	<- if(nrow(subdiv_data) != 0) subdivName else character(0)
+
 		if (is.na(variable)) {
 			return(data.frame(subDiv = subdivName, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))
 		} else if (identical(variable, "COGcat")) {
@@ -556,7 +559,7 @@ master_dir			<- "/Users/aesin/Desktop/Geo_again"
 genome_dir			<- file.path(master_dir, "Genomes")
 position_dir		<- file.path(master_dir, "HGT_position")
 positionInput_dir	<- file.path(position_dir, "Position_data")
-allProtDB_path		<- file.path(master_dir, "All_prot_db")
+allProtDB_path		<- file.path(master_dir, "All_prot_db_new")
 
 
 dataTypes			<- c("All", "lHGT", "sHGT", "Ver")
@@ -1187,8 +1190,18 @@ perCOGData_extract			<- function(COG, dataType, penalty, byAge = FALSE, subgroup
 		return(NA)
 	}
 
+	message(COG)
+
 	circStart		<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
 	perCOGbySubdiv	<- bySubdivision_split(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
+
+	## Combine and extract the data frames containing the per-gene subdivision information. However, this loses the circular data
+	subdivColData	<- bind_rows(lapply(perCOGbySubdiv$full_data, function(subdivTable) return(subdivTable$data)))
+
+	## Add the subdivision assignment for each individual gene
+	mapCOGontoSubdiv		<- unlist(lapply(perCOGAll$protID, grep, x = subdivColData$protID, fixed = TRUE))
+	perCOGAll$SubDivision	<- subdivColData$SubDivision[mapCOGontoSubdiv]
+	
 	return(list(allData = perCOGAll, CircStart = circStart, perCOGbySubdiv_df = perCOGbySubdiv$tab_df))
 }
 
@@ -1300,7 +1313,7 @@ uniqueCOGs			<- unique(unlist(perTypeData$All$allPosData$COGcat))
 ## Compare COG distributions between different datasets ##
 perTypeCOG_data	<- lapply(dataTypes_withAge, function(dataType) {
 
-	print(dataType)
+	message(dataType)
 	byAge		<- FALSE
 	subgroup	<- NA 
 
@@ -2309,6 +2322,183 @@ dev.off()
 
 
 # ------------------------------------------------------------------------------------- #
+
+
+# NB: warnings are breaking the circular column - not important here
+byCOG_geneSpread_list	<- lapply(uniqueCOGs, function(COG) {
+	perCOG_data		<- perTypeCOG_data$lHGT$perCOGdata[[COG]]$allData
+	eventUnique		<- unique(perCOG_data$eventIndex)
+	eventNumber		<- length(eventUnique)
+
+
+	byEventSpread_list	<- lapply(eventUnique, function(hgtEvent) {
+		perEvent_data	<- perCOG_data[which(perCOG_data$eventIndex == hgtEvent),]
+		# Number of genes involved in HGT event
+		numTotal	<- nrow(perEvent_data)
+
+		# Calculate sd on the distance from origin
+		oriDists	<- unlist(lapply(perEvent_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
+		eventDistSD	<- sd(oriDists)
+
+		# All members of event must belong to single Orth group
+		orthGroup	<- unique(perEvent_data$orthGroup)
+		if (length(orthGroup) > 1) {
+			stop("Should not have more than one group for HGT event")
+		}
+
+		# Summary df
+		summary_df	<- data.frame(COG = COG, orthGroup = orthGroup, eventIndex = hgtEvent, totalGenes = numTotal, geneSD = eventDistSD, stringsAsFactors = FALSE)
+		return(list(allData = perEvent_data, summary_df = summary_df))
+	})
+	# Combine the per-event results (into per-COG results)
+	byEventAllData_df 	<- bind_rows(lapply(byEventSpread_list, function(element) return(element$allData)))
+	byEventSummary_df 	<- bind_rows(lapply(byEventSpread_list, function(element) return(element$summary_df)))
+	return(list(allData = byEventAllData_df, summaryData = byEventSummary_df))
+})
+
+# Combine the cross-COG results
+byCOG_geneSpreadAll_df		<- bind_rows(lapply(byCOG_geneSpread_list, function(element) return(element$allData)))
+byCOG_geneSpreadSummary_df	<- bind_rows(lapply(byCOG_geneSpread_list, function(element) return(element$summaryData)))
+
+## Check which orthologous groups occur more than once - indicating multiple events in same gene family
+multiEventGroups_list	<- unique(byCOG_geneSpreadSummary_df$orthGroup[duplicated(byCOG_geneSpreadSummary_df$orthGroup)])
+
+## For each gene family that contains more than one HGT event, find the mean position per event
+## Compare this to the other events in the same gene family.
+## Naive assumption: independent events in same gene family should be positioned nearby
+perGroup_list	<- lapply(multiEventGroups_list, function(orthGroup) {
+	perGroup_data	<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$orthGroup == orthGroup),]
+	perGroup_events	<- unique(perGroup_data$eventIndex)
+
+	perEvent_list	<- lapply(perGroup_events, function(hgtEvent) {
+		perEvent_data	<- perGroup_data[which(perGroup_data$eventIndex == hgtEvent),]
+		oriDists		<- unlist(lapply(perEvent_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
+		perEvent_sd		<- sd(oriDists)
+		perEvent_mean	<- mean(oriDists)
+		out_df			<- data.frame(orthGroup = orthGroup, eventIndex = hgtEvent, COGcat = unique(unlist(perEvent_data$COGcat)), numGenes = nrow(perEvent_data), meanLocation = perEvent_mean, sdLocation = perEvent_sd, stringsAsFactors = FALSE)
+		return(out_df)
+	})
+	perEvent_combined	<- bind_rows(perEvent_list)
+	perEvent_combined$range	<- max(perEvent_combined$meanLocation) - min(perEvent_combined$meanLocation)
+	return(perEvent_combined)
+})
+perGroup_combined	<- bind_rows(perGroup_list)
+perGroup_combined	<- perGroup_combined[order(perGroup_combined$range),]
+perGroup_combined$orthGroup	<- factor(perGroup_combined$orthGroup, levels = unique(perGroup_combined$orthGroup))
+perGroup_combined$plotIndex	<- seq(1:nrow(perGroup_combined))
+
+
+## Plot the range of mean distances in independent HGT events within the same gene family
+bgBarCol	<- "grey40"
+ggplot(perGroup_combined, aes(x = plotIndex, y = range)) +
+	geom_bar(stat = "identity", color = bgBarCol, fill = bgBarCol) +
+	geom_bar(data = subset(perGroup_combined, COGcat %in% c("L", "G", "M")), aes(x = plotIndex, y = range, fill = COGcat, color = COGcat), stat = "identity") +
+	scale_fill_manual(values = wes_palette("Darjeeling1")[1:3], name = "COG") +
+	scale_color_manual(values = wes_palette("Darjeeling1")[1:3], guide = FALSE) +
+	darkTheme + 
+	theme(
+		legend.justification = c(0, 0),
+		legend.position = c(0.1, 0.5),
+		panel.grid.minor = element_blank()
+	)
+
+
+# ------------------------------------------------------------------------------------- #
+
+## Entries where there is only a single HGT event per orthGroup
+soloEventGroups_list	<- byCOG_geneSpreadSummary_df[which(!byCOG_geneSpreadSummary_df$orthGroup %in% multiEventGroups_list),]
+soloEventData_list		<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$orthGroup %in% soloEventGroups_list$orthGroup),]
+
+
+byCOGDispersionSolo_l	<- lapply(unique(unlist(soloEventData_list$COGcat)), function(COG) {
+
+	byCOGsoloEvent_data	<- soloEventData_list[which(soloEventData_list$COGcat == COG),]
+	uniqueGroups		<- unique(byCOGsoloEvent_data$orthGroup)
+
+	perCOGbyGroup_list	<- lapply(uniqueGroups, function(group) {
+		byGroup_data	<- byCOGsoloEvent_data[which(byCOGsoloEvent_data$orthGroup == group),]
+		oriDists		<- unlist(lapply(byGroup_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
+		meanLocation	<- mean(oriDists)
+		sdLocation		<- sd(oriDists)
+		out_df			<- data.frame(orthGroup = group, COGcat = COG, numGenes = nrow(byGroup_data), meanLocation = meanLocation, sdLocation = sdLocation, stringsAsFactors = FALSE)
+		return(out_df)
+	})
+
+	perCOGbyGroup_df	<- bind_rows(perCOGbyGroup_list)
+	return(perCOGbyGroup_df)
+})
+byCOGDispersionSolo_df	<- bind_rows(byCOGDispersionSolo_l)
+
+## Select just "M" data as an example
+M_data	<- subset(byCOGDispersionSolo_df, COGcat == "M")
+ggplot(M_data, aes(x = orthGroup, y = sdLocation)) + geom_point()
+
+## Select "M" groups that has an sd (i.e. > 2 genes) of less than 0.05 (clustered closely)
+Mnear_groups	<- M_data$orthGroup[which(M_data$sdLocation < 0.05)]
+ggplot(subset(M_data, orthGroup %in% Mnear_groups), aes(x = orthGroup, y = meanLocation)) + geom_point()
+
+## Test a group = 259
+test_Mgroup	<- Mnear_groups[1]
+
+## All the data corresponding to the orthologs in Group 259
+test_Mdata_tbl		<- dbSendQuery(conn, 'SELECT * FROM t1 WHERE orthGroup = :orthGroup')
+dbBind(test_Mdata_tbl, param = list(orthGroup = test_Mgroup))
+test_Mdata_df	<- dbFetch(test_Mdata_tbl)
+dbClearResult(test_Mdata_tbl)
+
+
+
+
+
+
+
+
+
+## Extract all the dnaA genes for the 
+dnaA_protID_list_file	<- file.path(position_dir, "dnaA_protIDs.txt")
+dnaA_protIDs			<- read.table(file = dnaA_protID_list_file, sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+
+# 4982 entries in this table, of which 4975 are unique (so 7 genomes have 2x dnaA gene?)
+dnaA_data		<- dbSendQuery(conn, 'SELECT * FROM t1 WHERE protID = :protIDs')
+dbBind(dnaA_data, param = list(protIDs = dnaA_protIDs))
+dnaA_data_df	<- dbFetch(dnaA_data)
+dbClearResult(dnaA_data)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 dbDisconnect(conn)
 
