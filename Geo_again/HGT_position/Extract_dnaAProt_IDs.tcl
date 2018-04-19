@@ -1,8 +1,6 @@
 #!/usr/local/bin/tclsh
-
 source ~/Documents/Scripts/General_utils.tcl
 package require sqlite3
-
 
 # Paths and output folders
 set master_dir		/Users/aesin/Desktop/Geo_again

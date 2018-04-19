@@ -29,509 +29,9 @@ if (!require("pacman")) install.packages("pacman")
 pacman::p_load("RSQLite", "Biostrings", "ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "ggdendro", "GGally", "ggpubr", "wesanderson", "ggrepel", "phytools", "zoo", "ggtree")
 
 
-sourceScriptDir	<- "/Users/aesin/Documents/Scripts/Geo_again/HGT_position"
-# sourceScriptDir	<- "/Users/Sasha/Documents/Scripts/Geo_again/HGT_position"
-# Source circular functions
 source(file.path(sourceScriptDir, "includeCircularFunctions.R"))
 
 
-getSubgroupData		<- function(genome_dir = NA) {
-	if (is.na(genome_dir)) {
-		stop("Need to provide \'Genome\' directory")
-	}
-	subspeciesGroup_file	<- file.path(genome_dir, "Genome_lists", "AG_subspeciesGroups.txt")
-	subspeciesGroup_data	<- read.table(file = subspeciesGroup_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
-
-	# Get those tips that have a fellow tip in the same subgroup. Isolate all the subgroups that have more than one member #
-	subspecOnly_data		<- subset(subspeciesGroup_data, duplicated(subspeciesGroup_data$Group) | duplicated(subspeciesGroup_data$Group, fromLast = TRUE))
-	uniqueSubGroup_char		<- unique(subspecOnly_data$Group)
-
-	# Read in the taxid <-> mowgliNode translation table (output in Time_analysis.rmd)
-	timeAnalysis_dir		<- file.path(master_dir, "HGT_time", "Data")
-	taxidMowExtend_df		<- read.table(file = file.path(timeAnalysis_dir, "Taxid2MowTip_table.tsv"), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
-	taxidMowExtend_df$Extension	<- as.character(taxidMowExtend_df$Extension)
-
-	# Read in the consensus AG time tree (output in Time_analysis.rmd)
-	AG_conTime_tree			<- read.tree(file = file.path(timeAnalysis_dir, "AG_conTimeTree.tree"))
-	AG_conTime_as4			<- phylo4(AG_conTime_tree)
-
-	# Translate the extension-tip tree to binomial-tip tree
-	AG_binomTime_tree		<- AG_conTime_tree
-	AG_binomTime_tree$tip.label	<- unlist(lapply(AG_binomTime_tree$tip.label, function(tip) {
-		newTipLabel_char	<- taxidMowExtend_df$Binomial[which(taxidMowExtend_df$Extension == tip)]
-	}))
-
-	# Translate the extension-tip tree to taxid-tip tree
-	AG_taxidTime_tree		<- AG_conTime_tree
-	AG_taxidTime_tree$tip.label	<- unlist(lapply(AG_taxidTime_tree$tip.label, function(tip) {
-		newTipLabel_char	<- taxidMowExtend_df$Taxid[which(taxidMowExtend_df$Extension == tip)]
-	}))
-
-	# Work out which branches are subgroup
-	subgroup_branches <- vector(mode = "character")
-	for (subGroup in uniqueSubGroup_char) {
-		taxidsInSubGroup	<- as.vector(subspecOnly_data$Taxid[which(subspecOnly_data$Group == subGroup)])
-		taxidsToMowTips		<- taxidMowExtend_df$Extension[which(taxidMowExtend_df$Taxid %in% taxidsInSubGroup)]
-		allSubGroupNodes	<- as.vector(descendants(AG_conTime_as4, phylobase::MRCA(AG_conTime_as4, taxidsToMowTips), "all"))
-
-		subgroupEdges_list	<- lapply(allSubGroupNodes, function(node) {
-			ancestor	<- ancestor(AG_conTime_as4, node)
-			node_lab	<- labels(AG_conTime_as4, type = c("all"))[node]
-			ance_lab	<- labels(AG_conTime_as4, type = c("all"))[ancestor]
-			branch_lab	<- paste(ance_lab, node_lab, sep = " ")
-			return(branch_lab)
-		})
-		# Add to list of subgroup branches
-		subgroup_branches	<- c(subgroup_branches, unlist(subgroupEdges_list))
-	}
-	return(list(subgroupBranch_list = subgroup_branches, AG_conTime_tree = AG_conTime_tree, AG_taxidTime_tree = AG_taxidTime_tree, AG_binomTime_tree = AG_binomTime_tree))
-}
-
-processInputData	<- function(dataType = "All", penalty = NA, inputDir, bandwith, subgroupBranches = NA) {
-
-	# Track progress
-	message(paste0("Attemtping to process \'", dataType, "\' at a penalty: ", penalty, " ..."), appendLF = FALSE)
-
-	# Set the name of the input file depending on data type
-	if (!identical(dataType, "All")) {
-		if (is.na(penalty))  stop("Provide a penalty unless dataType = \'All\'")
-		fileID	<- paste0("T", penalty, "_", dataType)
-	} else {
-		fileID	<- dataType
-	}
-
-	# Find the file, check it exists and read it in
-	genePos_file	<- file.path(inputDir, paste0(fileID, "_positionData.tsv"))
-	if (!file.exists(genePos_file)) stop(paste0("Cannot find file ", genePos_file))
-	genePos_data	<- read.table(file = genePos_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
-
-	# Circularise the relative start and end positions
-	genePos_data$CircStart	<- circular(genePos_data$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-	genePos_data$CircEnd	<- circular(genePos_data$relGeneEnd * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-
-	# Calculate circular density (on the start position)
-	genePosDens		<- density.circular(genePos_data$CircStart, kernel = "vonmises", bw = bandwith)
-
-	# For the HGT sets, determine which transfers are into subgroup (vs group) branches
-	if (identical(dataType, "lHGT") || identical(dataType, "sHGT")) {
-		if (is.na(penalty))  stop("Need subgroup branch data for HGT dataTypes")
-		genePos_data$Subgroup	<- FALSE
-		genePos_data$Subgroup[which(genePos_data$recepEdge %in% subgroupBranches)]	<- TRUE
-	}
-
-	# Process to COG column - make each entry a list of n COGs
-	genePos_data$COGcat[is.na(genePos_data$COGcat)]	<- "-"
-	genePos_data$COGcat	<- str_split(genePos_data$COGcat, "\\|")
-
-	# Track progress and return
-	message(paste0("\rAttemtping to process \'", dataType, "\' at a penalty: ", penalty, " ... done"))
-
-	return(list(Penalty = penalty, allPosData = genePos_data, circDensity = genePosDens))
-}
-
-## // Subdivision functions // ##
-
-# Split data by subdivision (e.g. occurence - for branch) or COG number
-bySubdivision_split	<- function(data, subDivisions, variable = NA) {
-
-	data$Mod_dist	<- data$relGeneStart
-	data$Mod_dist[which(data$Mod_dist > 0.5)]	<- 1 - data$Mod_dist[which(data$Mod_dist > 0.5)]
-	varName			<- unique(unlist(data[[variable]]))
-
-	bysubdiv_data	<- lapply(1:length(subDivisions), function(index) {
-
-		subdiv		<- subDivisions[[index]]
-		subdivName	<- names(subDivisions[index])
-
-
-		if (!identical(index, length(subDivisions))) {
-			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist < subdiv[2]),]	
-		} else {
-			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
-		}
-
-		## Add a column to the raw data being written back out
-		subdiv_data$SubDivision	<- if(nrow(subdiv_data) != 0) subdivName else character(0)
-
-		if (is.na(variable)) {
-			return(data.frame(subDiv = subdivName, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))
-		} else if (identical(variable, "COGcat")) {
-			subdiv_vars			<- unlist(subdiv_data[[variable]])
-			subdiv_var_tab		<- data.frame(COGcat = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
-		} else {
-			subdiv_vars			<- subdiv_data[[variable]]
-			subdiv_var_tab		<- data.frame(Variable = varName, subDiv = subdivName, numObsv = length(subdiv_vars), stringsAsFactors = FALSE)
-		}
-		return(list(data = subdiv_data, cog_tab = subdiv_var_tab))
-	})
-
-	if (is.na(variable)) {
-		subdivCombine_df	<- bind_rows(bysubdiv_data)
-		return(subdivCombine_df)
-	} else {
-		# Extract the tables and bind them into one dataframe
-		subdivCombine_tabs		<- lapply(bysubdiv_data, function(subdiv) return(subdiv$cog_tab))
-		subdivCombine_df		<- bind_rows(subdivCombine_tabs)
-		# Any missing values to 0
-		subdivCombine_df[is.na(subdivCombine_df)]	<- 0
-		# Add proportion column
-		subdivCombine_df$Proportion	<- subdivCombine_df$numObsv / sum(subdivCombine_df$numObsv)
-
-		return(list(full_data = bysubdiv_data, tab_df = subdivCombine_df))
-	}
-}
-
-
-
-## // Circular plots // ##
-basicPositionPlot	<- function(dataDensityA, dataDensityB = NA, bgDensity, shrink = 1.4, titleCex = 1.2, titleName = "", tcl.offset = 1, uin = 2.1, bg = "#333233") {
-
-	# Check all data input is density.circular
-	dataClass_l	<- lapply(list(dataDensityA, bgDensity), class)
-	uniqueClass	<- unique(dataClass_l)
-	if (length(uniqueClass) != 1 || uniqueClass != "density.circular") {
-		stop("All data must be of class \'density.circular\'")
-	}
-
-	# Colour background
-	if (!is.na(bg)) {
-		par(bg = bg)
-		message("Changing bg")
-	}
-
-	# Produce main plot and use the info for further plotting
-	mainPlot <- circular:::plot.density.circular(
-		x = bgDensity,
-		points.plot = F,
-		uin = uin,
-		axes = F,
-		xlab = NA,
-		ylab = NA,
-		control.circle = circle.control(type = "n"),
-		nosort = T,
-		lwd = 1.5,
-		col = "transparent",
-		ylim = c(-1.1, 1.1),
-		plot.type = "circle",
-		zero = (pi/2),
-		rotation = "clock",
-		shrink = shrink,
-		main = ""
-	)
-
-	# Density lines
-	bg_line	<- lines(bgDensity, lwd = 1.5, col = "transparent", plot.info = mainPlot, shrink = shrink)
-	A_line	<- lines(dataDensityA, lwd = 0, col = "transparent", plot.info = mainPlot, shrink = shrink)
-
-	# Set up colours
-	enrichUp	<- alpha(wes_palette("Darjeeling1")[2], 0.5)
-	enrichDown	<- alpha(wes_palette("Darjeeling1")[1], 0.5)
-
-	bg_line	<- lines(bgDensity, lwd = 1, col = "transparent", plot.info = mainPlot, shrink = shrink)
-
-	# Colour polygons
-	lapply(polyclip(A = list("x" = A_line$x, "y" = A_line$y), B = list("x" = bg_line$x, "y" = bg_line$y), op = "minus"), polygon, col = enrichUp, border = enrichUp)
-	lapply(polyclip(A = list("x" = bg_line$x, "y" = bg_line$y), B = list("x" = A_line$x, "y" = A_line$y), op = "minus"), polygon, col = enrichDown, border = enrichDown)
-
-	# If provided, plot the other data as a seperate line
-	if (!identical(dataDensityB, NA) & identical(class(dataDensityB), "density.circular")) {
-		Bline_col	<- alpha(wes_palette("Darjeeling1")[3], 0.8)
-		B_line		<- lines(dataDensityB, lwd = 1.5, col = Bline_col, plot.info = mainPlot, shrink = shrink)
-	}
-
-	# Replot the background line so it appears on top of the polygons
-	bg_line	<- lines(bgDensity, lwd = 1, col = "#D9D9D9", plot.info = mainPlot, shrink = shrink)
-
-	# Place the title in the middle
-	text(0, 0.2, titleName, cex = titleCex, col = "#D9D9D9", font = 4)
-
-	# Draw the axis - use custom functions to allow the the axis lines to be offset by a custom value
-	par(cex.axis = titleCex)
-	axis.circular_AE(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi / 2), template = "none", tcl = 0.3, tcl.text = 0.25, col = "#D9D9D9", tcl.offset = tcl.offset)
-
-	# Record the plot as an object
-	recordedPlot	<- recordPlot()
-	return(recordedPlot)
-}
-
-plotCOGCircularDistribution	<- function(perCOGData_list, dataType, minCOGNum = 100, ymax = 0.7) {
-
-	perCOGCircStart		<- lapply(perCOGData_list, function(COG) ifelse(length(COG$CircStart) >= minCOGNum, return(COG$CircStart), NA))
-	perCOGCircTrim		<- perCOGCircStart[!is.na(perCOGCircStart)]
-
-
-	## Apply the summary.circular_AE function to get, amongst other stats, the Mean and Rho values for each branch
-	perCOGCircSummary_list	<- lapply(1:length(perCOGCircTrim), function(index) {
-		# Get the branch, and summarise
-		COGCircSum	<- summary.circular_AE(perCOGCircTrim[[index]])
-		# Get the name of the branch
-		COGName		<- names(perCOGCircTrim)[index]
-		# Return data frame
-		COGCircSum_df	<- cbind(COG = COGName, as.data.frame(t(COGCircSum)), stringsAsFactors = FALSE)
-		return(COGCircSum_df)
-	})
-	## Bind the dataframes to make df with all stats per branch
-	perCOGCircSummary_df		<- bind_rows(perCOGCircSummary_list)
-	perCOGCircSummary_df$logN	<- log(perCOGCircSummary_df$n)
-
-
-	conPal <- colorRampPalette(wes_palette("Zissou1"))
-	perCOGAvPos_plot	<- ggplot(perCOGCircSummary_df, aes(x = Mean, y = Rho, color = logN, label = COG)) +
-		scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
-		scale_y_continuous(limits = c(0, ymax)) +
-		ggtitle(paste0("Average COG position for ", dataType, " genes")) +
-		coord_polar() +
-		geom_point(size = 1.5) +
-		scale_colour_gradientn(colors = conPal(20)) +
-		geom_text_repel(aes(label = COG), point.padding = 0.2, min.segment.length = 0.2) +
-		darkTheme +
-		theme(
-			axis.title.x = element_blank(),
-			legend.justification = c(0, 0),
-			legend.position = c(0, 0),
-			panel.grid.major = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
-			panel.grid.minor = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.3)),
-		)
-
-	return(list(circSum = perCOGCircSummary_df, plot = perCOGAvPos_plot))
-}
-
-## // Functional analysis // ##
-
-## For a datatype and penalty (if not "All") extract COG list and total number
-getPropCOG	<- function(dataType, Penalty = NA) {
-
-	if (is.na(Penalty)) {
-		COG			<- unlist(perTypeData[[dataType]]$allPosData$COGcat)
-		colName		<- "Prop_All"
-	} else {
-		COG			<- unlist(perTypeData[[dataType]][[Penalty]]$allPosData$COGcat)
-		colName		<- paste0(dataType, "_T", Penalty)
-	}
-	
-	COG_df			<- as.data.frame(table(COG), stringsAsFactors = FALSE)
-	totalCOGs		<- sum(COG_df$Freq)
-	COG_df$Prop		<- COG_df$Freq / totalCOGs
-
-	names(COG_df)[3]	<- colName
-	return(list(propDF = COG_df[,-2], totalCOGs = totalCOGs))
-}
-
-## Calculate the enrichment of COGs in one Class (and penalty) over another
-## For comparison against Vertical - use penalty 3 as this is the most stringent set
-calcPropEnrich	<- function(data = "lHGT", background = "Ver", penalty = "3") {
-
-	if (identical(data, background)) {
-		stop("Can't compare to itself")
-	} else if (identical(background, "Ver")) {
-		bg_df	<- perTypeCOGprop$Ver$'3'$propCOGdf
-	} else if (identical(background, "All")) {
-		bg_df	<- perTypeCOGprop$All$propCOGdf
-	}
-
-	data_df		<- perTypeCOGprop[[data]][[penalty]]$propCOGdf
-
-	join_df		<- inner_join(data_df, bg_df, by = "COG")
-	join_df$Diff		<- log(join_df[,2] / join_df[,3])
-	names(join_df)[4]	<- paste0("Diff_T", penalty)
-
-	return(join_df[,c(1,4)])
-}
-
-## Calculate the per-COG ranges of enrichment values (across penalties)
-## Produce coordinates to pass to geom_rect
-calcEnrichRangesForPlot	<- function(df, molten_df, box_width = 0.2) {
-
-	coordinate_df <- data.frame(x1 = numeric(), x2 = numeric(), y1 = numeric(), y2 = numeric())
-
-	for (i in 1:length(df$COG)) {
-		COG_needed	<- levels(molten_df$COG)[i]
-		row_number	<- which(df$COG == COG_needed)
-
-		## Do not count NAs in identifying min/max values ##
-		data_line	<- df[row_number,-1]
-		data_line_clean	<- data_line[,as.vector(!is.na(data_line))]
-
-		## Calculate the max and min values for the boxes ##
-		max_y	<- max(data_line_clean)
-		min_y	<- min(data_line_clean)
-
-		coordinate_df[nrow(coordinate_df)+1, ]	<- c((i - box_width), (i + box_width), min_y, max_y)
-	}
-	return(coordinate_df)
-}
-
-
-## // ggplot // ##
-centerLegendTitle	<- function(plot) {
-	## Requires gtools
-
-	# extract legend
-	g		<- ggplotGrob(plot)
-	grobs 	<- g$grobs
-	legend_index	<- which(sapply(grobs, function(x) x$name) == "guide-box")
-	legend	<- grobs[[legend_index]]
-
-	# extract guides table
-	guides_index 	<- which(sapply(legend$grobs, function(x) x$name) == "layout")
-	guides	<- legend$grobs[[guides_index]]
-
-	# add extra column for spacing
-	# guides$width[5] is the extra spacing from the end of the legend text
-	# to the end of the legend title. If we instead distribute it 50:50 on
-	# both sides, we get a centered legend
-	guides	<- gtable_add_cols(guides, 0.5*guides$width[5], 1)
-	guides$widths[6]	<- guides$widths[2]
-	title_index	<- guides$layout$name == "title"
-	guides$layout$l[title_index]	<- 2
-
-	# reconstruct legend and write back
-	legend$grobs[[guides_index]]	<- guides
-	g$grobs[[legend_index]]			<- legend
-
-	return(g)
-}
-
-plotBranchbyTrait_AE <- function (tree, x, mode = c("edges", "tips", "nodes"), palette = "rainbow", legend = TRUE, xlims = NULL, ...) {
-	
-	mode <- mode[1]
-	if (!inherits(tree, "phylo")) 
-		stop("tree should be an object of class \"phylo\".")
-	if (mode == "tips") {
-		x <- c(x[tree$tip.label], fastAnc(tree, x))
-		names(x)[1:length(tree$tip.label)] <- 1:length(tree$tip.label)
-		XX <- matrix(x[tree$edge], nrow(tree$edge), 2)
-		x <- rowMeans(XX)
-	}
-	else if (mode == "nodes") {
-		XX <- matrix(x[tree$edge], nrow(tree$edge), 2)
-		x <- rowMeans(XX)
-	}
-	if (hasArg(tol)) 
-		tol <- list(...)$tol
-	else tol <- 1e-06
-	if (hasArg(prompt)) 
-		prompt <- list(...)$prompt
-	else prompt <- FALSE
-	if (hasArg(type)) 
-		type <- list(...)$type
-	else type <- "phylogram"
-	if (hasArg(show.tip.label)) 
-		show.tip.label <- list(...)$show.tip.label
-	else show.tip.label <- TRUE
-	if (hasArg(show.node.label)) 
-		show.node.label <- list(...)$show.node.label
-	else show.node.label <- FALSE
-	if (hasArg(edge.width)) 
-		edge.width <- list(...)$edge.width
-	else edge.width <- 4
-	if (hasArg(edge.lty)) 
-		edge.lty <- list(...)$edge.lty
-	else edge.lty <- 1
-	if (hasArg(font)) 
-		font <- list(...)$font
-	else font <- 3
-	if (hasArg(cex)) 
-		cex <- list(...)$cex
-	else cex <- par("cex")
-	if (hasArg(adj)) 
-		adj <- list(...)$adj
-	else adj <- NULL
-	if (hasArg(srt)) 
-		srt <- list(...)$srt
-	else srt <- 0
-	if (hasArg(no.margin)) 
-		no.margin <- list(...)$no.margin
-	else no.margin <- TRUE
-	if (hasArg(root.edge)) 
-		root.edge <- list(...)$root.edge
-	else root.edge <- FALSE
-	if (hasArg(label.offset)) 
-		label.offset <- list(...)$label.offset
-	else label.offset <- 0.01 * max(nodeHeights(tree))
-	if (hasArg(underscore)) 
-		underscore <- list(...)$underscore
-	else underscore <- FALSE
-	if (hasArg(x.lim)) 
-		x.lim <- list(...)$x.lim
-	else x.lim <- NULL
-	if (hasArg(y.lim)) 
-		y.lim <- list(...)$y.lim
-	else y.lim <- if (legend && !prompt && type %in% c("phylogram", 
-		"cladogram")) 
-		c(1 - 0.06 * length(tree$tip.label), length(tree$tip.label))
-	else NULL
-	if (hasArg(direction)) 
-		direction <- list(...)$direction
-	else direction <- "rightwards"
-	if (hasArg(lab4ut)) 
-		lab4ut <- list(...)$lab4ut
-	else lab4ut <- NULL
-	if (hasArg(tip.color)) 
-		tip.color <- list(...)$tip.color
-	else tip.color <- "black"
-	if (hasArg(plot)) 
-		plot <- list(...)$plot
-	else plot <- TRUE
-	if (hasArg(rotate.tree)) 
-		rotate.tree <- list(...)$rotate.tree
-	else rotate.tree <- 0
-	if (hasArg(open.angle)) 
-		open.angle <- list(...)$open.angle
-	else open.angle <- 0
-
-	if (is.function(palette)) 
-		cols <- palette(n = 1000)
-	else {
-		if (palette == "heat.colors") 
-			cols <- heat.colors(n = 1000)
-		if (palette == "gray") 
-			cols <- gray(1000:1/1000)
-		if (palette == "rainbow") 
-			cols <- rainbow(1000, start = 0.7, end = 0)
-		else
-			cols <- palette
-	}
-	if (is.null(xlims)) 
-		xlims <- range(x) + c(-tol, tol)
-	breaks <- 0:1000/1000 * (xlims[2] - xlims[1]) + xlims[1]
-	whichColor <- function(p, cols, breaks) {
-		i <- 1
-		while (p >= breaks[i] && p > breaks[i + 1]) i <- i + 
-			1
-		cols[i]
-	}
-	colors <- sapply(x, whichColor, cols = cols, breaks = breaks)
-	par(lend = 2)
-	xx <- plot.phylo(tree, type = type, show.tip.label = show.tip.label, 
-		show.node.label = show.node.label, edge.color = colors, 
-		edge.width = edge.width, edge.lty = edge.lty, font = font, 
-		cex = cex, adj = adj, srt = srt, no.margin = no.margin, 
-		root.edge = root.edge, label.offset = label.offset, underscore = underscore, 
-		x.lim = x.lim, y.lim = y.lim, direction = direction, 
-		lab4ut = lab4ut, tip.color = tip.color, plot = plot, 
-		rotate.tree = rotate.tree, open.angle = open.angle, lend = 2, 
-		new = FALSE)
-	
-	if (legend == TRUE && is.logical(legend)) 
-		legend <- round(0.3 * max(nodeHeights(tree)), 2)
-	if (legend) {
-		if (hasArg(title)) 
-			title <- list(...)$title
-		else title <- "trait value"
-		if (hasArg(digits)) 
-			digits <- list(...)$digits
-		else digits <- 1
-		if (prompt) 
-			add.color.bar(legend, cols, title, xlims, digits, 
-				prompt = TRUE)
-		else add.color.bar(legend, cols, title, xlims, digits, 
-			prompt = FALSE, x = par()$usr[1] + 0.05 * (par()$usr[2] - 
-				par()$usr[1]), y = par()$usr[3] + 0.05 * (par()$usr[4] - 
-				par()$usr[3]))
-	}
-	invisible(xx)
-}
 
 darkTheme	<- theme(
 	plot.background = element_rect(fill = "#333233", color = NA),
@@ -550,26 +50,8 @@ darkTheme	<- theme(
 )
 
 
-# ------------------------------------------------------------------------------------- #
-
-# ------------------------------------------------------------------------------------- #
-
-master_dir			<- "/Users/aesin/Desktop/Geo_again"
-# master_dir			<- "C:/Users/Sasha/Desktop/Geo_again2"
-genome_dir			<- file.path(master_dir, "Genomes")
-position_dir		<- file.path(master_dir, "HGT_position")
-positionInput_dir	<- file.path(position_dir, "Position_data")
-allProtDB_path		<- file.path(master_dir, "All_prot_db_new")
 
 
-dataTypes			<- c("All", "lHGT", "sHGT", "Ver")
-dataTypes_withAge	<- c(dataTypes, "Old", "Recent")
-penalty_list		<- as.character(c(3, 4, 5, 6))
-bandwith 			<- 3000
-window_size			<- 500
-
-# ------------------------------------------------------------------------------------- #
-# ------------------------------------------------------------------------------------- #
 
 ## Define compartments
 subDivision_list	<- list(Ori = c(0, 0.05), nearOri = c(0.05, 0.15), farOri = c(0.15, 0.25), farTer = c(0.25, 0.35), nearTer = c(0.35, 0.45), Ter = c(0.45, 0.5))
@@ -594,33 +76,12 @@ subDivisionKey_df$col	<- factor(subDivisionKey_df$col, levels = names(subDivisio
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 
-# Get the branches corresponding to subgroups (for lHGT and sHGT data types)
-subgroupData		<- getSubgroupData(genome_dir = genome_dir)
-subgroupBranch_list	<- subgroupData$subgroupBranch_list
-AG_conTime_tree		<- subgroupData$AG_conTime_tree
-AG_taxidTime_tree	<- subgroupData$AG_taxidTime_tree
-AG_binomTime_tree	<- subgroupData$AG_binomTime_tree
 
-perTypeData	<- lapply(dataTypes, function(dataType) {
+# AG_conTime_tree		<- subgroupData$AG_conTime_tree
+# AG_taxidTime_tree	<- subgroupData$AG_taxidTime_tree
+# AG_binomTime_tree	<- subgroupData$AG_binomTime_tree
 
-	## Position data input directory
-	posInput_dir	<- file.path(positionInput_dir, paste0(dataType, "_input"))
 
-	## For the "All" gene set, process without penalty
-	if (dataType == "All") {
-		return(processInputData(dataType = dataType, inputDir = posInput_dir, bandwith = bandwith))
-	}
-
-	## For Vertical, lHGT, and sHGT read in the position data per penalty
-	perPenaltyData	<- lapply(penalty_list, function(penalty) {
-		return(processInputData(dataType = dataType, penalty = penalty, inputDir = posInput_dir, bandwith = bandwith, subgroupBranches = subgroupBranch_list))
-	})
-	# Rename the list to penalty values
-	names(perPenaltyData)	<- penalty_list
-
-	return(perPenaltyData)
-})
-names(perTypeData)	<- dataTypes
 
 # ------------------------------------------------------------------------------------- #
 
@@ -1189,9 +650,6 @@ perCOGData_extract			<- function(COG, dataType, penalty, byAge = FALSE, subgroup
 	if (nrow(perCOGAll) == 0) {
 		return(NA)
 	}
-
-	message(COG)
-
 	circStart		<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
 	perCOGbySubdiv	<- bySubdivision_split(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
 
@@ -1889,6 +1347,8 @@ byTypeSpeciesGCNorm		<- lapply(byTypebySpeciesGC_data, function(GC_byType) {
 	bySpeciesNorm_df	<- bind_rows(bySpeciesNorm_list)
 })
 
+dbDisconnect(conn)
+
 
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
@@ -2321,7 +1781,20 @@ print(VervHGT_GCCorr_plot)
 dev.off()
 
 
+
+
+
+
+
+
+
 # ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+
+# Open All_prot database
+conn			<- dbConnect(RSQLite::SQLite(), allProtDB_path)
 
 
 # NB: warnings are breaking the circular column - not important here
@@ -2404,6 +1877,101 @@ ggplot(perGroup_combined, aes(x = plotIndex, y = range)) +
 
 
 # ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+
+## Extract all the dnaA genes for the 
+dnaA_protID_list_file	<- file.path(position_dir, "dnaA_protIDs.txt")
+dnaA_protIDs			<- read.table(file = dnaA_protID_list_file, sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+
+# 4982 entries in this table, of which 4975 are unique (so 7 genomes have 2x dnaA gene?)
+dnaA_data		<- dbSendQuery(conn, 'SELECT * FROM t1 WHERE protID = :protIDs')
+dbBind(dnaA_data, param = list(protIDs = dnaA_protIDs))
+dnaA_data_df	<- dbFetch(dnaA_data)
+dbClearResult(dnaA_data)
+
+# Clean DNAa table to contain only taxid entries with one DNAa gene
+duplDNAa_taxids	<- dnaA_data_df$taxid[which(duplicated(dnaA_data_df$taxid))]
+dnaA_clean_df	<- dnaA_data_df[which(!dnaA_data_df$taxid %in% duplDNAa_taxids),]
+
+# Read in the species subgroupings file (result of Scripts/Geo_again/Genome_lists/8.Identify_species_subgroupings.R)
+speciesSubgroups_file	<- file.path(genome_dir, "Genome_lists", "Species_groupings.tsv")
+speciesSubgroups_df		<- read.table(speciesSubgroups_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+
+GetRelativePosition	<- function(genePosition, oriStart, oriEnd, oriStrand, genomeLength) {
+
+	if (identical(oriStrand, "Forward")) {
+		# Get the position relative to the origin
+		relGenePosition	<- genePosition - oriStart
+
+		# If the relative location is negative then it lies upstream of the origin
+		if (relGenePosition < 0) {
+			relGenePosition	<- relGenePosition + genomeLength
+		}
+	} else if (identical(oriStrand, "Reverse")) {
+		# Get the position relative to the origin
+		relGenePosition	<- genePosition - oriEnd
+
+		# If it's negative it lies downstream of the origin. Take the absolute value and leave as is #
+		# If it's positive it lies upstream. We subtract it's position from the genome size. This will result in chromStart being > chromEnd #
+		relGenePosition	<- ifelse(relGenePosition < 0, abs(relGenePosition), genomeLength - relGenePosition)
+	} else {
+		stop("Origin strand information is missing")
+	}
+
+	## Get the fractional position
+	fractGenePosition	<- round(relGenePosition / genomeLength, digits = 8)
+	return(fractGenePosition)
+}
+
+summariseSubgroups	<- function(df, subgroupData, summaryStat, clusterCon = NULL) {
+	
+	# Check there is a cluster
+	if (is.null(clusterCon)) {
+		stop("Need to specify a cluster connection for this function")
+	}
+
+	uniqueParentTaxids	<- unique(subgroupData$internalParent)
+
+	byParentTaxid	<- parLapply(clusterCon, uniqueParentTaxids, function(parentTaxid) {
+		# Get all the data rows that correspond to children of this parent
+		childTaxids		<- subgroupData$taxid[which(subgroupData$internalParent == parentTaxid)]
+		perParentData	<- df[which(df$taxid %in% childTaxids),]
+
+		# Some taxids will not be present in subsetted data
+		if(nrow(perParentData) == 0) {
+			return(NA)
+		}
+
+		# The parent taxid might not be present in the data, so we take the name from the subgrouping data
+		parentName		<- subgroupData$parentName[which(subgroupData$taxid == parentTaxid)]
+
+		# Summary statistics on the column desired
+		byParent_mean	<- mean(perParentData[[summaryStat]])
+		byParent_sd		<- ifelse(nrow(perParentData) > 1, sd(perParentData[[summaryStat]]), NA)
+
+		# Make and rename output df
+		out_df	<- data.frame(parentTaxid = parentTaxid, parentBinomial = parentName, childNumber = nrow(perParentData), summaryMean = byParent_mean, summarySD = byParent_sd, stringsAsFactors = FALSE)
+		names(out_df)[which(names(out_df) == "summaryMean")]	<- summaryStat
+
+		return(out_df)
+	})
+	# Remove empty element and bind to df. Then order by number of children
+	byParentTaxid_df	<- bind_rows(byParentTaxid[!is.na(byParentTaxid)])
+	byParentTaxid_df	<- byParentTaxid_df[order(byParentTaxid_df$childNumber, decreasing = TRUE),]
+	return(byParentTaxid_df)
+}
+
+
+
+
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+
+
 
 ## Entries where there is only a single HGT event per orthGroup
 soloEventGroups_list	<- byCOG_geneSpreadSummary_df[which(!byCOG_geneSpreadSummary_df$orthGroup %in% multiEventGroups_list),]
@@ -2429,70 +1997,131 @@ byCOGDispersionSolo_l	<- lapply(unique(unlist(soloEventData_list$COGcat)), funct
 })
 byCOGDispersionSolo_df	<- bind_rows(byCOGDispersionSolo_l)
 
-## Select just "M" data as an example
-M_data	<- subset(byCOGDispersionSolo_df, COGcat == "M")
-ggplot(M_data, aes(x = orthGroup, y = sdLocation)) + geom_point()
-
-## Select "M" groups that has an sd (i.e. > 2 genes) of less than 0.05 (clustered closely)
-Mnear_groups	<- M_data$orthGroup[which(M_data$sdLocation < 0.05)]
-ggplot(subset(M_data, orthGroup %in% Mnear_groups), aes(x = orthGroup, y = meanLocation)) + geom_point()
-
-## Test a group = 259
-test_Mgroup	<- Mnear_groups[1]
-
-## All the data corresponding to the orthologs in Group 259
-test_Mdata_tbl		<- dbSendQuery(conn, 'SELECT * FROM t1 WHERE orthGroup = :orthGroup')
-dbBind(test_Mdata_tbl, param = list(orthGroup = test_Mgroup))
-test_Mdata_df	<- dbFetch(test_Mdata_tbl)
-dbClearResult(test_Mdata_tbl)
+# ------------------------------------------------------------------------------------- #
 
 
 
 
+hgtCOGCat_list	<- unlist(unique(soloEventData_list$COGcat))
+
+lapply(hgtCOGCat_list, function(COGname) {
+
+	onlyCOG_data			<- subset(soloEventData_list, COGcat == COGname)
+	onlyCOG_data$dist2ori	<- ifelse(onlyCOG_data$relGeneStart > 0.5, 1 - onlyCOG_data$relGeneStart, onlyCOG_data$relGeneStart)
+	onlyCOG_groups			<- unique(onlyCOG_data$orthGroup)
+
+
+
+	byGroupOrthPosition	<- lapply(onlyCOG_groups, function(group) {
+
+		message(paste0("COG == ", COGname, ": working on group ", group))
+
+		## All the data corresponding to the orthologs
+		orthGroup_tbl	<- dbSendQuery(conn, 'SELECT * FROM t1 WHERE orthGroup = :orthGroup')
+		dbBind(orthGroup_tbl, param = list(orthGroup = group))
+		orthGroup_df	<- dbFetch(orthGroup_tbl)
+		dbClearResult(orthGroup_tbl)
+
+		## Select only those that have matching taxids in the clean DNAa_data
+		pruneOrth_data	<- orthGroup_df[which(orthGroup_df$taxid %in% dnaA_clean_df$taxid),]
+		# Select only those that are on the main chromosome
+		pruneOrth_data	<- pruneOrth_data[which(pruneOrth_data$plasmid == "F"),]
+
+		# ------------------------------------------------------------------------------------- #
+	
+		clustA		<- makeCluster(numCores, type = "FORK")
+		## For each entry, get the relative position of the gene
+		perGroupGenPos	<- parLapply(clustA, 1:nrow(pruneOrth_data), function(rowIndex) {
+			
+			# Data row
+			dataRow		<- pruneOrth_data[rowIndex,]
+			# Necessary dnaA data (dnaA gene start, gene end, and strand)
+			dnaA_data	<- subset(dnaA_clean_df, taxid == dataRow$taxid, select = c(gene_start, gene_end, strand))
+			
+			# Calculate relative gene position
+			relGeneStart	<- GetRelativePosition(
+				genePosition = dataRow$gene_start,
+				oriStart = dnaA_data$gene_start,
+				oriEnd = dnaA_data$gene_end,
+				oriStrand = dnaA_data$strand,
+				genomeLength = dataRow$genome_l
+			)
+
+			# Relative distance to origin
+			dist2ori	<- ifelse(relGeneStart > 0.5, 1 - relGeneStart, relGeneStart)
+
+			# Remove the nucleotide sequence and protein sequence data (memory use)
+			dataRowTrim	<- subset(dataRow, select = c(-sequence, -NuclSeq))
+
+			# Return dataframe
+			return(cbind(dataRowTrim, relGeneStart = relGeneStart, dist2ori = dist2ori, oriStart = dnaA_data$gene_start, oriStrand = dnaA_data$strand, stringsAsFactors = FALSE))
+		})
+		stopCluster(clustA)
+
+		# Bind all the individual gene results into a per-Group dataframe
+		perGroupGenPos_df	<- bind_rows(perGroupGenPos)
+
+		# ------------------------------------------------------------------------------------- #
+
+		## Summarise by subgroup
+		clustB			<- makeCluster(numCores, type = "FORK")
+		bySubgroup_df	<- summariseSubgroups(df = perGroupGenPos_df, subgroupData = speciesSubgroups_df, summaryStat = "dist2ori", clusterCon = clustB)
+		stopCluster(clustB)
+		
+		# ------------------------------------------------------------------------------------- #
+
+		## Gene data for the HGT only for this group
+		HGT_entries		<- perTypeData$lHGT$`4`$allPosData$protID[which(perTypeData$lHGT$`4`$allPosData$orthGroup == group)]
+		HGT_only_set	<- perGroupGenPos_df[which(perGroupGenPos_df$protID %in% HGT_entries),]
+
+		plotTemp	<- ggplot(data = perGroupGenPos_df, aes(dist2ori)) + 
+			geom_density(adjust = 1/5) +
+			geom_density(data = bySubgroup_df, adjust = 1/5, color = "red") +
+			geom_histogram(
+				data = subset(perGroupGenPos_df, is_ag == 1),
+				aes(x = dist2ori, y = ..ncount..),
+				bins = 100, 
+				fill = "red",
+				inherit.aes = FALSE) +
+			geom_histogram(
+				data = HGT_only_set,
+				aes(x = dist2ori, y = -..ncount..),
+				bins = 100, 
+				fill = "blue",
+				inherit.aes = FALSE)
+
+		return(list(allData = bySubgroup_df, AG_HGT_data = HGT_only_set, numberOfGenes = nrow(perGroupGenPos_df), numberOfSpecies = nrow(bySubgroup_df), plot = plotTemp))
+	})
+
+	## Rename the list by group
+	names(byGroupOrthPosition)	<- paste0(COGname, onlyCOG_groups)
+
+})
 
 
 
 
 
-## Extract all the dnaA genes for the 
-dnaA_protID_list_file	<- file.path(position_dir, "dnaA_protIDs.txt")
-dnaA_protIDs			<- read.table(file = dnaA_protID_list_file, sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
-
-# 4982 entries in this table, of which 4975 are unique (so 7 genomes have 2x dnaA gene?)
-dnaA_data		<- dbSendQuery(conn, 'SELECT * FROM t1 WHERE protID = :protIDs')
-dbBind(dnaA_data, param = list(protIDs = dnaA_protIDs))
-dnaA_data_df	<- dbFetch(dnaA_data)
-dbClearResult(dnaA_data)
 
 
 
+byGroupOrthPosition_df	<- bind_rows(lapply(byGroupOrthPosition, function(element) return(element$allData)))
+noPlasmid				<- byGroupOrthPosition_df[which(byGroupOrthPosition_df$plasmid == "F"),]
 
 
+bacillaceae_accAss	<- read.table(file = file.path(master_dir, "Consensus_groups", "Bacillaceae", "Bacillaceae_acc_ass_list.txt"), sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+bacillales_accAss	<- read.table(file = file.path(master_dir, "Consensus_groups", "Bacillales", "Bacillales_acc_ass_list.txt"), sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+clostridia_accAss	<- read.table(file = file.path(master_dir, "Consensus_groups", "Clostridia", "Clostridia_acc_ass_list.txt"), sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
 
+AGOnly			<- noPlasmid[which(noPlasmid$binomial %in% binomial_list),]
+bacillalesOnly	<- noPlasmid[which(noPlasmid$acc_ass %in% bacillales_accAss),]
+bacillaceaeOnly	<- noPlasmid[which(noPlasmid$acc_ass %in% bacillaceae_accAss),]
+clostridiaOnly	<- noPlasmid[which(noPlasmid$acc_ass %in% clostridia_accAss),]
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Orth_G_AG_plot			<- ggplot(data = AGOnly, aes(dist2ori)) + geom_density(adjust = 1/4, col = "red") + geom_density(data = justG, adjust = 1/4, col = "blue")
+Orth_G_Bacillaceae_plot	<- ggplot(data = bacillaceaeOnly, aes(dist2ori)) + geom_density(adjust = 1/4)
+Orth_G_Bacillales_plot	<- ggplot(data = bacillalesOnly, aes(dist2ori)) + geom_density(adjust = 1/4)
+Orth_G_Clostridia_plot	<- ggplot(data = clostridiaOnly, aes(dist2ori)) + geom_density(adjust = 1/4)
 
 
 
@@ -2501,6 +2130,29 @@ dbClearResult(dnaA_data)
 
 
 dbDisconnect(conn)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

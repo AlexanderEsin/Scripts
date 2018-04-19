@@ -12,7 +12,7 @@ set accass_tax_file	$direct/Genomes/Genome_lists/Acc_ass_taxid_table.tsv
 
 ## // ##
 ## Desired classification for which to filder genomes
-set name			"Bacillales"
+set name			"Clostridia"
 puts stdout			"Collecting all proteomes under the taxonomic group: $name ..."
 set out_dir			$direct/Consensus_groups
 file mkdir			$out_dir/$name
@@ -75,17 +75,17 @@ close $out
 
 ## // ##
 ## Transfer clean and duplicate fasta files
-set group_clean_fasta_dir	$out_dir/$name/Proteome_clean_fastas
-set group_dup_fasta_dir		$out_dir/$name/Proteome_dup_fastas
-file mkdir $group_clean_fasta_dir $group_dup_fasta_dir
+# set group_clean_fasta_dir	$out_dir/$name/Proteome_clean_fastas
+# set group_dup_fasta_dir		$out_dir/$name/Proteome_dup_fastas
+# file mkdir $group_clean_fasta_dir $group_dup_fasta_dir
 
-puts stdout 		"Copying proteome fasta files for $name genomes ..."
-foreach acc_ass $group_list {
-	set fasta_file_name		"$acc_ass\_proteome.fasta"
-	file copy -force $proteome_dir/Proteome_clean_fastas/$fasta_file_name $group_clean_fasta_dir
-	file copy -force $proteome_dir/Proteome_dup_fastas/$fasta_file_name $group_dup_fasta_dir
-}
-puts stdout			"All done."
+# puts stdout 		"Copying proteome fasta files for $name genomes ..."
+# foreach acc_ass $group_list {
+# 	set fasta_file_name		"$acc_ass\_proteome.fasta"
+# 	file copy -force $proteome_dir/Proteome_clean_fastas/$fasta_file_name $group_clean_fasta_dir
+# 	file copy -force $proteome_dir/Proteome_dup_fastas/$fasta_file_name $group_dup_fasta_dir
+# }
+# puts stdout			"All done."
 
 
 

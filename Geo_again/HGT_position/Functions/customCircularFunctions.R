@@ -1,4 +1,6 @@
-## Self-referencing custom "Circular" functions to allow finer grained control of circular plots
+#!/usr/bin/env Rscript
+require(pacman, warn.conflicts = FALSE, quietly = TRUE)
+p_load("circular")
 
 AxisCircularRad_AE	<- function(at, units, labels, attext, tick, tcl, tcl.text, cex, col, lty, lwd, tcl.offset) {
 	r <- tcl.offset + tcl * c(-1/2, 1/2)
