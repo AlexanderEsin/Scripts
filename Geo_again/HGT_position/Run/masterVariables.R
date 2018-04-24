@@ -14,6 +14,10 @@ dataTypes			<- c("All", "lHGT", "sHGT", "Ver")
 dataTypes_withAge	<- c(dataTypes, "Old", "Recent")
 penalty_list		<- as.character(c(3, 4, 5, 6))
 
+# Penalties (HGT + Ver) that are used for most cases (e.g. COG analysis)
+verPenalty			<- "3"
+hgtPenalty			<- "4"
+
 # All prot db
 allProtDB_path		<- file.path(master_path, "All_prot_db_new")
 

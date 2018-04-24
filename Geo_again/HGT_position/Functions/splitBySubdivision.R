@@ -23,8 +23,11 @@ splitBySubdivision	<- function(data, subDivisions, variable = NA) {
 			subdiv_data			<- data[which(data$Mod_dist >= subdiv[1] & data$Mod_dist <= subdiv[2]),]
 		}
 
-		## Add a column to the raw data being written back out
+		# Add a column to the raw data being written back out
 		subdiv_data$SubDivision	<- if(nrow(subdiv_data) != 0) subdivName else character(0)
+
+		# Remove the "CircStart" & "CircEnd" columns - we will be combining DFs later on, and binding rows with circular vectors throws warninings
+		subdiv_data				<- subset(subdiv_data, select = c(-CircStart, -CircEnd))
 
 		if (is.na(variable)) {
 			return(data.frame(subDiv = subdivName, numObsv = nrow(subdiv_data), stringsAsFactors = FALSE))

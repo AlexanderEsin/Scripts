@@ -16,7 +16,7 @@ getSubgroupData		<- function(genome_dir = NULL) {
 	uniqueSubGroup_char		<- unique(subspecOnly_data$Group)
 
 	# Read in the taxid <-> mowgliNode translation table (output in Time_analysis.rmd)
-	timeAnalysis_dir		<- file.path(master_dir, "HGT_time", "Data")
+	timeAnalysis_dir		<- file.path(master_path, "HGT_time", "Data")
 	taxidMowExtend_df		<- read.table(file = file.path(timeAnalysis_dir, "Taxid2MowTip_table.tsv"), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
 	taxidMowExtend_df$Extension	<- as.character(taxidMowExtend_df$Extension)
 

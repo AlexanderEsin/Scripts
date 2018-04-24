@@ -46,7 +46,7 @@ byBranchFig_path	<- file.path(figureOutput_path, "byBranch")
 bysubdivFig_path	<- file.path(figureOutput_path, "bySubdiv")
 
 # Quartz plotting options common to this script
-quartz.options( canvas = "#333233", bg = "#333233", type = "pdf")
+quartz.options(canvas = "#333233", bg = "#333233", type = "pdf")
 
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
