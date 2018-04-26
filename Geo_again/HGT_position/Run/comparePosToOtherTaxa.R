@@ -19,6 +19,10 @@ perTypeData			<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
 # Per-type COG data
 perTypeCOG_data		<- readRDS(file.path(positionData_path, "AG_perTypeCOGData.rds"))
 
+# taxdmp nodes & names data
+nodes_data			<- readRDS(file.path(taxdmp_path, "nodes.rds"))
+names_data			<- readRDS(file.path(taxdmp_path, "names.rds"))
+
 # Subdivision key
 subDivisionKey_file	<- file.path(positionData_path, "subDivisionKeyData.rds")
 if(!file.exists(subDivisionKey_file)) {
@@ -69,6 +73,7 @@ byCOG_geneSpread_list	<- lapply(uniqueCOGs, function(COG) {
 
 		# Drop the CircStart and CircEnd columns, because combining circular vectors with bind_rows throws warnings
 		perEvent_data	<- subset(perEvent_data, select = -c(CircStart, CircEnd))
+		perEvent_data$dist2ori	<- oriDists
 
 		# Summary df
 		summary_df	<- data.frame(COG = COG, orthGroup = orthGroup, eventIndex = hgtEvent, totalGenes = numTotal, geneSD = eventDistSD, geneDistMax = eventDistMax, stringsAsFactors = FALSE)
@@ -238,7 +243,7 @@ dnaA_clean_df	<- dnaA_clean_df[which(!dnaA_clean_df$plasmid == "T"),]
 
 # Read in the species subgroupings file (result of Scripts/Geo_again/Genomes/8.Identify_species_subgroupings.R)
 speciesSubgroups_file	<- file.path(genome_path, "Genome_lists", "Species_groupings.tsv")
-speciesSubgroups_df		<- read.table(speciesSubgroups_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+speciesSubgroups_df		<- read.table(speciesSubgroups_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE, quote = "")
 
 # Select just the columns we need
 dnaA_clean_trim	<- subset(dnaA_clean_df, select = c(taxid, gene_start, gene_end, strand))
@@ -278,30 +283,33 @@ byCOGDispersionSolo_df	<- bind_rows(byCOGDispersionSolo_l)
 
 # ------------------------------------------------------------------------------------- #
 
+# Identify the parentSpecies taxids that belong to desired superGroups
+superGroups				<- c("Bacillaceae", "Bacillales", "Clostridia")
+bySupergroupTaxid_list	<- lapply(superGroups, taxidsBySupergroup, speciesGroupings = speciesSubgroups_df, nodes_data = nodes_data, names_data = names_data)
+names(bySupergroupTaxid_list)	<- superGroups
+rm(list = c("names_data", "nodes_data"))
 
-
+# ------------------------------------------------------------------------------------- #
 
 hgtCOGCat_list	<- unlist(unique(soloEventData_list$COGcat))
 
-lapply(hgtCOGCat_list, function(COGname) {
+perCOGOrth_data	<- lapply(hgtCOGCat_list, function(COGname) {
+
+	message(paste0("COG == ", COGname))
 
 	onlyCOG_data			<- subset(soloEventData_list, COGcat == COGname)
 	onlyCOG_data$dist2ori	<- ifelse(onlyCOG_data$relGeneStart > 0.5, 1 - onlyCOG_data$relGeneStart, onlyCOG_data$relGeneStart)
 	onlyCOG_groups			<- unique(onlyCOG_data$orthGroup)
 
+	byGroupOrthPosition	<- mclapply(onlyCOG_groups, function(group) {
 
-
-	byGroupOrthPosition	<- lapply(onlyCOG_groups, function(group) {
-
-		message(paste0("COG == ", COGname, ": working on group ", group))
-
-		## All the data corresponding to the orthologs
+		# All the data corresponding to the orthologs
 		orthGroup_tbl	<- dbSendQuery(dbConn, 'SELECT * FROM t1 WHERE orthGroup = :orthGroup')
 		dbBind(orthGroup_tbl, param = list(orthGroup = group))
 		orthGroup_df	<- dbFetch(orthGroup_tbl)
 		dbClearResult(orthGroup_tbl)
 
-		## Select only those that have matching taxids in the clean DNAa_data
+		# Select only those that have matching taxids in the clean DNAa_data
 		pruneOrth_data	<- orthGroup_df[which(orthGroup_df$taxid %in% dnaA_clean_df$taxid),]
 		# Select only those that are on the main chromosome
 		pruneOrth_data	<- pruneOrth_data[which(pruneOrth_data$plasmid == "F"),]
@@ -309,40 +317,42 @@ lapply(hgtCOGCat_list, function(COGname) {
 		rm(orthGroup_df)
 
 		# ------------------------------------------------------------------------------------- #
-
-	
+		# For each gene entry, combine with dnaA data (start, end, strand) and calculate relative gene position
 		combineOri_df	<- left_join(pruneOrth_data, dnaA_clean_trim, by = "taxid")
 		combineOri_df$relGeneStart	<- apply(combineOri_df, 1, genomeRelativePosition_format)
 		combineOri_df$dist2ori		<- ifelse(combineOri_df$relGeneStart > 0.5, 1 - combineOri_df$relGeneStart, combineOri_df$relGeneStart)
 		combineOri_df	<- subset(combineOri_df, select = -c(sequence, NuclSeq))
 
-		perGroupGenPos_df <- combineOri_df
-	
-		# WIP
-		# WIP
-		# WIP
-		# WIP
-		# WIP
-		# WIP
-		# WIP
 		# ------------------------------------------------------------------------------------- #
+		# Separate AG genes from ortholog genes. We make no distinction about HGT or vertical here
+		combineOriNoAG_df	<- combineOri_df[which(combineOri_df$is_ag == 0),]
+		combineOriAG_df		<- combineOri_df[which(combineOri_df$is_ag == 1),]
+		# Clean memory
+		rm(combineOri_df)
 
-		## Summarise by subgroup
-		clustB			<- makeCluster(numCores, type = "FORK")
-		bySubgroup_df	<- summariseSubgroups(df = perGroupGenPos_df, subgroupData = speciesSubgroups_df, summaryStat = "dist2ori", clusterCon = clustB)
-		stopCluster(clustB)
+		# ------------------------------------------------------------------------------------- #
+		# Add subgrouping data
+		combineOriSubgroup_df	<- left_join(combineOriNoAG_df, speciesSubgroups_df, by = "taxid")
+		uniqueParentSpecies		<- unique(combineOriSubgroup_df$parentSpecies)
+
+		# Clean memory
+		rm(combineOriNoAG_df)
+
+		bySubspeciesGroup_list	<- lapply(uniqueParentSpecies, summariseSubgroups, data = combineOriSubgroup_df, summaryStat = "dist2ori")
+		bySubspeciesGroup_df	<- bind_rows(bySubspeciesGroup_list)
 		
 		# ------------------------------------------------------------------------------------- #
-
-		## Gene data for the HGT only for this group
+		# Gene data for the HGT only for this group
 		HGT_entries		<- perTypeData$lHGT$`4`$allPosData$protID[which(perTypeData$lHGT$`4`$allPosData$orthGroup == group)]
-		HGT_only_set	<- perGroupGenPos_df[which(perGroupGenPos_df$protID %in% HGT_entries),]
+		HGT_only_set	<- combineOriAG_df[which(combineOriAG_df$protID %in% HGT_entries),]
 
-		plotTemp	<- ggplot(data = perGroupGenPos_df, aes(dist2ori)) + 
+		# ------------------------------------------------------------------------------------- #
+		# Make the plot
+		plotTemp	<- ggplot(data = combineOriSubgroup_df, aes(dist2ori)) + 
 			geom_density(adjust = 1/5) +
-			geom_density(data = bySubgroup_df, adjust = 1/5, color = "red") +
+			geom_density(data = bySubspeciesGroup_df, adjust = 1/5, color = "red") +
 			geom_histogram(
-				data = subset(perGroupGenPos_df, is_ag == 1),
+				data = combineOriAG_df,
 				aes(x = dist2ori, y = ..ncount..),
 				bins = 100, 
 				fill = "red",
@@ -354,13 +364,37 @@ lapply(hgtCOGCat_list, function(COGname) {
 				fill = "blue",
 				inherit.aes = FALSE)
 
-		return(list(allData = bySubgroup_df, AG_HGT_data = HGT_only_set, numberOfGenes = nrow(perGroupGenPos_df), numberOfSpecies = nrow(bySubgroup_df), plot = plotTemp))
-	})
+		return(list(allData = bySubspeciesGroup_df, AG_HGT_data = HGT_only_set, numberOfGenes = nrow(combineOriSubgroup_df), numberOfSpecies = nrow(bySubspeciesGroup_df), plot = plotTemp))
+	}, mc.cores = 10)
 
-	## Rename the list by group
+	Sys.sleep(3)
+
+	# Rename the list by group
 	names(byGroupOrthPosition)	<- paste0(COGname, onlyCOG_groups)
 
+	# ------------------------------------------------------------------------------------- #
+
+	byGroupOrthPosition_df	<- bind_rows(lapply(byGroupOrthPosition, function(element) return(element$allData)))
+
+	bySuperGroupCompare	<- bind_rows(lapply(superGroups, function(superGroup) {
+		SGtaxid_list	<- bySupergroupTaxid_list[[superGroup]]
+		subsetOrthPos	<- subset(byGroupOrthPosition_df, parentTaxid %in% SGtaxid_list)
+		subsetOrthPos$SuperGroup	<- superGroup
+		return(subsetOrthPos)
+	}))
+
+	hgtData	<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$COGcat == COGname),]
+	hgtData$SuperGroup	<- "HGT"
+
+	bySuperGroupCompare	<- bind_rows(list(bySuperGroupCompare, hgtData))
+
+	supergroupCompbyCOG_plot <- ggplot(data = byGroupOrthPosition_df, mapping = aes(dist2ori)) +
+		geom_density(color = "black", adjust = 1/5) +
+		geom_density(data = bySuperGroupCompare, aes(dist2ori, color = SuperGroup), fill = "transparent", adjust = 1/5)
+
+	return(list(perGroupData = byGroupOrthPosition, supergroupCompareData = bySuperGroupCompare, supergroupComparePlot = supergroupCompbyCOG_plot))
 })
+names(perCOGOrth_data)	<- hgtCOGCat_list
 
 
 
@@ -369,8 +403,10 @@ lapply(hgtCOGCat_list, function(COGname) {
 
 
 
-byGroupOrthPosition_df	<- bind_rows(lapply(byGroupOrthPosition, function(element) return(element$allData)))
-noPlasmid				<- byGroupOrthPosition_df[which(byGroupOrthPosition_df$plasmid == "F"),]
+
+
+
+
 
 
 bacillaceae_accAss	<- read.table(file = file.path(master_dir, "Consensus_groups", "Bacillaceae", "Bacillaceae_acc_ass_list.txt"), sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1

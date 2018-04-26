@@ -26,6 +26,9 @@ genomeRelativePosition	<- function(genePosition, oriStart, oriEnd, oriStrand, ge
 	return(fractGenePosition)
 }
 
+
+# This function variant is formatted to work in "apply" where the
+# relevant variables are named in a specific way
 genomeRelativePosition_format	<- function(row) {
 
 	oriStrand	<- row[["oriStrand"]]

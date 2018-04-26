@@ -3,6 +3,7 @@
 master_path			<- "/Users/aesin/Desktop/Geo_again"
 genome_path			<- file.path(master_path, "Genomes")
 position_path		<- file.path(master_path, "HGT_position")
+taxdmp_path			<- file.path(genome_path, "taxdmp")
 
 # Paths for scripts and functions
 scripts_path		<- "/Users/aesin/Documents/Scripts/Geo_again/HGT_position"
