@@ -42,6 +42,13 @@ lHGTvsVer_COGcompare	<- bySubdivCOGCompare(
 	clusterBy = "A",
 	subDivison_cols = subDivison_cols)
 
+# Re-plot but allow totally free clustering of all COGs
+lHGTvsVer_COGcompare_free	<- bySubdivCOGCompare(
+	bySuvdiv_dataType_A = lHGT_bySubdiv,
+	bySuvdiv_dataType_B = Ver_bySubdiv,
+	subDivision_list = subDivision_list,
+	subDivison_cols = subDivison_cols)
+
 # ------------------------------------------------------------------------------------- #
 # Compare the COG distributions between the lHGT Old and Recent datasets
 Old_bySubdiv		<- perTypeCOG_data$Old$bySubdivision
@@ -53,6 +60,14 @@ OldvsRcent_COGcompare	<- bySubdivCOGCompare(
 	subDivision_list = subDivision_list,
 	clusterBy = "A",
 	subDivison_cols = subDivison_cols)
+
+# Re-plot but allow totally free clustering of all COGs
+OldvsRcent_COGcompare_free	<- bySubdivCOGCompare(
+	bySuvdiv_dataType_A = Old_bySubdiv,
+	bySuvdiv_dataType_B = Recent_bySubdiv,
+	subDivision_list = subDivision_list,
+	subDivison_cols = subDivison_cols)
+
 
 
 # ------------------------------------------------------------------------------------- #
@@ -72,10 +87,23 @@ print(lHGTvsVer_COGcompare$ComparisonBarplot, newpage = FALSE)
 popViewport()
 invisible(dev.off())
 
+# Plot the lHGT vs Vertical data - clustered freely
+quartz(width = 20, height = 10, file = file.path(COGvSpaceFig_path, "VerticalvslHGT_clusterFree.png"))
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
+
+pushViewport(viewport(layout.pos.row = 1))
+print(lHGTvsVer_COGcompare_free$ClusterDendro + theme(plot.margin = unit(c(0, 0.5, 0, 0.5), "cm")), newpage = FALSE)
+popViewport()
+
+pushViewport(viewport(layout.pos.row = 2))
+print(lHGTvsVer_COGcompare_free$ComparisonBarplot, newpage = FALSE)
+popViewport()
+invisible(dev.off())
+
 
 # ------------------------------------------------------------------------------------- #
 
-## Plot the lHGT Old vs Recent data - clustered by the Old distributions
+# Plot the lHGT Old vs Recent data - clustered by the Old distributions
 quartz(width = 18, height = 10, file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterByOld.png"))
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
@@ -85,6 +113,20 @@ popViewport()
 
 pushViewport(viewport(layout.pos.row = 2))
 print(OldvsRcent_COGcompare$ComparisonBarplot, newpage = FALSE)
+popViewport()
+invisible(dev.off())
+
+
+# Plot the lHGT Old vs Recent data - clustered freely
+quartz(width = 20, height = 10, file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterFree.png"))
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
+
+pushViewport(viewport(layout.pos.row = 1))
+print(OldvsRcent_COGcompare_free$ClusterDendro, newpage = FALSE)
+popViewport()
+
+pushViewport(viewport(layout.pos.row = 2))
+print(OldvsRcent_COGcompare_free$ComparisonBarplot, newpage = FALSE)
 popViewport()
 invisible(dev.off())
 

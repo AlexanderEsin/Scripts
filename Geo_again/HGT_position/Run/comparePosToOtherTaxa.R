@@ -184,7 +184,8 @@ events_A	<- sample(unique(byCOG_geneSpreadAll_df$eventIndex), numObserv)
 randInCOGEventRange	<- unlist(lapply(1:length(events_A), function(eventNum) {
 	eventA		<- events_A[eventNum]
 	event_COG	<- unique(unlist(byCOG_geneSpreadAll_df$COG[which(byCOG_geneSpreadAll_df$eventIndex == eventA)]))
-	eventB		<- sample(unique(subset(byCOG_geneSpreadAll_df, COGcat %in% event_COG, select = eventIndex, drop = TRUE)), 1)
+	print(event_COG)
+	eventB		<- sample(unique(subset(byCOG_geneSpreadAll_df, COGcat == event_COG, select = eventIndex, drop = TRUE)), 1)
 
 	eventComparison	<- unlist(lapply(c(eventA, eventB), function(event) {
 		event_data		<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$eventIndex == event),]
@@ -199,13 +200,37 @@ randInCOGEventRange	<- unlist(lapply(1:length(events_A), function(eventNum) {
 randInCOG_df	<- data.frame(range = randInCOGEventRange, type = "RandomInCOG", stringsAsFactors = FALSE)
 
 # ------------------------------------------------------------------------------------- #
-# Bind the within-Group gene coLocation with the random sampling
-compToRandom_df	<- bind_rows(list(subset(perGroupAlt_df, select = c(range, type)), rand_df, randInCOG_df))
-compToRandom_df$type	<- factor(compToRandom_df$type, levels = c("Random", "RandomInCOG", "IntraGroup"))
+# Partition the multiEvent data further by the COG they represent - some COGs have an intrinsic positional bias
 
-# We'll do a wilcox test on all combinations (3)
-statComparisons		<- lapply(combn(unique(compToRandom_df$type), 2, simplify = FALSE), paste0)
-plotCols			<- wes_palette("Rushmore1")[3:5]
+# Positionally biased and non-biased COGs
+positionBiasCOGs		<- c("J", "M", "G", "C", "E", "Q", "O")
+positionNonBiasCOGs		<- c("T", "K", "V", "L", "P", "I")
+
+# Partition and label data
+perGroupBiasCOGs		<- perGroupAlt_df[which(perGroupAlt_df$COGcat %in% positionBiasCOGs),]
+perGroupNonBias			<- perGroupAlt_df[which(perGroupAlt_df$COGcat %in% positionNonBiasCOGs),]
+perGroupBiasCOGs$type	<- "IntraCOGBias"
+perGroupNonBias$type	<- "IntraCOGNonBias"
+
+# Bind the random sample data with multi event data
+compToRandom_df			<- bind_rows(list(
+	subset(perGroupAlt_df, select = c(range, type)),
+	subset(perGroupBiasCOGs, select = c(range, type)),
+	subset(perGroupNonBias, select = c(range, type)),
+	rand_df,
+	randInCOG_df))
+
+# Factor the type for plot order
+typeOrder				<- c("Random", "RandomInCOG", "IntraGroup", "IntraCOGBias", "IntraCOGNonBias")
+compToRandom_df$type	<- factor(compToRandom_df$type, levels = typeOrder)
+
+# We'll do a wilcox test on all combinations of random and full multiEvent set + 1 comparision between positional and non-positioned COGs
+statComparisons_1	<- lapply(combn(typeOrder[1:3], 2, simplify = FALSE), paste0)
+statComparisons_2	<- lapply(combn(typeOrder[4:5], 2, simplify = FALSE), paste0)
+statComparisons		<- c(statComparisons_1, statComparisons_2)
+
+# Plot colours
+plotCols			<- wes_palette("Rushmore1")[1:5]
 
 # Produce the boxplot
 multiInGroupEvents_boxplot <- ggplot(data = compToRandom_df, aes(x = type, y = range, fill = type)) +

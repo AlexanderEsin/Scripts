@@ -2,9 +2,11 @@
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("dplyr", "reshape2", "ggplot2", "ggdendro")
 
-bySubdivCOGCompare	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, subDivision_list, clusterBy = "A", subDivison_cols = NA, cogMinCutOff = 50) {
+bySubdivCOGCompare	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, subDivision_list, clusterBy = NULL, subDivison_cols = NULL, cogMinCutOff = 50) {
 
-	if(is.na(subDivison_cols)) stop("Required: subDivison_cols variable from the subDivisionKeyData object")
+	if (is.null(subDivison_cols)) stop("Required: subDivison_cols variable from the subDivisionKeyData object")
+
+	# ------------------------------------------------------------------------------------- #
 
 	combine_dataTypes			<- bind_rows(bySuvdiv_dataType_A, bySuvdiv_dataType_B)
 	combine_dataTypes$subDiv	<- factor(combine_dataTypes$subDiv, levels = names(subDivision_list))
@@ -19,42 +21,43 @@ bySubdivCOGCompare	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, subDivi
 	minCutOffCOGs	<- minCutOffCOGs[!is.na(minCutOffCOGs)]
 	minCutOffPrune	<- combine_dataTypes[which(combine_dataTypes$COGcat %in% minCutOffCOGs),]
 
+	# ------------------------------------------------------------------------------------- #
 
-	# Cluster one of the comparisons - this will be used to order the data
-	if (identical(clusterBy, "A")) {
-		clusterBySet		<- unique(bySuvdiv_dataType_A$Set)
+	if (is.null(clusterBy)) {
+		message("Clustering across all data")
+		
+		# Create a new column, combining COG names with the set (e.g. Ver) for clustering
+		minCutOffPrune	<- bind_rows(lapply(unique(minCutOffPrune$Set), function(setName) {
+			bySet_subdata	<- subset(minCutOffPrune, Set == setName)
+			bySet_subdata$COGcat_wType	<- paste0(bySet_subdata$COGcat, "\n", setName)
+			return(bySet_subdata)
+		}))
+
+		dataForCluster		<- minCutOffPrune
+	} else if  (identical(clusterBy, "A")) {
+		dataForCluster		<- minCutOffPrune[which(minCutOffPrune$Set == unique(bySuvdiv_dataType_A$Set)),]
 	} else if (identical(clusterBy, "B")) {
-		clusterBySet		<- unique(bySuvdiv_dataType_B$Set)
+		dataForCluster		<- minCutOffPrune[which(minCutOffPrune$Set == unique(bySuvdiv_dataType_B$Set)),]
 	} else {
-		stop("Must cluster by either dataset A or dataset B")
+		stop("ClusterBy option should be either \'A\', \'B\', or \'NULL\'")
 	}
-	dataForCluster					<- minCutOffPrune[which(minCutOffPrune$Set == clusterBySet),]
 
+	# ------------------------------------------------------------------------------------- #
+	
+	# Prepare data for clustering and calculate distance matrix
+	if (is.null(clusterBy)) {
+		clusterRecast_data				<- dcast(dataForCluster, COGcat_wType ~ subDiv, value.var = "numObsv")
+		rownames(clusterRecast_data)	<- clusterRecast_data$COGcat_wType	
+	} else {
+		clusterRecast_data				<- dcast(dataForCluster, COGcat ~ subDiv, value.var = "numObsv")
+		rownames(clusterRecast_data)	<- clusterRecast_data$COGcat
+	}
 
-	# Prepare data to cluster 
-	clusterRecast_data				<- dcast(dataForCluster, COGcat ~ subDiv, value.var = "numObsv")
-	rownames(clusterRecast_data)	<- clusterRecast_data$COGcat
 	clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
 	clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
 
+	# Produce dendrogram
 	clusterCompartments_dendro		<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
-
-
-	# Perform the ChisSQ tests
-	chisqByCOG_list	<- lapply(minCutOffCOGs, function(COG) {
-		# subset data by COG
-		subsetByCOG		<- minCutOffPrune[which(minCutOffPrune$COGcat == COG),]
-		# recast data
-		recastForChisq	<- dcast(subsetByCOG, subDiv ~ Set, value.var = "numObsv")
-		# remove the category (subdiv) column leaving a two column matrix
-		matrixForChisq	<- as.matrix(recastForChisq[,-1])
-		# perform chisq
-		chisq.pval		<- signif(chisq.test(x = matrixForChisq)$p.value, digits = 3)
-		chisq.format	<- paste0("Chisq:\n", chisq.pval)
-		return(data.frame(COGcat = COG, chisqPval = chisq.pval, chisqForm = chisq.format, stringsAsFactors = FALSE))
-	})
-	chisqByCOG_df		<- bind_rows(chisqByCOG_list)
-
 
 	# Plot the clustering dendrogram
 	perBranchCompartment_cluster	<- ggplot() +
@@ -69,32 +72,79 @@ bySubdivCOGCompare	<- function(bySuvdiv_dataType_A, bySuvdiv_dataType_B, subDivi
 			axis.ticks = element_blank()
 		)
 
-	# Refactor the COG categories to match the clustering
-	minCutOffPrune$COGcat		<- factor(minCutOffPrune$COGcat, levels = clusterCompartments_dendro$labels$label)
-	chisqByCOG_df$COGcat		<- factor(chisqByCOG_df$COGcat, levels = clusterCompartments_dendro$labels$label)
+	# ------------------------------------------------------------------------------------- #
 
-	# Plot the comparison barplot
-	compBySubDiv_barplot		<- ggplot(data = minCutOffPrune, aes(x = Set, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
-		geom_bar(stat = "identity", position = "fill") +
-		geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
-		geom_label(data = chisqByCOG_df, aes(x = 1.5, y = 0.5, label = chisqForm), position = position_dodge(width = 0.5), size = 4, color = "#D9D9D9", fill = "#333233", inherit.aes = FALSE) +
-		facet_wrap(~COGcat, nrow = 1) +
-		scale_fill_manual(values = subDivison_cols, guide = FALSE) +
-		darkTheme +
-		theme(
-			plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
-			panel.grid.major.y = element_blank(),
-			panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
-			panel.grid.minor.y = element_blank(),
-			axis.text.y = element_blank(),
-			axis.title.y = element_blank(),
-			axis.title.x = element_blank(),
-			axis.ticks = element_blank(),
-			strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
-			strip.text = element_text(color =  "#D9D9D9", size = 12)
-		)
+	if (is.null(clusterBy)) {
+		minCutOffPrune$COGcat_wType		<- factor(minCutOffPrune$COGcat_wType, levels = clusterCompartments_dendro$labels$label)
 
-	## Return both the cluster dendrogram and barplot
-	return(list(ClusterDendro = perBranchCompartment_cluster, ComparisonBarplot = compBySubDiv_barplot, perCOGstat = chisqByCOG_df))
+		compBySubDiv_barplot		<- ggplot(data = minCutOffPrune, aes(x = COGcat_wType, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
+			geom_bar(stat = "identity", position = "fill") +
+			geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
+			# facet_wrap(~COGcat_wType, nrow = 1) +
+			scale_fill_manual(values = subDivison_cols, guide = FALSE) +
+			darkTheme +
+			theme(
+				plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
+				panel.grid.major.y = element_blank(),
+				panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
+				panel.grid.minor.y = element_blank(),
+				axis.text.y = element_blank(),
+				axis.title.y = element_blank(),
+				axis.title.x = element_blank(),
+				axis.ticks = element_blank(),
+				strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
+				strip.text = element_text(color =  "#D9D9D9", size = 12)
+			)
+
+		# Return both the cluster dendrogram and barplot
+		return(list(ClusterDendro = perBranchCompartment_cluster, ComparisonBarplot = compBySubDiv_barplot, perCOGstat = NA))
+
+	} else {
+
+		# Perform the ChisSQ tests - only if we are clustering by a type
+		chisqByCOG_list	<- lapply(minCutOffCOGs, function(COG) {
+			# subset data by COG
+			subsetByCOG		<- minCutOffPrune[which(minCutOffPrune$COGcat == COG),]
+			# recast data
+			recastForChisq	<- dcast(subsetByCOG, subDiv ~ Set, value.var = "numObsv")
+			# remove the category (subdiv) column leaving a two column matrix
+			matrixForChisq	<- as.matrix(recastForChisq[,-1])
+			# perform chisq
+			chisq.pval		<- signif(chisq.test(x = matrixForChisq)$p.value, digits = 3)
+			chisq.format	<- paste0("Chisq:\n", chisq.pval)
+			return(data.frame(COGcat = COG, chisqPval = chisq.pval, chisqForm = chisq.format, stringsAsFactors = FALSE))
+		})
+		chisqByCOG_df		<- bind_rows(chisqByCOG_list)
+
+
+		# Refactor the COG categories to match the clustering
+		minCutOffPrune$COGcat		<- factor(minCutOffPrune$COGcat, levels = clusterCompartments_dendro$labels$label)
+		chisqByCOG_df$COGcat		<- factor(chisqByCOG_df$COGcat, levels = clusterCompartments_dendro$labels$label)
+
+		# Plot the comparison barplot
+		compBySubDiv_barplot		<- ggplot(data = minCutOffPrune, aes(x = Set, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
+			geom_bar(stat = "identity", position = "fill") +
+			geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
+			geom_label(data = chisqByCOG_df, aes(x = 1.5, y = 0.5, label = chisqForm), position = position_dodge(width = 0.5), size = 4, color = "#D9D9D9", fill = "#333233", inherit.aes = FALSE) +
+			facet_wrap(~COGcat, nrow = 1) +
+			scale_fill_manual(values = subDivison_cols, guide = FALSE) +
+			darkTheme +
+			theme(
+				plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
+				panel.grid.major.y = element_blank(),
+				panel.grid.major.x = element_line(size = 0.8, color = "#D9D9D9"),
+				panel.grid.minor.y = element_blank(),
+				axis.text.y = element_blank(),
+				axis.title.y = element_blank(),
+				axis.title.x = element_blank(),
+				axis.ticks = element_blank(),
+				strip.background = element_rect(fill = "transparent", color = "#D9D9D9"),
+				strip.text = element_text(color =  "#D9D9D9", size = 12)
+			)
+
+		# Return both the cluster dendrogram and barplot
+		return(list(ClusterDendro = perBranchCompartment_cluster, ComparisonBarplot = compBySubDiv_barplot, perCOGstat = chisqByCOG_df))
+
+	}	
 }
 

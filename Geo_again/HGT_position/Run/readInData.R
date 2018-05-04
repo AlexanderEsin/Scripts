@@ -9,7 +9,7 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 # Get the branches corresponding to subgroups (for lHGT and sHGT data types)
 message("\nProcessing subgroup data...", appendLF = FALSE)
 
-subgroupData		<- getSubgroupData(genome_dir = genome_path)
+subgroupData		<- getSubgroupData(genome_dir = genome_path, databasePath = allProtDB_path)
 subgroupBranch_list	<- subgroupData$subgroupBranch_list
 
 message("\rProcessing subgroup data... done\n")
