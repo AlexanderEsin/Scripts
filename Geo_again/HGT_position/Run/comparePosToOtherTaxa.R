@@ -34,6 +34,14 @@ if(!file.exists(subDivisionKey_file)) {
 message("\rReading in data... done\n")
 
 # ------------------------------------------------------------------------------------- #
+# Output path for figures
+orthPositionFig_path	<- file.path(figureOutput_path, "orthPosition")
+
+# ------------------------------------------------------------------------------------- #
+# Set global quartz options
+quartz.options(canvas = "#333233", bg = "#333233", type = "png", dpi = 300)
+
+# ------------------------------------------------------------------------------------- #
 # Open All_prot database
 dbConn			<- dbConnect(RSQLite::SQLite(), allProtDB_path)
 
@@ -351,7 +359,7 @@ perCOGOriOrth_data		<- lapply(allSoloCOGCat, processOrthologPosition,
 	dbConn = dbConn,
 	superGroupTaxid_list = bySupergroupTaxid_list
 )
-names(perCOGOriOrth_data)	<- nearOriCOGCat
+names(perCOGOriOrth_data)	<- allSoloCOGCat
 
 # Orthologs of AG HGT groups, of which all members are in Ter/Near-Ter
 perCOGTerOrth_data		<- lapply(allSoloCOGCat, processOrthologPosition,
@@ -360,7 +368,7 @@ perCOGTerOrth_data		<- lapply(allSoloCOGCat, processOrthologPosition,
 	dbConn = dbConn,
 	superGroupTaxid_list = bySupergroupTaxid_list
 )
-names(perCOGTerOrth_data)	<- nearOriCOGCat
+names(perCOGTerOrth_data)	<- allSoloCOGCat
 
 
 # ------------------------------------------------------------------------------------- #
@@ -425,6 +433,19 @@ Ori_MetabolicOrth_plot	<- ggplot(data = ori_terBias_data, mapping = aes(x = dist
 		strip.text = element_text(color = "#D9D9D9", size = 12)
 	)
 
+
+quartz(width = 16, height = 12, file = file.path(orthPositionFig_path, "posBiasOrthCompare_biasCOGs.png"))
+print(positionBiasOrthCompare_plot)
+invisible(dev.off())
+
+quartz(width = 16, height = 12, file = file.path(orthPositionFig_path, "posBiasOrthCompare_biasCOGs_terOnly.png"))
+print(Ter_MetabolicOrth_plot)
+invisible(dev.off())
+
+
+quartz(width = 16, height = 12, file = file.path(orthPositionFig_path, "posBiasOrthCompare_biasCOGs_oriOnly.png"))
+print(Ori_MetabolicOrth_plot)
+invisible(dev.off())
 
 
 

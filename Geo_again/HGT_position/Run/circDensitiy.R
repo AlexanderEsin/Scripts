@@ -117,8 +117,8 @@ message("\rPlotting lHGT vs sHGT gene density at single penatly... done")
 message("Plotting Old vs Recent lHGT gene density...", appendLF = FALSE)
 
 penalty		<- "4"
-# Define the bandwith for circular density estimation
-bandwith 	<- 3000
+# Define the bandwidth for circular density estimation
+bandwidth 	<- 3000
 
 quartz(width = 21, height = 8)
 par(mfrow = c(1, 3))
@@ -136,7 +136,7 @@ invisible(lapply(list("lHGT", "Group", "Subgroup"), function(type) {
 	}
 
 	# Calculate circular density (on the start position)
-	HGTDensity	<- density.circular(typeCircStart, kernel = "vonmises", bw = bandwith)
+	HGTDensity	<- density.circular(typeCircStart, kernel = "vonmises", bw = bandwidth)
 	allDensity	<- perTypeData$All$circDensity
 	vertDensity	<- perTypeData$Ver$'3'$circDensity
 
@@ -218,5 +218,55 @@ if (file.exists(file.path(figureOutput_path, "HGT_density_bySubdivision.ai"))) {
 } else {
 	message(paste0("\nWARNING: The HGT density over subcompartment plot \"DensityOverSubcompartment.pdf\" should be adjusted / edited and placed in:\n\t", figureOutput_path))
 }
+
+
+
+# ------------------------------------------------------------------------------------- #
+
+binomial_list		<- unique(perTypeData$All$allPosData$binomial)
+uinSpecies			<- 0.8
+titleCexSpecies		<- 0.7
+bandwidthSpecies	<- 1500
+shrinkSpecies		<- 1
+
+quartz(width = 12, height = 12)
+par(mfrow = c(5, 5))
+par(mar = c(0, 0, 0, 0))
+invisible(lapply(binomial_list, function(species) {
+
+	# HGT and background circular data
+	HGTSpec_circ	<- subset(perTypeData$lHGT$'4'$allPosData, binomial == species, select = CircStart, drop = TRUE)
+	bgSpec_circ		<- subset(perTypeData$All$allPosData, binomial == species, select = CircStart, drop = TRUE)
+
+	# HGT and background density calculation. NB bandwidth is lower than for the combined plots!
+	HGTSpec_dens	<- density.circular(HGTSpec_circ, kernel = "vonmises", bw = bandwidthSpecies)
+	bgSpec_dens		<- density.circular(bgSpec_circ, kernel = "vonmises", bw = bandwidthSpecies)
+
+	# Number of genes for each density plot
+	numGenes		<- length(HGTSpec_circ)
+
+	# Produce plot
+	position_plot	<- circularDensityPlot(dataDensityA = HGTSpec_dens, bgDensity = bgSpec_dens, shrink = shrinkSpecies, tcl.offset = 0.8, titleCex = titleCexSpecies, uin = uinSpecies, titleName = paste0(species, "\nGenes = ", numGenes))
+	replayPlot(position_plot)
+}))
+outputFileName	<- file.path(circDensityFig_path, "bySpecies_HGT_Enrichment.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
