@@ -14,8 +14,8 @@ genomeRelativePosition	<- function(genePosition, oriStart, oriEnd, oriStrand, ge
 		# Get the position relative to the origin
 		relGenePosition	<- genePosition - oriEnd
 
-		# If it's negative it lies downstream of the origin. Take the absolute value and leave as is #
-		# If it's positive it lies upstream. We subtract it's position from the genome size. This will result in chromStart being > chromEnd #
+		# If it's negative it lies downstream of the origin. Take the absolute value and leave as is 
+		# If it's positive it lies upstream. We subtract it's position from the genome size. This will result in chromStart being > chromEnd
 		relGenePosition	<- ifelse(relGenePosition < 0, abs(relGenePosition), genomeLength - relGenePosition)
 	} else {
 		stop("Origin strand information is missing")

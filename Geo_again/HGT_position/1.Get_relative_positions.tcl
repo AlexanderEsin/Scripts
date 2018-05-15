@@ -46,7 +46,7 @@ set genome_dir		$master_dir/Genomes/Genome_lists
 set posit_dir		$master_dir/HGT_position/Position_data
 
 # Find and open the DB
-set all_db_file		$master_dir/All_prot_db
+set all_db_file		$master_dir/All_prot_db_new
 sqlite3 allProt_db	$all_db_file
 
 # Directory to find tipID <-> protID keys
@@ -88,6 +88,11 @@ foreach entry $startLocTag_data {
 	lappend oriPos_list	$dbEntry_list
 }
 
+# Write out the start dnaA start position data
+set oriPos_listHeader [join [list Taxid geneStart geneEnd Strand] \t]
+set out [open $genome_dir/AG_dnaA_startEnd_positions.tsv w]
+puts $out [join [concat [list $oriPos_listHeader] $oriPos_list] \n]
+close $out
 
 
 ## Penalty and HGT-type lists
