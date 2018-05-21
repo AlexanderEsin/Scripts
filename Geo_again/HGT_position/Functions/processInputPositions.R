@@ -5,7 +5,7 @@ p_load("stringr", "circular")
 processInputPositions	<- function(dataType = "All", penalty = NA, inputDir, bandwith, subgroupBranches = NA) {
 
 	# Track progress
-	message(paste0("Processing \'", dataType, "\' at penalty: ", penalty, " ..."), appendLF = FALSE)
+	message(paste0("\tProcessing \'", dataType, "\' at penalty: ", penalty, " ..."), appendLF = FALSE)
 
 	# Set the name of the input file depending on data type
 	if (!identical(dataType, "All")) {

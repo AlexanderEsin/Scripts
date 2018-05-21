@@ -5,7 +5,7 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("RSQLite", "plyr", "dplyr","ggplot2", "ggtree", "wesanderson", "Biostrings", "ggpubr", "Hmisc")
+p_load("RSQLite", "plyr", "dplyr","ggplot2", "ggtree", "wesanderson", "Biostrings", "ggpubr", "Hmisc", "data.table")
 
 
 # ------------------------------------------------------------------------------------- #
@@ -21,6 +21,9 @@ perTypeCOG_data		<- readRDS(file.path(positionData_path, "AG_perTypeCOGData.rds"
 
 # Subgroup data
 subgroupData		<- readRDS(file.path(positionData_path, "AG_subgroupData.rds"))
+
+# Genomic Island data
+byType_withGI_data	<- readRDS(file.path(positionData_path, "AG_perTypeGIData.rds"))
 
 # Subdivision key
 subDivisionKey_file	<- file.path(positionData_path, "subDivisionKeyData.rds")
@@ -144,20 +147,18 @@ byTypebySpeciesGC_data	<- mclapply(dataTypes_withAge, mc.cores = 14, function(da
 				subsetData		<- subset(perTypeData$lHGT[[penalty]]$allPosData, Subgroup == subgroup)
 			}
 
-			# Get the protIDs and locusTags. NB <<- is assignment to global environment
-			with(subsetData, {
-				geneProtIDs	<<- protID[which(binomial == species & relGeneStart > bin_start & relGeneStart <= bin_end)]
-				genelocTags	<<- locusTag[which(binomial == species & relGeneStart > bin_start & relGeneStart <= bin_end)]
-			})
+			# Further subset by position
+			subsetByPos			<- subset(subsetData, binomial == species & relGeneStart >= bin_start & relGeneStart <= bin_end)
+			subsetByPos			<- subsetByPos[order(subsetByPos$relGeneStart),]
 
 			# If the number of genes of this dataType in this Bin is 0 - return
-			if (length(geneProtIDs) < geneCutOff) {
+			if (length(subsetByPos$protID) < geneCutOff) {
 				return(data.frame(BinIndex = genome_bin, GC_content = NA, stringsAsFactors = FALSE))
 			}
 
 			# Get the corresponding nucleotide sequences from the Sqlite database
 			nuclSeq_tbl		<- dbSendQuery(conn, 'SELECT NuclSeq FROM t1 WHERE protID = :protIDs AND locus = :locTags AND binomial = :species')
-			dbBind(nuclSeq_tbl, param = list(protIDs = geneProtIDs, locTags = genelocTags, species = rep(species, length(geneProtIDs))))
+			dbBind(nuclSeq_tbl, param = list(protIDs = subsetByPos$protID, locTags = subsetByPos$locusTag, species = rep(species, nrow(subsetByPos))))
 			nuclSeq_df		<- dbFetch(nuclSeq_tbl)
 			dbClearResult(nuclSeq_tbl)
 
@@ -167,12 +168,17 @@ byTypebySpeciesGC_data	<- mclapply(dataTypes_withAge, mc.cores = 14, function(da
 			# For lHGT genes - calculate overall GC content
 			GeneGC_cont		<- rowSums(subset(alphabetFrequency(nuclSeq_stringSet, as.prob = TRUE), select = 2:3, drop = FALSE))
 			
-			return(data.frame(BinIndex = genome_bin, GC_content = GeneGC_cont, stringsAsFactors = FALSE))
+			out_df			<- data.frame(BinIndex = genome_bin, GC_content = GeneGC_cont, locusTag = subsetByPos$locusTag, stringsAsFactors = FALSE)
+
+			return(out_df)
 		})
 
 		# Combine the per-Bin data
 		byBinGC_df			<- bind_rows(byBinGC_list)
 		byBinGC_df$Species	<- species
+
+		# Check for the "All" gene groups that every gin makes it into the bin (and not more than once into any bins)
+		# if (nrow(byBinGC_df[!is.na(byBinGC_df$binLocTags),]) != nrow(subset(perTypeData$All$allPosData, binomial == species))) message(species)
 
 		return(byBinGC_df)
 	})
@@ -181,7 +187,6 @@ byTypebySpeciesGC_data	<- mclapply(dataTypes_withAge, mc.cores = 14, function(da
 	bySpeciesGC_df$Type	<- dataType
 
 	return(bySpeciesGC_df)
-
 })
 
 # Rename list after dataTypes
@@ -442,9 +447,42 @@ GCbyBin_allNorm_plot	<- ggplot(GC_allGenes, aes(x = BinIndex, y = GC_norm, color
 		se = FALSE) +
 	# Overall smooth line (cross-species)
 	geom_smooth(method = "gam", formula = y ~ s(x, k = 25), size = 1.5, se = TRUE, span = 0.2, color = "red") +
-	scale_color_manual(values = allGenes_col, guide = guide_legend(title = "Gene Type")) +
 	scale_fill_manual(values = alpha(allGenes_col, 0.7), guide = FALSE) +
 	darkTheme
+
+
+
+GC_allGenes$Species	<- factor(GC_allGenes$Species, levels = binomial_list)
+
+GC_byBin_bySpecies_allGene_plot	<- ggplot(GC_allGenes, aes(x = BinIndex, y = GC_norm, color = Type)) +
+	scale_x_continuous(name = "Percentage along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+	scale_y_continuous(name = "GC content") +
+	facet_wrap(~Species, ncol = 2) +
+	# geom_rect(data =  allGenesNorm_subdivs, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), inherit.aes = FALSE) +
+	geom_smooth(
+		data = GC_allGenes,
+		aes(group = Species),
+		color = wes_palette("Darjeeling1")[1],
+		method = "loess",
+		span = 0.05,
+		col = alpha(allGenes_col, 0.6),
+		size = 0.2,
+		se = FALSE) +
+	# Overall smooth line (cross-species)
+	# geom_smooth(method = "gam", formula = y ~ s(x, k = 25), size = 1.5, se = TRUE, span = 0.2, color = "red") +
+	# scale_fill_manual(values = alpha(allGenes_col, 0.7), guide = FALSE) +
+	darkTheme +
+	theme(
+		axis.text.y = element_blank(),
+		axis.ticks.y = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.y = element_blank(),
+ 		strip.background = element_blank(),
+ 		strip.text = element_text(color = allGenes_col))
+
+
+
+
 
 # Write plot
 quartz(width = 12, height = 8, dpi = 300, type = "png", file = file.path(GC_byBinFig_path, "perSpeciesAll_normalised.png"))
@@ -458,18 +496,34 @@ invisible(dev.off())
 GC_VerVsHGT				<- bind_rows(list(byTypeSpeciesGCNorm$Ver, byTypeSpeciesGCNorm$lHGT))
 GC_VerVsHGT$BinIndex	<- (GC_VerVsHGT$BinIndex * 100) / binNumber
 
+# Add the first quarter of the genome onto the end to smooth over the origin
+quarter_subset	<- subset(GC_VerVsHGT, BinIndex <= 25)
+quarter_subset$BinIndex	<- quarter_subset$BinIndex + 100
+GC_VerVsHGT_ext	<- rbind(GC_VerVsHGT, quarter_subset)
+
+# Add the first quarter to the subdivision color bars
+subdivs_firstQ	<- subset(allGenesNorm_subdivs, xmax <= 25)
+subdivs_firstQ$xmin	<- subdivs_firstQ$xmin + 100
+subdivs_firstQ$xmax	<- subdivs_firstQ$xmax + 100
+subdivs_ext		<- rbind(allGenesNorm_subdivs, subdivs_firstQ)
+subdivCols_ext	<- subDivison_cols[1:nrow(subdivs_firstQ)]
+
 # Factor variables + color
-GC_VerVsHGT$Type	<- factor(GC_VerVsHGT$Type, levels = dataTypes_withAge)
-GC_VerVsHGT$Species	<- factor(GC_VerVsHGT$Species, levels = rev(tipOrder))
+GC_VerVsHGT_ext$Type	<- factor(GC_VerVsHGT_ext$Type, levels = dataTypes_withAge)
+GC_VerVsHGT_ext$Species	<- factor(GC_VerVsHGT_ext$Species, levels = rev(tipOrder))
 verVsHGT_cols		<- wes_palette("Darjeeling1")[1:2]
 
 # Plot with normalised per-Bin GC values. Have to use GAM smoothhing method (loess memory fail), k=20 looks most like loess.
-GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT, aes(x = BinIndex, y = GC_norm, color = Type), fill = Type) +
-	scale_x_continuous(name = "Percebtage along genome", limits = c(0, 100), breaks = seq(0, 100, 10), minor_breaks = NULL) +
+GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT_ext, aes(x = BinIndex, y = GC_norm, color = Type), fill = Type) +
+	scale_x_continuous(name = "Percentage along genome", limits = c(0, 125), breaks = seq(0, 125, 10), minor_breaks = NULL) +
 	scale_y_continuous(name = "Normalised GC content") +
-	geom_rect(data =  allGenesNorm_subdivs, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), fill = alpha(unlist(lapply(subDivison_cols, rep, times = 2)), 0.2), inherit.aes = FALSE) +
+	geom_rect(
+		data =  subdivs_ext,
+		aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+		fill = alpha(c(unlist(lapply(subDivison_cols, rep, times = 2)), subdivCols_ext), 0.2),
+		inherit.aes = FALSE) +
 	geom_smooth(
-		data = subset(GC_VerVsHGT, Type == "Ver"),
+		data = subset(GC_VerVsHGT_ext, Type == "Ver"),
 		aes(group = Species),
 		method = "loess",
 		span = 0.1,
@@ -477,7 +531,7 @@ GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT, aes(x = BinIndex, y = GC_norm, c
 		size = 0.2,
 		se = FALSE) +
 	geom_smooth(
-		data = subset(GC_VerVsHGT, Type == "lHGT"),
+		data = subset(GC_VerVsHGT_ext, Type == "lHGT"),
 		aes(group = Species),
 		method = "loess",
 		span = 0.1,
@@ -485,7 +539,8 @@ GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT, aes(x = BinIndex, y = GC_norm, c
 		size = 0.2,
 		se = FALSE) +
 	# Overall smooth line (cross-species)
-	geom_smooth(aes(color = Type, fill = Type), method = "gam", formula = y ~ s(x, k = 20), size = 1.5, se = TRUE, span = 0.1) +
+	# geom_smooth(aes(color = Type, fill = Type), method = "gam", formula = y ~ s(x, k = 20), size = 1.5, se = TRUE, span = 0.05) +
+	geom_smooth(aes(color = Type, fill = Type), method = "loess", size = 1.5, se = TRUE, span = 0.1) +
 	scale_color_manual(values = verVsHGT_cols, guide = guide_legend(title = "Gene Type")) +
 	scale_fill_manual(values = alpha(verVsHGT_cols, 0.7), guide = FALSE) +
 	darkTheme +
@@ -496,7 +551,7 @@ GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT, aes(x = BinIndex, y = GC_norm, c
 	)
 
 # Write plot
-quartz(width = 18, height = 10, dpi = 300, type = "png", file = file.path(GC_byBinFig_path, "perSpeciesVerHGT_normalised.png"))
+quartz(width = 21, height = 10, dpi = 300, type = "pdf", file = file.path(GC_byBinFig_path, "perSpeciesVerHGT_normalised.pdf"))
 print(GCbyBin_VerHGT_norm_plot)
 invisible(dev.off())
 
@@ -656,38 +711,47 @@ valueTypes		<- c("VerOnly", "VerWithRecent", "RecentWithVer", "RecentOnly")
 # Sort data depending on the content of genes in the bin
 bySpecies_normGC_list	<- mclapply(binomial_list, mc.cores = 14, function(speciesName) {
 
-	byBinMeanGC_list	<- lapply(1:binNumber, function(genome_bin) {
+	byBinPresent_list	<- lapply(1:binNumber, function(genome_bin) {
 
-		with(GC_VerVsNew, {
-			byBin_HGT	<<- mean(GC_norm[which(BinIndex == genome_bin & Species == speciesName & Type == "Recent")])
-			byBin_Ver	<<- mean(GC_norm[which(BinIndex == genome_bin & Species == speciesName & Type == "Ver")])
-		})
+		HGT_GC_inBin	<- subset(GC_VerVsNew, BinIndex == genome_bin & Species == speciesName & Type == "Recent", select = GC_norm, drop = TRUE)
+		Ver_GC_inBin	<- subset(GC_VerVsNew, BinIndex == genome_bin & Species == speciesName & Type == "Ver", select = GC_norm, drop = TRUE)
 
-		return(data.frame(BinIndex = genome_bin, Ver_GC = byBin_Ver, lHGT_GC = byBin_HGT, stringsAsFactors = FALSE))
+		HGT_inBin	<- ifelse(is.na(mean(HGT_GC_inBin)), FALSE, TRUE)
+		Ver_inBin	<- ifelse(is.na(mean(Ver_GC_inBin)), FALSE, TRUE)
+
+		return(data.frame(BinIndex = genome_bin, Ver_inBin = Ver_inBin, HGT_inBin = HGT_inBin, stringsAsFactors = FALSE))
 	})
-	byBinMeanGC_df	<- bind_rows(byBinMeanGC_list)
+	byBinPresent_df	<- bind_rows(byBinPresent_list)
+
+	verOnly_indices	<- subset(byBinPresent_df, Ver_inBin & !HGT_inBin, select = BinIndex, drop = TRUE)
+	hgtOnly_indices	<- subset(byBinPresent_df, !Ver_inBin & HGT_inBin, select = BinIndex, drop = TRUE)
+	ver_hgt_indices	<- subset(byBinPresent_df, Ver_inBin & HGT_inBin, select = BinIndex, drop = TRUE)
 
 	byTypeGC_cont	<- lapply(valueTypes, function(subsetType) {
 
 		if (identical(subsetType, "VerOnly")) {
-			values	<- subset(byBinMeanGC_df, !is.na(Ver_GC) & is.na(lHGT_GC), select = Ver_GC, drop = TRUE)
+			data	<- subset(GC_VerVsNew, BinIndex %in% verOnly_indices & Species == speciesName & Type == "Ver")
 		} else if (identical(subsetType, "VerWithRecent")) {
-			values	<- subset(byBinMeanGC_df, !is.na(Ver_GC) & !is.na(lHGT_GC), select = Ver_GC, drop = TRUE)
+			data	<- subset(GC_VerVsNew, BinIndex %in% ver_hgt_indices & Species == speciesName & Type == "Ver")
 		} else if (identical(subsetType, "RecentWithVer")) {
-			values	<- subset(byBinMeanGC_df, !is.na(Ver_GC) & !is.na(lHGT_GC), select = lHGT_GC, drop = TRUE)
+			data	<- subset(GC_VerVsNew, BinIndex %in% ver_hgt_indices & Species == speciesName & Type == "Recent")
 		} else if (identical(subsetType, "RecentOnly")) {	
-			values	<- subset(byBinMeanGC_df, is.na(Ver_GC) & !is.na(lHGT_GC), select = lHGT_GC, drop = TRUE)
+			data	<- subset(GC_VerVsNew, BinIndex %in% hgtOnly_indices & Species == speciesName & Type == "Recent")
 		}
 
-		if (length(values) == 0) values	<- NA
+		if (nrow(data) == 0) return(NA)
 
-		return(data.frame(GC_value = values, type = subsetType, stringsAsFactors = FALSE))
+		data$type	<- subsetType
+
+		return(data)
 	})
-	byTypeGC_cont	<- bind_rows(byTypeGC_cont)
-	byTypeGC_cont$Species	<- speciesName
 
-	return(byTypeGC_cont)
+	byTypeGC_cont	<- byTypeGC_cont[!is.na(byTypeGC_cont)]
+	byTypeGC_df		<- bind_rows(byTypeGC_cont)
+
+	return(byTypeGC_df)
 })
+
 bySpecies_normGC_df	<- bind_rows(bySpecies_normGC_list)
 
 
@@ -696,22 +760,41 @@ bySpecies_normGC_df$type	<- factor(bySpecies_normGC_df$type, levels = valueTypes
 statComparisons				<- list(valueTypes[1:2], valueTypes[2:3], valueTypes[3:4])
 
 # Counter for the number of bins in each category
-binCounter_df	<- as.data.frame(table(bySpecies_normGC_df$type))
-names(binCounter_df)	<- c("type", "Count")
-binCounter_df$yval		<- round_any(max(bySpecies_normGC_df$GC_value, na.rm = T), accuracy = 0.01, f = floor)
-binCounter_df$label		<- paste0("Bins = ", binCounter_df$Freq)
+geneCounter_df			<- as.data.frame(table(bySpecies_normGC_df$type))
+names(geneCounter_df)	<- c("type", "Count")
+geneCounter_df$yval		<- round_any(max(bySpecies_normGC_df$GC_norm, na.rm = T), accuracy = 0.01, f = floor)
+geneCounter_df$label	<- paste0("Genes = ", geneCounter_df$Count)
 
 # Plot and plot colours
 plotCols	<- wes_palette("Rushmore1")[2:5]
-recentHGT_VerContext_boxplot	<- ggplot(data = bySpecies_normGC_df, aes(x = type, y = GC_value, fill = type)) +
+recentHGT_VerContext_boxplot	<- ggplot(data = bySpecies_normGC_df, aes(x = type, y = GC_norm, fill = type)) +
 	scale_y_continuous(name = "Normalised GC value") +
 	scale_x_discrete(name = "Gene type", labels = str_wrap(c("Vertical Only", "Vertical with recent HGTs", "Recent HGTs with Vertical", "Recent HGTs Only"), width = 20)) +
 	geom_boxplot(color = "#D9D9D9") +
-	geom_label(data = binCounter_df, aes(y = yval, label = Count), vjust = 1, color = "#D9D9D9", fill = "#333233") +
+	geom_label(data = geneCounter_df, aes(y = yval, label = Count), vjust = 1, color = "#D9D9D9", fill = "#333233") +
 	scale_fill_manual(values = plotCols) +
 	stat_compare_means(mapping = aes(x = type, y = GC_value), comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni", color = "#D9D9D9", size = 0.5, label = "p.format") +
 	darkTheme
 
+
+
+## 767 of the 918 RecentOnly genes are in the 19 species with GI data
+recentOnly_data			<- subset(bySpecies_normGC_df, type == "RecentOnly")
+recentOnly_GISpecies	<- recentOnly_data[which(recentOnly_data$locusTag %in% byType_withGI_data$lHGT$`4`$locusTag),]
+GI_status	<- subset(byType_withGI_data$lHGT$`4`, locusTag %in% recentOnly_data$locusTag, select = In_GI, drop = TRUE)
+recentOnly_GISpecies$In_GI	<- GI_status
+nrow(subset(recentOnly_GISpecies, In_GI == TRUE))
+# 470 / 767 are in GIs
+
+## 325 of the 401 RecentWithVer genes are in the 19 species with GI data
+recentWithVer_data		<- subset(bySpecies_normGC_df, type == "RecentWithVer")
+recentWithVer_GISpecies <- recentWithVer_data[which(recentWithVer_data$locusTag %in% byType_withGI_data$lHGT$`4`$locusTag),]
+GI_status	<- subset(byType_withGI_data$lHGT$`4`, locusTag %in% recentWithVer_data$locusTag, select = In_GI, drop = TRUE)
+recentWithVer_GISpecies$In_GI	<- GI_status
+nrow(subset(recentWithVer_GISpecies, In_GI == TRUE))
+# 110 / 325 are in GIs
+
+## So, 61.2% of RecentOnly genes are in GIs - 33.9% of recentWithVer genes are in GIs, explaining the GC-content difference
 
 # Write plot
 quartz(width = 16, height = 10, dpi = 300, type = "png", file = file.path(GC_byBinFig_path, "recentGenesVerticalContext.png"))
@@ -751,7 +834,7 @@ verVsHGT_normGC_cor_list	<- lapply(c("Recent", "Old"), function(hgtType) {
 		bothPresent$Species	<- speciesName
 
 		return(bothPresent)
-
+ 
 	})
 
 	bySpecies_compare_df			<- bind_rows(bySpecies_compare)

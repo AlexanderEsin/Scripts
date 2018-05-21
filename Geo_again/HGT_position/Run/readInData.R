@@ -99,6 +99,104 @@ names(perTypeCOG_data)	<- dataTypes_withAge
 
 
 # ------------------------------------------------------------------------------------- #
+# Process GI data
+message("\nProcessing GI data... ")
+
+# Output path for GI figures
+GIanalysisFig_path	<- file.path(figureOutput_path, "genomicIslands")
+if (!dir.exists(GIanalysisFig_path)) dir.create(GIanalysisFig_path)
+
+# Quartz options
+quartz.options(canvas = "#333233", bg = "#333233")
+
+# Read in GI boundary file
+giBoundary_file		<- file.path(giProcess_path, "perGenome_relGIBoundaries.tsv")
+giBoundary_data		<- read.table(giBoundary_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+
+# Partition the genome into segments covered by GI
+GI_presence_list	<- lapply(1:nrow(giBoundary_data), function(index) {
+
+	GI_row	<- giBoundary_data[index,]
+	if (is.na(GI_row$GI_relStart)) {
+		return(NA)
+	}
+
+	GI_present	<- seq(from = round(GI_row$GI_relStart, 4), to = round(GI_row$GI_relEnd, 4), by = 0.0001)
+	out_df	<- data.frame(Species = rep(GI_row$Binomial, length(GI_present)), GI_location = GI_present, stringsAsFactors = FALSE)
+	return(out_df)
+})
+
+# Remove all the genomes with no GI data
+GI_presence_list	<- GI_presence_list[!is.na(GI_presence_list)]
+GI_presence_df		<- bind_rows(GI_presence_list)
+
+# Number of unique (GI present) species
+speciesWithGI	<- unique(GI_presence_df$Species)
+numSpeciesGI	<- length(speciesWithGI)
+
+# Overall plot
+GI_crossGenomeDens_plot	<- ggplot(data = GI_presence_df, aes(x = GI_location)) +
+	scale_x_continuous(limits = c(0, 1), name = "Relative Genome Position") +
+	geom_histogram(aes(y = ..ncount.. / 4, fill = Species), bins = 1000) +
+	geom_density(adjust = 0.25, color = "#D9D9D9", show.legend = FALSE) +
+	scale_fill_manual(values = alpha(wes_palette("Darjeeling1", n = numSpeciesGI, type = "continuous"), 0.8)) +
+	darkTheme
+
+
+quartz(width = 20, height = 10, type = "pdf", file = file.path(GIanalysisFig_path, "GI_crossGenomePositions.pdf"))
+print(GI_crossGenomeDens_plot)
+invisible(dev.off())
+
+
+byType_withGI_data		<- lapply(list("lHGT", "sHGT", "Ver"), function(dataType) {
+
+	message(paste0("Data Type = ", dataType))
+
+	byPenalty_withGI	<- lapply(penalty_list, function(penalty) {
+
+		message(paste0("\tWorking on penalty = ", penalty))
+
+		bySpeciesWithGI_list	<- mclapply(speciesWithGI, function(species) {
+
+			bySpeciesPos_data	<- subset(perTypeData[[dataType]][[penalty]]$allPosData, binomial == species)
+			bySpeciesGI_data	<- subset(giBoundary_data, Binomial == species)
+
+			withinGI	<- unlist(lapply(1:nrow(bySpeciesPos_data), function(geneIndex) {
+
+				geneData		<- bySpeciesPos_data[geneIndex,]
+				relGeneStart	<- geneData$relGeneStart
+				
+				withinAnyGI		<- unlist(lapply(1:nrow(bySpeciesGI_data), function(GI_index) {
+					giEntry		<- bySpeciesGI_data[GI_index,]
+					withinGI	<- ifelse(relGeneStart >= giEntry$GI_relStart & relGeneStart <=giEntry$GI_relEnd, TRUE, FALSE)
+					return(withinGI)
+				}))
+
+				if(any(withinAnyGI)) return(TRUE) else return(FALSE)
+			}))
+
+			# Remove the circStart and circEnd columns as we'll break the circular class by bind_rows
+			bySpeciesPos_data	<- subset(bySpeciesPos_data, select = -c(CircStart, CircEnd))
+
+			bySpeciesWithGI_data	<- cbind(bySpeciesPos_data, In_GI = withinGI, stringsAsFactors = FALSE)
+			return(bySpeciesWithGI_data)
+		}, mc.cores = 14)
+
+		# Dataframe including only species with annotated GIs - each entry has a TRUE/FALSE for whether the gene is within a GI
+		bySpeciesWithGI_df		<- bind_rows(bySpeciesWithGI_list)
+
+		# Circularise start and end positions
+		bySpeciesWithGI_df$CircStart	<- circular(bySpeciesWithGI_df$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+		bySpeciesWithGI_df$CircEnd		<- circular(bySpeciesWithGI_df$relGeneEnd * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+
+		return(bySpeciesWithGI_df)
+	})
+	names(byPenalty_withGI)	<- penalty_list
+	return(byPenalty_withGI)
+})
+names(byType_withGI_data)	<- c("lHGT", "sHGT", "Ver")
+
+# ------------------------------------------------------------------------------------- #
 
 # Save the subgroup and position data
 message("\nSaving objects...", appendLF = FALSE)
@@ -106,6 +204,7 @@ message("\nSaving objects...", appendLF = FALSE)
 saveRDS(object = subgroupData, file = file.path(positionData_path, "AG_subgroupData.rds"))
 saveRDS(object = perTypeData, file = file.path(positionData_path, "AG_perTypeData.rds"))
 saveRDS(object = perTypeCOG_data, file = file.path(positionData_path, "AG_perTypeCOGData.rds"))
+saveRDS(object = byType_withGI_data, file = file.path(positionData_path, "AG_perTypeGIData.rds"))
 
 message("\rSaving objects... done")
 

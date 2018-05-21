@@ -257,6 +257,122 @@ invisible(dev.off())
 
 
 
+quartz(width = 12, height = 12)
+par(mfrow = c(5, 5))
+par(mar = c(0, 0, 0, 0))
+invisible(lapply(binomial_list, function(species) {
+
+	# HGT and background circular data
+	HGTSpec_circ	<- subset(perTypeData$Ver$'3'$allPosData, binomial == species, select = CircStart, drop = TRUE)
+	bgSpec_circ		<- subset(perTypeData$All$allPosData, binomial == species, select = CircStart, drop = TRUE)
+
+	# HGT and background density calculation. NB bandwidth is lower than for the combined plots!
+	HGTSpec_dens	<- density.circular(HGTSpec_circ, kernel = "vonmises", bw = bandwidthSpecies)
+	bgSpec_dens		<- density.circular(bgSpec_circ, kernel = "vonmises", bw = bandwidthSpecies)
+
+	# Number of genes for each density plot
+	numGenes		<- length(HGTSpec_circ)
+
+	# Produce plot
+	position_plot	<- circularDensityPlot(
+		dataDensityA = HGTSpec_dens,
+		bgDensity = bgSpec_dens,
+		enrichUpColor = wes_palette("BottleRocket2")[1],
+		enrichDownColor = wes_palette("Zissou1")[1],
+		shrink = shrinkSpecies,
+		tcl.offset = 0.8,
+		titleCex = titleCexSpecies,
+		uin = uinSpecies,
+		titleName = paste0(species, "\nGenes = ", numGenes))
+	replayPlot(position_plot)
+}))
+outputFileName	<- file.path(circDensityFig_path, "bySpecies_Ver_Enrichment.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
