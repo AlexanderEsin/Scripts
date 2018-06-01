@@ -10,8 +10,10 @@ library(stringr)
 genome_dir		<- "/users/aesin/Desktop/Geo_again/Genomes"
 genome_out_dir	<- file.path(genome_dir, "Genome_gbffs")
 genome_list_dir	<- file.path(genome_dir, "Genome_lists")
-dir.create(genome_out_dir, showWarning = FALSE)
-dir.create(genome_list_dir, showWarning = FALSE)
+
+# Create dirs if they don't exist
+if (!dir.exists(genome_out_dir) dir.create(genome_out_dir)
+if (!dir.exists(genome_list_dir) dir.create(genome_list_dir)
 
 if (!file.exists(file.path(genome_list_dir, "All_complete_genomes.tsv"))) {
 	

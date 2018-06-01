@@ -83,6 +83,7 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 		HGT_entries		<- perTypeData$lHGT$`4`$allPosData$protID[which(perTypeData$lHGT$`4`$allPosData$orthGroup == group)]
 		HGT_only_set	<- combineOriAG_df[which(combineOriAG_df$protID %in% HGT_entries),]
 
+
 		# ------------------------------------------------------------------------------------- #
 		# Make the plot
 		plotTemp	<- ggplot(data = combineOriSubgroup_df, aes(dist2ori)) + 
@@ -101,10 +102,12 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 				fill = "blue",
 				inherit.aes = FALSE)
 
+		gc()
+
 		return(list(allData = bySubspeciesGroup_df, AG_HGT_data = HGT_only_set, numberOfGenes = nrow(combineOriSubgroup_df), numberOfSpecies = nrow(bySubspeciesGroup_df), plot = plotTemp))
 	}, mc.cores = 10, mc.allow.recursive = FALSE)
 
-	Sys.sleep(1)
+	
 
 	# Rename the list by group
 	names(byGroupOrthPosition)	<- paste0(COGname, inRangeGroups)

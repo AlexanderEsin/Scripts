@@ -254,9 +254,6 @@ invisible(dev.copy2pdf(file = outputFileName))
 invisible(dev.off())
 
 
-
-
-
 quartz(width = 12, height = 12)
 par(mfrow = c(5, 5))
 par(mar = c(0, 0, 0, 0))
@@ -289,6 +286,7 @@ invisible(lapply(binomial_list, function(species) {
 outputFileName	<- file.path(circDensityFig_path, "bySpecies_Ver_Enrichment.pdf")
 invisible(dev.copy2pdf(file = outputFileName))
 invisible(dev.off())
+
 
 
 

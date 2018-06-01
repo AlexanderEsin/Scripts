@@ -26,6 +26,9 @@ allProtDB_path		<- file.path(master_path, "All_prot_db_new")
 # Location of reused dataObjects
 positionData_path	<- file.path(position_path, "DataObjects")
 
+# Outlier genomes (genomic rearrangements)
+outlierTaxid		<- c(294699, 544556)
+
 # Location of figure outputs
 figureOutput_path	<- file.path(position_path, "Figures")
 

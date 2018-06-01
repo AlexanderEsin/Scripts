@@ -282,6 +282,8 @@ speciesSubgroups_df		<- read.table(speciesSubgroups_file, sep = "\t", header = T
 dnaA_clean_trim	<- subset(dnaA_clean_df, select = c(taxid, gene_start, gene_end, strand))
 names(dnaA_clean_trim)	<- c("taxid", "oriStart", "oriEnd", "oriStrand")
 
+saveRDS(object = dnaA_clean_trim, file = file.path(positionData_path, "bySpecies_dnaA_data.rds"))
+
 
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
@@ -346,7 +348,7 @@ allSoloCOGCat	<- unlist(unique(soloEventData_list$COGcat))
 
 # All ortholog data
 perCOGOrth_data			<- lapply(allSoloCOGCat, processOrthologPosition,
-	orthData = soloEventData_list,
+	orthData = byCOG_geneSpreadAll_df,
 	dbConn = dbConn,
 	superGroupTaxid_list = bySupergroupTaxid_list)
 names(perCOGOrth_data)	<- allSoloCOGCat
