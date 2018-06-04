@@ -105,6 +105,22 @@ zoneBoundary_df[which(zoneBoundary_df$boundary == finalBoundary),] <- c(NA, NA, 
 zoneBoundary_df$zoneType	<- c("oriVer", "oriHGT", "midOther", "flankVer", "terHGT", "flankVer", "midOther", "oriHGT", "oriVer")
 zoneBoundary_df$boundIndex	<- c("a1", "b1", "c1", "d1", "d2", "c2", "b2", "a2", NA)
 
+
+## Create a zone df for just origin-terminus symmetrical representation
+finalBoundary			<- subset(zoneBoundaryExt_df, zoneMin < 0.5 & zoneMax > 0.5, select = boundary, drop = TRUE)
+zoneBoundary_toOri_df	<- subset(zoneBoundary_df, boundary <= finalBoundary)
+zoneBoundary_toOri_df[which(zoneBoundary_toOri_df$boundary == finalBoundary),] <- NA
+zoneBoundary_toOri_df$zoneMin[which(zoneBoundary_df$boundary == finalBoundary)]	<- zoneBoundary_df$zoneMin[which(zoneBoundary_df$boundary == finalBoundary)]
+zoneBoundary_toOri_df$zoneMax[which(zoneBoundary_df$boundary == finalBoundary)]	<- 0.5
+zoneBoundary_toOri_df$zoneType[which(zoneBoundary_df$boundary == finalBoundary)]	<- "terHGT"
+
+
+## Zone boundaries without boundary zone (padding)
+zoneBoundary_noPad_df	<- zoneBoundary_df
+zoneBoundary_noPad_df$zoneMax	<- c(zoneBoundary_df$boundary[1:(nrow(zoneBoundary_df) - 1)], 1)
+zoneBoundary_noPad_df$zoneMin[-1]	<- zoneBoundary_noPad_df$boundary[1:(nrow(zoneBoundary_df) - 1)]
+
+
 # ------------------------------------------------ #
 # Plot the density curves of HGT and vertical genes and boundaries
 
@@ -116,6 +132,7 @@ hgtZoneCol		<- alpha(wes_palette("Darjeeling1")[2], 0.2)
 verZoneCol		<- alpha(wes_palette("Darjeeling1")[3], 0.2)
 othZoneCol		<- alpha(wes_palette("IsleofDogs1")[6], 0.2)
 zone_cols		<- c(verZoneCol, hgtZoneCol, othZoneCol, verZoneCol, hgtZoneCol, verZoneCol, othZoneCol, hgtZoneCol, verZoneCol, hgtZoneCol, othZoneCol)
+zoneToOri_cols	<- zone_cols[1:5]
 
 # Boundary color
 boundaryCol		<- wes_palette("Darjeeling1")[1]
