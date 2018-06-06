@@ -23,9 +23,12 @@ dbConn			<- dbConnect(RSQLite::SQLite(), allProtDB_path)
 
 binomial_list		<- unique(perTypeData$All$allPosData$binomial)
 
-# ------------------------------------------------------------------------------------- #
 # Path to sporulation analysis
-sporulation_path	<- file.path(master_path, "Sporulation")
+sporFigureOut_path	<- file.path(sporulation_path, "Figures", "23Genomes")
+if (!dir.exists(sporFigureOut_path)) dir.create(sporFigureOut_path, recursive = TRUE)
+
+
+# ------------------------------------------------------------------------------------- #
 
 # Read in the sigF regulon genes (Wang JMB 2006)
 bsub_sigF_regulonGenes_file	<- file.path(sporulation_path, "bsubPY79_sigF_regulonGenes.tsv")
@@ -144,6 +147,8 @@ bSubOnly_pos_list	<- lapply(unique(sigF_inAG_plot_df$geneName), function(gene) {
 })
 bSubOnly_pos_df		<- bind_rows(bSubOnly_pos_list)
 
+# ------------------------------------------------------------------------------------- #
+
 # # Just for those genes in which each AG species has an ortholog
 # sigF_allInAG_plot_list	<- lapply(1:numInAllAG, function(geneIndex) {
 # 	gene		<- unique(siG_allInAG_df$geneName)[geneIndex]
@@ -162,6 +167,29 @@ bSubOnly_pos_df		<- bind_rows(bSubOnly_pos_list)
 # sigF_allInAG_plot_df		<- bind_rows(sigF_allInAG_plot_list)
 
 
+## Plot b subtilis genes only
+
+bSubOnly_pos_list	<- lapply(unique(sigF_inAG_plot_df$geneName), function(gene) {
+	perGene_data	<- subset(sigF_inAG_plot_df, geneName == gene)
+	singleEntry		<- perGene_data[1,]
+	return(singleEntry)
+})
+bSubOnly_pos_df		<- bind_rows(bSubOnly_pos_list)
+
+ggplot(bSubOnly_pos_df, aes(x = 1, xend = 2, y = bsubToOriStart, yend = bsubToOriStart)) +
+	scale_x_continuous(limits = c(1, 2.5)) +
+	scale_y_reverse(limits = c(0.5, 0), breaks = seq(0.5, 0, by = -0.5), labels = c("Terminus", "Origin")) +
+	geom_segment(color = alpha(wes_palette("Zissou1")[5], 0.6)) +
+	geom_text_repel(
+		aes(x = 2, y = bsubToOriStart, label = geneName),
+		hjust = 0,
+		direction = "y",
+		nudge_x = 0.15,
+		segment.size = 0.2,
+		size = 2.5,
+		box.padding = 0.6,
+		max.iter = 10000) +
+	theme_classic()
 
 # Compared across replichores / All present / Some present / All absent genes
 sigF_regulon_crossAG_comparison_plot	<- ggplot(subset(sigF_inAG_plot_df), aes(x = xmin, xend = xmax, y = relGeneStart, yend = relGeneStart)) +
@@ -193,22 +221,23 @@ sigF_regulon_crossAG_comparison_plot	<- ggplot(subset(sigF_inAG_plot_df), aes(x 
 		axis.title = element_text(size = 14))
 
 
+# ------------------------------------------------------------------------------------- #
 # G. kaustophlius vs B. subtilis
 
-gKauOnly_data	<- subset(sigF_inAG_plot_df, binomial == binomial_list[1])
-gKauOnly_data$relStart	<- gKauOnly_data$relGeneStart
+gKauOnly_sigF_data	<- subset(sigF_inAG_plot_df, binomial == binomial_list[1])
+gKauOnly_sigF_data$relStart	<- gKauOnly_sigF_data$relGeneStart
 
-bSubOnly_data	<- subset(bSubOnly_pos_df, select = c(geneName, inAllAG, bsubRelStart, bsubToOriStart, bsubReplichore))
-bSubOnly_data$binomial	<- "Bacillus subtilis 168"
-bSubOnly_data$relStart	<- bSubOnly_data$bsubRelStart
+bSubOnly_sigF_data	<- subset(bSubOnly_pos_df, select = c(geneName, inAllAG, bsubRelStart, bsubToOriStart, bsubReplichore))
+bSubOnly_sigF_data$binomial	<- "Bacillus subtilis 168"
+bSubOnly_sigF_data$relStart	<- bSubOnly_sigF_data$bsubRelStart
 
-gKay_bSub_comb		<- full_join(gKauOnly_data, subset(bSubOnly_data, select = c(binomial, geneName, inAllAG, bsubRelStart, bsubToOriStart, bsubReplichore, relStart)))
+gKau_bSub_sigF_comb		<- full_join(gKauOnly_sigF_data, subset(bSubOnly_sigF_data, select = c(binomial, geneName, inAllAG, bsubRelStart, bsubToOriStart, bsubReplichore, relStart)))
 
-sigF_bSub_gKau_comparison_plot	<- ggplot(gKay_bSub_comb, aes(x = binomial, y = relStart, yend = relStart, group = geneName, color = binomial)) +
+sigF_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_sigF_comb, aes(x = binomial, y = relStart, yend = relStart, group = geneName, color = binomial)) +
 	scale_y_continuous(name = "Relative Genomic Position", limits = c(0, 1), breaks = seq(0, 1, by = 0.5), labels = c("Origin", "Terminus", "Origin")) +
 	geom_point(shape = 124, size = 10) +
 	geom_line(linetype = "dashed", color = alpha(wes_palette("IsleofDogs1")[6], 0.5)) +
-	geom_label_repel(data = subset(gKay_bSub_comb, binomial == "Bacillus subtilis 168"),
+	geom_label_repel(data = subset(gKau_bSub_sigF_comb, binomial == "Bacillus subtilis 168"),
 		aes(x = 0.95, label = geneName),
 		xlim = c(0, 0.7),
 		hjust = 0,
@@ -217,76 +246,76 @@ sigF_bSub_gKau_comparison_plot	<- ggplot(gKay_bSub_comb, aes(x = binomial, y = r
 		show.legend = FALSE) +
 	scale_color_manual(values = wes_palette("Darjeeling1")[c(1,5)]) +
 	coord_flip() +
+	ggtitle("Comparison of sigmaF regulon genes between Geobacillus kaustophilus and Bacillus subtilis") +
 	theme_classic() +
 	theme(
 		panel.grid.major.y = element_line(size = 0.05),
 		axis.text = element_text(size = 11),
-		axis.title = element_text(size = 14))
+		axis.title = element_text(size = 14),
+		plot.title = element_text(hjust = 0.5, size = 16))
 
 
 
+# ------------------------------------------------------------------------------------- #
+# There are 1098 vertical genes in Gkau - corresponding to 1094 orthGroups
+gKauOnly_ver_data	<- subset(perTypeData$Ver$'3'$allPosData, binomial == binomial_list[1])
+gKauOnly_verGroup_l	<- unique(gKauOnly_ver_data$orthGroup)
 
+# For each orthologous group, find orthologs in bacillus subtilis
+bsub_allVer_protID_tbl	<- dbSendQuery(dbConn, 'SELECT OrthGroup, protID, gene_start FROM t1 WHERE taxid == :bsub_taxid AND OrthGroup == :orthGroup')
+dbBind(bsub_allVer_protID_tbl, param = list(bsub_taxid = rep(bsub_168_taxid, length(gKauOnly_verGroup_l)), orthGroup = gKauOnly_verGroup_l))
+bsub_allVer_df	<- dbFetch(bsub_allVer_protID_tbl)
+dbClearResult(bsub_allVer_protID_tbl)
 
+# Find the relative start position of the B subtilis genes
+bsub_ver_relStart_list	<- lapply(bsub_allVer_df$gene_start, genomeRelativePosition, oriStart = bsub_168_dnaA_data$oriStart, oriEnd = bsub_168_dnaA_data$oriEnd, oriStrand = bsub_168_dnaA_data$oriStrand, genomeLength = bsub_168_genomeLength)
+bsub_allVer_df$relStart		<- unlist(bsub_ver_relStart_list)
+bsub_allVer_df$toOriStart	<- ifelse(bsub_allVer_df$relStart > 0.5, 1 - bsub_allVer_df$relStart, bsub_allVer_df$relStart)
+bsub_allVer_df				<- bsub_allVer_df[order(-bsub_allVer_df$toOriStart),]
+names(bsub_allVer_df)[1]	<- "orthGroup"
+bsub_allVer_df$binomial		<- "Bacillus subtilis 168"
 
+# For the 1094 Gkau Vertical orthGroups, we dind 898 Bsub genes from 893 groups
+# To plot, we only want groups that are present in both
+gKauOnly_verInBsub_data	<- subset(gKauOnly_ver_data, orthGroup %in% bsub_allVer_protID_df$OrthGroup)
+gKauOnly_verInBsub_data$relStart	<- gKauOnly_verInBsub_data$relGeneStart
 
+# Join the Gkau and Bsub data
+gKau_bSub_allVer_comb		<- full_join(gKauOnly_verInBsub_data, bsub_allVer_df)
 
-
-
-
-
-ggplot(subset(sigF_inAG_plot_df), aes(x = xmin, xend = xmax, y = toOriStart, yend = toOriStart)) +
-	scale_x_continuous(name = "SigmaF regulon gene", limits = c(0, numGenes), breaks = seq(0.5, numGenes, by = 1), labels = unique(sigF_inAG_plot_df$geneName)) +
-	scale_y_continuous(name = "Relative Genomic Position", limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.5), labels = c("Origin", "Terminus")) +
-	# Boundary lines
-	geom_hline(yintercept = zoneBoundary_toOri_df$boundary, color = boundaryCol, size) +
-	# Boundary padding
-	geom_rect(data = zoneBoundary_toOri_df, aes(xmin = -Inf, xmax = Inf, ymin = boundaryMin, ymax = boundaryMax), fill = alpha(boundaryCol, 0.2), inherit.aes = FALSE) +
-	# Zone colouring
-	geom_rect(data = zoneBoundary_toOri_df, aes(xmin = -Inf, xmax = Inf, ymin = zoneMin, ymax = zoneMax), fill = zoneToOri_cols, inherit.aes = FALSE) +
-	# Gene positions
-	geom_segment(color = alpha(wes_palette("Moonrise1")[4], 0.6)) +
+# Plot
+quartz(width = 21, height = 8, canvas = "white", bg = "white")
+allVer_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_allVer_comb, aes(x = binomial, y = relStart, yend = relStart, group = orthGroup, color = binomial)) +
+	scale_y_continuous(
+		name = "Relative Genomic Position",
+		limits = c(0, 1),
+		breaks = seq(0, 1, by = 0.5),
+		minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
+		labels = c("Origin", "Terminus", "Origin")) +
+	geom_point(shape = 124, size = 8) +
+	geom_line(linetype = "solid", color = alpha(wes_palette("IsleofDogs1")[6], 0.9), size = 0.1) +
+	scale_color_manual(values = wes_palette("Darjeeling1")[c(1,5)], guide = FALSE) +
 	coord_flip() +
+	ggtitle("Comparison of shared (AG vertical) genes between Geobacillus kaustophilus and Bacillus subtilis") +
 	theme_classic() +
 	theme(
 		panel.grid.major.y = element_line(size = 0.05),
+		panel.grid.minor.x  = element_line(size = 0.4, linetype = "dashed", color = wes_palette("Darjeeling1")[2]),
 		axis.text = element_text(size = 11),
-		axis.title = element_text(size = 14))
+		axis.text.y = element_text(angle = 45),
+		axis.title = element_text(size = 14),
+		axis.title.y = element_blank(),
+		plot.title = element_text(hjust = 0.5, size = 16))
+print(allVer_bSub_gKau_comparison_plot)
+
+fileName	<- file.path(sporFigureOut_path, "allVer_bSub_gKau_comparison")
+invisible(quartz.save(file = paste0(fileName, ".pdf"), type = "pdf", dpi = 100))
+invisible(quartz.save(file = paste0(fileName, ".png"), type = "png", dpi = 100))
 
 
 
 
 
-
-
-
-
-
-
-
-
-## Plot b subtilis genes only
-
-bSubOnly_pos_list	<- lapply(unique(sigF_inAG_plot_df$geneName), function(gene) {
-	perGene_data	<- subset(sigF_inAG_plot_df, geneName == gene)
-	singleEntry		<- perGene_data[1,]
-	return(singleEntry)
-})
-bSubOnly_pos_df		<- bind_rows(bSubOnly_pos_list)
-
-ggplot(bSubOnly_pos_df, aes(x = 1, xend = 2, y = bsubToOriStart, yend = bsubToOriStart)) +
-	scale_x_continuous(limits = c(1, 2.5)) +
-	scale_y_reverse(limits = c(0.5, 0), breaks = seq(0.5, 0, by = -0.5), labels = c("Terminus", "Origin")) +
-	geom_segment(color = alpha(wes_palette("Zissou1")[5], 0.6)) +
-	geom_text_repel(
-		aes(x = 2, y = bsubToOriStart, label = geneName),
-		hjust = 0,
-		direction = "y",
-		nudge_x = 0.15,
-		segment.size = 0.2,
-		size = 2.5,
-		box.padding = 0.6,
-		max.iter = 10000) +
-	theme_classic()
 
 
 

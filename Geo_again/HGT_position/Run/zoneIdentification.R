@@ -5,161 +5,295 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("RSQLite", "dplyr","ggplot2", "ggpubr", "wesanderson", "gridExtra")
+p_load("RSQLite", "dplyr","ggplot2", "ggpubr", "wesanderson", "gridExtra", "stringr")
 
 
 # ------------------------------------------------------------------------------------- #
+message("\nReading in data...", appendLF = FALSE)
+
+# General position data
+perTypeData			<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
+
+message("\rReading in data... done\n")
+
 # Open All_prot database
 dbConn			<- dbConnect(RSQLite::SQLite(), allProtDB_path)
 
-# ------------------------------------------------ #
-
+# ------------------------------------------------------------------------------------- #
+# Extend the data an extra 25% to cover the origin fully (remove edge effects in density estimation)
 dataTypes_trunc		<- c("All", "lHGT", "Ver")
+withExtendedPos_data <- lapply(dataTypes_trunc, function(dataType) {
 
-extendedPos_data <- lapply(dataTypes_trunc, function(dataType) {
-
-	byAge	<- FALSE
+	# Identify the dataframe we need for the dataType
 	if (identical(dataType, "All")) {
-		penalty		<- NULL
+		data	<- 	perTypeData$All$allPosData
 	} else if (identical(dataType, "Ver")) {
-		penalty		<- verPenalty
+		data	<- perTypeData[[dataType]][[verPenalty]]$allPosData
 	} else {
-		penalty		<- hgtPenalty
-		if (identical(dataType, "Old") || identical(dataType, "Recent")) {
-			byAge		<- TRUE
-			subgroup	<- ifelse(identical(dataType, "Old"), FALSE, TRUE)
-		}
+		data	<- perTypeData[[dataType]][[hgtPenalty]]$allPosData
 	}
 
-	# Get the data per Type
-	if (is.null(penalty)) {
-		data_trunc	<- subset(perTypeData$All$allPosData, select = -c(CircStart, CircEnd))
-	} else if (!byAge) {
-		data_trunc	<- subset(perTypeData[[dataType]][[penalty]]$allPosData, select = -c(CircStart, CircEnd))
-	}
+	# Subset to remove the circular start and end
+	data_trim	<- subset(data, select = -c(CircStart, CircEnd))
+	
+	# Add the dataType as a column
+	data_trim$type	<- dataType
 
-	# Remove the two outlier genomes
-	data_trunc		<- subset(data_trunc, !taxid %in% outlierTaxid)
-
-	data_trunc$type	<- dataType
-
-	firstQ		<- subset(data_trunc, relGeneStart >= 0 & relGeneStart <= 0.25)
+	# Add the first quarter of the data onto the end to calculate densities over the Origin
+	firstQ		<- subset(data_trim, relGeneStart >= 0 & relGeneStart <= 0.25)
 	firstQ$relGeneStart	<- firstQ$relGeneStart + 1
 	firstQ$relGeneEnd	<- firstQ$relGeneEnd + 1
-	extended	<- bind_rows(list(data_trunc, firstQ))
+	extended	<- bind_rows(list(data_trim, firstQ))
 
-	return(extended)
+	return(list(normal_df = data_trim, extended_df = extended))
 })
 
-# Convert to df and factor the dataType for colouring
-extendedPos_df		<- bind_rows(extendedPos_data)
+# Without extension
+normalPos_df		<- bind_rows(lapply(withExtendedPos_data, function(x) return(x$normal_df)))
+normalPos_df$type	<- factor(normalPos_df$type, levels = dataTypes_trunc)
+
+# With 25% extension of data
+extendedPos_df		<- bind_rows(lapply(withExtendedPos_data, function(x) return(x$extended_df)))
 extendedPos_df$type	<- factor(extendedPos_df$type, levels = dataTypes_trunc)
 
+# ------------------------------------------------------------------------------------- #
+# Exploratory plot of linear HGT vs Ver densities to identify boundaries
 
-# ------------------------------------------------ #
-
-
-# Transition zone boundaries - assigned by eye
-boundary_vector	<- c(0.045, 0.955, 1.045, 0.130, 0.870, 1.130, 0.230, 0.770, 1.230, 0.375, 0.625)
-# The padding up and downstream of a boundary - the transition zone. The total zone is then 45kb @ padding of 0.0075 for a 3mb genome
-padding_size	<- 0.0075
-
-# Produce of a set of transition zone coordinates
-boundaryPad_list	<- lapply(boundary_vector, function(position) {
-	# Padding around transition boundary
-	pad_up		<- position - padding_size
-	pad_down	<- position + padding_size
-
-	# Return df
-	out_df		<- data.frame(boundary = position, boundaryMin = pad_up, boundaryMax = pad_down, ymin = -Inf, ymax = Inf, stringsAsFactors = FALSE)
-	return(out_df)
-})
-boundaryPad_df	<- bind_rows(boundaryPad_list)
-
-# Produce of a set of enrichment zones (between transition zones)
-zoneRange_list	<- lapply(sort(boundary_vector), function(position) {
-	# Find the next smallest position
-	lower_boundaries	<- boundary_vector[which(boundary_vector < position)]
-	if (length(lower_boundaries) != 0) lower_bound <- max(lower_boundaries) else lower_bound <- 0
-	
-	# If it's the first zone from the origin, the lower bound is 0 (unpadded)
-	if (identical(lower_bound, 0)) zoneMin	<- lower_bound else zoneMin <- lower_bound + padding_size
-	zoneMax	<- position - padding_size
-
-	# Return df
-	out_df		<- data.frame(boundary = position, zoneMin = zoneMin, zoneMax = zoneMax, ymin = -Inf, ymax = Inf, stringsAsFactors = FALSE)
-	return(out_df)
-})
-zoneRange_df	<- bind_rows(zoneRange_list)
-
-# Combine into a single dataframe
-zoneBoundaryExt_df	<- cbind(merge(boundaryPad_df[-4:-5], zoneRange_df[-4:-5], by = "boundary"), zoneRange_df[,4:5])
-
-## Create a truncated zone df - where the final zone ends at 1 (represent whole genome)
-finalBoundary		<- subset(zoneBoundaryExt_df, zoneMin < 1 & zoneMax > 1, select = boundary, drop = TRUE)
-# Drop the repeat zones and ymin/ymax needed for plotting
-zoneBoundary_df		<- subset(zoneBoundaryExt_df, boundary <= finalBoundary, select = -c(ymin, ymax))
-# Adjust final zone to end at 1
-zoneBoundary_df[which(zoneBoundary_df$boundary == finalBoundary),] <- c(NA, NA, NA, zoneBoundary_df$zoneMin[which(zoneBoundary_df$boundary == finalBoundary)], 1)
-# Add the type of zone
-zoneBoundary_df$zoneType	<- c("oriVer", "oriHGT", "midOther", "flankVer", "terHGT", "flankVer", "midOther", "oriHGT", "oriVer")
-zoneBoundary_df$boundIndex	<- c("a1", "b1", "c1", "d1", "d2", "c2", "b2", "a2", NA)
-
-
-## Create a zone df for just origin-terminus symmetrical representation
-finalBoundary			<- subset(zoneBoundaryExt_df, zoneMin < 0.5 & zoneMax > 0.5, select = boundary, drop = TRUE)
-zoneBoundary_toOri_df	<- subset(zoneBoundary_df, boundary <= finalBoundary)
-zoneBoundary_toOri_df[which(zoneBoundary_toOri_df$boundary == finalBoundary),] <- NA
-zoneBoundary_toOri_df$zoneMin[which(zoneBoundary_df$boundary == finalBoundary)]	<- zoneBoundary_df$zoneMin[which(zoneBoundary_df$boundary == finalBoundary)]
-zoneBoundary_toOri_df$zoneMax[which(zoneBoundary_df$boundary == finalBoundary)]	<- 0.5
-zoneBoundary_toOri_df$zoneType[which(zoneBoundary_df$boundary == finalBoundary)]	<- "terHGT"
-
-
-## Zone boundaries without boundary zone (padding)
-zoneBoundary_noPad_df	<- zoneBoundary_df
-zoneBoundary_noPad_df$zoneMax	<- c(zoneBoundary_df$boundary[1:(nrow(zoneBoundary_df) - 1)], 1)
-zoneBoundary_noPad_df$zoneMin[-1]	<- zoneBoundary_noPad_df$boundary[1:(nrow(zoneBoundary_df) - 1)]
-
-
-# ------------------------------------------------ #
-# Plot the density curves of HGT and vertical genes and boundaries
-
-# Density curve colours
-density_cols	<- c(alpha(wes_palette("Chevalier1")[4], 1), wes_palette("Darjeeling1")[2:3])
-
-# Set up zone colours
-hgtZoneCol		<- alpha(wes_palette("Darjeeling1")[2], 0.2)
-verZoneCol		<- alpha(wes_palette("Darjeeling1")[3], 0.2)
-othZoneCol		<- alpha(wes_palette("IsleofDogs1")[6], 0.2)
-zone_cols		<- c(verZoneCol, hgtZoneCol, othZoneCol, verZoneCol, hgtZoneCol, verZoneCol, othZoneCol, hgtZoneCol, verZoneCol, hgtZoneCol, othZoneCol)
-zoneToOri_cols	<- zone_cols[1:5]
-
-# Boundary color
-boundaryCol		<- wes_palette("Darjeeling1")[1]
+# Set density curve colours
+all_HGT_Ver_cols	<- c(alpha(wes_palette("Chevalier1")[4], 0.5), wes_palette("Darjeeling1")[2:3])
 
 # Plot
-splitRelGenome_zones <- ggplot(data = plot_df, aes(x = relGeneStart, color = type)) +
+linearXSpecies_verHGT_dens_plot <- ggplot(data = extendedPos_df, aes(x = relGeneStart, color = type)) +
 	scale_x_continuous(
 		name = "Normalized genome position",
 		limits = c(0, 1.25),
 		breaks = seq(0, 1, by = 0.5),
 		labels = c("Origin", "Terminus", "Origin"),
-		minor_breaks = seq(0, 1.25, by = 0.05)) +
-	scale_y_continuous(name = "Gene Density") +
-	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/12, size = 1) +
-	scale_color_manual(values = plot_colors) +
-	# Boundary lines
-	geom_vline(xintercept = zoneBoundaryExt_df$boundary, color = boundaryCol, linetype = "dashed") +
-	# Boundary padding
-	geom_rect(data = zoneBoundaryExt_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = ymin, ymax = ymax), fill = alpha(boundaryCol, 0.4), inherit.aes = FALSE) +
-	# Zone colouring
-	geom_rect(data = zoneBoundaryExt_df, aes(xmin = zoneMin, xmax = zoneMax, ymin = ymin, ymax = ymax), fill = zone_cols, inherit.aes = FALSE) +
+		minor_breaks = seq(0, 1.25, by = ((1 / 360) * 30)),
+		sec.axis = dup_axis(
+			name = NULL,
+			breaks = seq(0, 1.25, by = ((1 / 360) * 30)),
+			labels = c("Origin", seq(30, 150, by = 30), "Terminus", seq(210, 330, by = 30) ,"Origin", seq(30, 90, by = 30))
+		)) +
+	scale_y_continuous(name = "Gene Enrichment") +
+	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/10, size = 1) +
+	scale_color_manual(values = all_HGT_Ver_cols) +
+	ggtitle("Exploratory zone boundary analysis") +
 	theme_classic() +
 	theme(
 		panel.grid.major.x = element_line(size = 0.5),
-		panel.grid.minor.x = element_line(size = 0.0, linetype = "longdash"),
+		panel.grid.minor.x = element_line(size = 0.2, linetype = "longdash"),
 		axis.text = element_text(size = 12),
-		axis.title = element_text(size = 14))
+		axis.title = element_text(size = 14),
+		axis.ticks.y = element_blank(),
+		axis.ticks.length = unit(0.6, "lines"),
+		plot.title = element_text(hjust = 0.5, size = 16))
+
+
+
+# ------------------------------------------------ #
+# Identified 5 Ori-Ter symmetrical zones. Boundaries assigned by eye
+zoneBounds	<- data.frame(boundary = c(0.045, 0.130, 0.230, 0.375, 0.625, 0.770, 0.870, 0.955, 1.045, 1.130, 1.230))
+boundCol	<- wes_palette("Darjeeling1")[1]
+
+# Plot the prelim boundaries
+prelimBoundary_plot	<- linearXSpecies_verHGT_dens_plot +
+	geom_vline(xintercept = zoneBounds$boundary, color = boundCol) +
+	theme(
+		panel.grid.major.x = element_line(size = 0.5),
+		panel.grid.minor.x = element_blank())
+
+# ------------------------------------------------ #
+# The padding up and downstream of a boundary - the transition zone. The total zone is then 45kb @ padding of 0.0075 for a 3mb genome
+padding_size	<- 0.0075
+
+# Produce of a set of transition zone coordinates
+boundaryPaddding_list	<- lapply(zoneBounds$boundary, function(position) {
+	# Padding around transition boundary
+	pad_up		<- position - padding_size
+	pad_down	<- position + padding_size
+
+	# Return df
+	out_df		<- data.frame(boundary = position, boundaryMin = pad_up, boundaryMax = pad_down, stringsAsFactors = FALSE)
+	return(out_df)
+})
+zoneBounds_padded	<- bind_rows(boundaryPaddding_list)
+
+
+# Plot the prelim boundaries with the transition zone
+prelimBoundary_padded_plot	<- linearXSpecies_verHGT_dens_plot +
+	# Boundary lines
+	geom_vline(xintercept = zoneBounds_padded$boundary, color = boundCol, linetype = "dashed") +
+	# Boundary padding
+	geom_rect(data = zoneBounds_padded, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
+	theme(
+		panel.grid.major.x = element_line(size = 0.5),
+		panel.grid.minor.x = element_blank())
+
+
+# ------------------------------------------------ #
+# Produce of a set of enrichment zones (between boundaries)
+zoneRange_list	<- lapply(zoneBounds$boundary, function(position) {
+
+	# Find the next smallest position
+	lower_boundaries	<- zoneBounds$boundary[which(zoneBounds$boundary < position)]
+	if (length(lower_boundaries) != 0) lower_bound <- max(lower_boundaries) else lower_bound <- 0
+
+	# Zone start and end (padding ignored)
+	zoneMin <- lower_bound
+	zoneMax	<- position
+	
+	# Zone start and end (padding included)
+	if (identical(lower_bound, 0)) zoneMin_pad	<- zoneMin else zoneMin_pad <- zoneMin + padding_size
+	zoneMax_pad	<- zoneMax - padding_size
+
+	# Return df
+	out_df		<- data.frame(boundary = position, zoneMin = zoneMin, zoneMax = zoneMax, zoneMin_pad = zoneMin_pad, zoneMax_pad = zoneMax_pad, stringsAsFactors = FALSE)
+	return(out_df)
+})
+zoneRange_df	<- bind_rows(zoneRange_list)
+zoneRange_df$zoneName	<- c("oriVer", "oriHGT", "midOther", "flankVer", "terHGT", "flankVer", "midOther", "oriHGT", "oriVer", "oriHGT", "midOther")
+zoneRange_df$zoneType	<- c("Ver", "HGT", "Other", "Ver", "HGT", "Ver", "Other", "HGT", "Ver", "HGT", "Other")
+
+zoneCol_df		<- data.frame(
+	zoneType = c("HGT", "Ver", "Other"),
+	zoneCol = alpha(c(wes_palette("Darjeeling1")[2:3], wes_palette("IsleofDogs1")[6]), 0.2),
+	stringsAsFactors = FALSE)
+zoneRange_df	<- left_join(zoneRange_df, zoneCol_df, by = "zoneType")
+
+# Finall join the boundary df with the zone df
+zoneBoundRange_df	<- left_join(zoneBounds_padded, zoneRange_df, by = "boundary")
+
+# Plot the prelim boundaries with the enrichment zones
+prelimBoundary_withZones_plot	<- linearXSpecies_verHGT_dens_plot +
+	scale_x_continuous(
+		expand = expand_scale(mult = c(0.025, 0.025)),
+		name = "Normalized genome position",
+		limits = c(0, 1.25),
+		breaks = seq(0, 1, by = 0.5),
+		labels = c("Origin", "Terminus", "Origin"),
+		minor_breaks = seq(0, 1.25, by = ((1 / 360) * 30)),
+		sec.axis = dup_axis(
+			name = NULL,
+			breaks = rowMeans(zoneBoundRange_df[c("zoneMin", "zoneMax")]),
+			labels = zoneBoundRange_df$zoneName)
+	) +
+	# Boundary lines
+	geom_vline(xintercept = zoneBoundRange_df$boundary, color = boundCol, linetype = "dashed") +
+	# Boundary padding
+	geom_rect(data = zoneBoundRange_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
+	# Zone colouring
+	geom_rect(data = zoneBoundRange_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneBoundRange_df$zoneCol, inherit.aes = FALSE) +
+	theme(
+		panel.grid.major.x = element_line(size = 0.5),
+		panel.grid.minor.x = element_blank())
+
+
+# ------------------------------------------------ #
+
+# Create a truncated zone df - where the final zone ends at 1 (represent whole genome)
+finalBoundary		<- subset(zoneBoundRange_df, zoneMin < 1 & zoneMax > 1, select = boundary, drop = TRUE)
+zoneRangeToOri_df	<- subset(zoneBoundRange_df, boundary <= finalBoundary)
+zoneRangeToOri_df[nrow(zoneRangeToOri_df), c("boundary", "boundaryMin", "boundaryMax", "zoneMax", "zoneMax_pad")] <- c(rep(NA, 3), rep(1, 2))
+
+# Create a truncated zone df - where the final zone ends at 0.5 (for distToOri representations)
+finalBoundary		<- subset(zoneBoundRange_df, zoneMin < 0.5 & zoneMax > 0.5, select = boundary, drop = TRUE)
+zoneRangeToTer_df	<- subset(zoneBoundRange_df, boundary <= finalBoundary)
+zoneRangeToTer_df[nrow(zoneRangeToTer_df), c("boundary", "boundaryMin", "boundaryMax", "zoneMax", "zoneMax_pad")] <- c(rep(NA, 3), rep(0.5, 2))
+
+
+toOriDensity_withZones_plot	<- ggplot(data = normalPos_df, aes(x = distToOri, color = type)) +
+	scale_x_continuous(
+		expand = expand_scale(mult = c(0.025, 0.025)),
+		name = "Normalized genome position",
+		limits = c(0, 0.5),
+		breaks = seq(0, 0.5, by = 0.5),
+		labels = c("Origin", "Terminus"),
+		minor_breaks = seq(0, 0.5, by = ((1 / 360) * 30)),
+		sec.axis = dup_axis(
+			name = NULL,
+			breaks = rowMeans(zoneRangeToTer_df[c("zoneMin", "zoneMax")]),
+			labels = zoneRangeToTer_df$zoneName)
+	) +	
+	scale_y_continuous(name = "Gene Enrichment") +
+	# Plot density lines
+	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/10, size = 1) +
+	# Boundary lines
+	geom_vline(xintercept = zoneRangeToTer_df$boundary, color = boundCol, linetype = "dashed") +
+	# Boundary padding
+	geom_rect(data = zoneRangeToTer_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
+	# Zone colouring
+	geom_rect(data = zoneRangeToTer_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneRangeToTer_df$zoneCol, inherit.aes = FALSE) +
+	# Coloring, title, themes etc..
+	scale_color_manual(values = all_HGT_Ver_cols) +
+	ggtitle("Exploratory zone boundary analysis") +
+	theme_classic() +
+	theme(
+		panel.grid.major.x = element_line(size = 0.5),
+		panel.grid.minor.x = element_blank(),
+		axis.text = element_text(size = 12),
+		axis.title = element_text(size = 14),
+		axis.ticks.y = element_blank(),
+		axis.ticks.length = unit(0.6, "lines"),
+		plot.title = element_text(hjust = 0.5, size = 16)
+	)
+
+
+# ------------------------------------------------------------------------------------- #
+
+
+
+AG_noPlasmid_path	<- file.path(genome_path, "AG_genome_noPlasmid_gbffs")
+AG_noPlasmid_gbk_df	<- data.frame(fileNames = dir(path = AG_noPlasmid_path, pattern = "*.gbk$"), stringsAsFactors = FALSE)
+AG_noPlasmid_gbk_df$acc_ass	<- str_replace(AG_noPlasmid_gbk_df$fileNames, pattern="_genomic.gbk", replacement = "")
+
+# Open the taxid / acc_ass translation table
+accAss_taxid_file	<- file.path(genome_path, "Genome_lists", "Acc_ass_taxid_table.tsv")
+accAss_taxid_df		<- read.table(file = accAss_taxid_file, sep = "\t", header = FALSE, stringsAsFactors = FALSE)
+names(accAss_taxid_df)	<- c("acc_ass", "taxid")
+
+# Find the taxids for these files
+AG_noPlasmid_gbk_df	<- left_join(AG_noPlasmid_gbk_df, accAss_taxid_df, by = "acc_ass")
+
+# Remove the rearrange genomes
+AG_noPlasmid_gbk_df	<- subset(AG_noPlasmid_gbk_df, !taxid %in% outlierTaxid)
+
+# Create an output folder to hold the tRNA fasta
+tRNA_output_path	<- file.path(giProcess_path, "tRNA_fasta")
+if (!dir.exists(tRNA_output_path)) dir.create(tRNA_output_path)
+
+# Extract the tRNA positions from the genbank file
+invisible(lapply(1:nrow(AG_noPlasmid_gbk_df), function(index) {
+
+	# Entry and output file name
+	AG_genbankEntry	<- AG_noPlasmid_gbk_df[index,]
+	outputName		<- paste0(AG_genbankEntry$acc_ass, "_tRNA.fasta")
+
+	# See the python script for usage instructions
+	system2("genbank_to_fasta.py",
+		args = paste0(
+			"-i ", file.path(AG_noPlasmid_path, AG_genbankEntry$fileNames),
+			" -o ", file.path(tRNA_output_path, outputName),
+			" -m 'genbank' -s 'nt' -f 'tRNA' -d 'spacepipe' -q 'protein_id,locus_tag,gene,product,location' &>/dev/null"
+		)
+	)
+}))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ------------------------------------------------ #
 

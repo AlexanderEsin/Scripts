@@ -2,14 +2,14 @@
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("stringr", "circular")
 
-processInputPositions	<- function(dataType = "All", penalty = NA, inputDir, bandwith, subgroupBranches = NA) {
+processInputPositions	<- function(dataType = "All", penalty = NULL, inputDir, bandwith, removeSpecies = NULL, subgroupBranches = NULL) {
 
 	# Track progress
 	message(paste0("\tProcessing \'", dataType, "\' at penalty: ", penalty, " ..."), appendLF = FALSE)
 
 	# Set the name of the input file depending on data type
 	if (!identical(dataType, "All")) {
-		if (is.na(penalty))  stop("Provide a penalty unless dataType = \'All\'")
+		if (is.null(penalty))  stop("Provide a penalty unless dataType = \'All\'")
 		fileID	<- paste0("T", penalty, "_", dataType)
 	} else {
 		fileID	<- dataType
@@ -20,6 +20,15 @@ processInputPositions	<- function(dataType = "All", penalty = NA, inputDir, band
 	if (!file.exists(genePos_file)) stop(paste0("Cannot find file ", genePos_file))
 	genePos_data	<- read.table(file = genePos_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
 
+
+	# Check if we need to remove any species - and remove them at this stage if necessary
+	if (!is.null(removeSpecies)) {
+		genePos_data	<- subset(genePos_data, !taxid %in% removeSpecies)
+	}
+
+	# Add a distance-to-origin (relative distance reduced to a range of 0-0.5)
+	genePos_data$distToOri	<- ifelse(genePos_data$relGeneStart > 0.5, 1 - genePos_data$relGeneStart, genePos_data$relGeneStart)
+
 	# Circularise the relative start and end positions
 	genePos_data$CircStart	<- circular(genePos_data$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
 	genePos_data$CircEnd	<- circular(genePos_data$relGeneEnd * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
@@ -29,7 +38,7 @@ processInputPositions	<- function(dataType = "All", penalty = NA, inputDir, band
 
 	# For the HGT sets, determine which transfers are into subgroup (vs group) branches
 	if (identical(dataType, "lHGT") || identical(dataType, "sHGT")) {
-		if (is.na(penalty))  stop("Need subgroup branch data for HGT dataTypes")
+		if (is.null(subgroupBranches))  stop("Need subgroup branch data for HGT dataTypes")
 		genePos_data$Subgroup	<- FALSE
 		genePos_data$Subgroup[which(genePos_data$recepEdge %in% subgroupBranches)]	<- TRUE
 	}

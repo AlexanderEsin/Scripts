@@ -3,7 +3,7 @@
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("circular", "wesanderson", "ggplot2", "polyclip")
 
-circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, shrink = 1.4, titleCex = 1.2, titleName = "", tcl.offset = 1, uin = 2.1, bg = "#333233", enrichUpColor = NULL, enrichDownColor = NULL) {
+circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, shrink = 1.4, titleCex = 1.2, titleName = "", tcl.offset = 1, uin = 2.1, bg = "#333233", axisCol = "#D9D9D9", enrichUpColor = NULL, enrichDownColor = NULL, axis.at = NULL, axis.labels = NULL) {
 
 	# Check all data input is density.circular
 	dataClass_l	<- lapply(list(dataDensityA, bgDensity), class)
@@ -13,7 +13,7 @@ circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, sh
 	}
 
 	# Colour background
-	if (!is.na(bg)) {
+	if (!is.null(bg)) {
 		par(bg = bg)
 	}
 
@@ -65,14 +65,20 @@ circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, sh
 	}
 
 	# Replot the background line so it appears on top of the polygons
-	bg_line	<- lines(bgDensity, lwd = 1, col = "#D9D9D9", plot.info = mainPlot, shrink = shrink)
+	bg_line	<- lines(bgDensity, lwd = 1, col = axisCol, plot.info = mainPlot, shrink = shrink)
 
 	# Place the title in the middle
-	text(0, 0.2, titleName, cex = titleCex, col = "#D9D9D9", font = 4)
+	text(0, 0.1, titleName, cex = titleCex, col = axisCol, font = 4)
 
 	# Draw the axis - use custom functions to allow the the axis lines to be offset by a custom value
 	par(cex.axis = titleCex)
-	axis.circular_AE(at = NULL, labels = c("Origin", "", "Terminus", ""), rotation = "clock", zero = (pi / 2), template = "none", tcl = 0.3, tcl.text = 0.25, col = "#D9D9D9", tcl.offset = tcl.offset)
+	
+	if (is.null(axis.at)) axis.labels <- c("Origin", "", "Terminus", "")
+	else if (is.null(axis.at) & !is.null(axis.labels)) stop("If providing custom axis labels, provide custom axis coordinates with axis.at")
+	else if (!is.null(axis.at) & is.null(axis.labels)) stop("If providing custom axis coordinates, provide custom axis labels with axis.labels")
+	else if (!is.null(axis.at)) axis.at <- circular(axis.at, rotation = "clock", zero = (pi / 2), template = "none", units = "degrees")
+
+	axis.circular_AE(at = axis.at, labels = axis.labels, rotation = "clock", zero = (pi / 2), template = "none", tcl = 0.3, tcl.text = 0.25, col = axisCol, tcl.offset = tcl.offset)
 
 	# Record the plot as an object
 	recordedPlot	<- recordPlot()

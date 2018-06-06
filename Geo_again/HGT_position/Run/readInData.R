@@ -30,11 +30,11 @@ perTypeData	<- lapply(dataTypes, function(dataType) {
 	posInput_dir	<- file.path(positionInput_path, paste0(dataType, "_input"))
 
 	# For the "All" gene set, process without penalty
-	if (identical(dataType, "All")) return(processInputPositions(dataType = dataType, inputDir = posInput_dir, bandwith = bandwith))
+	if (identical(dataType, "All")) return(processInputPositions(dataType = dataType, inputDir = posInput_dir, bandwith = bandwith, removeSpecies = outlierTaxid))
 
 	# For Vertical, lHGT, and sHGT read in the position data per penalty
 	perPenaltyData	<- lapply(penalty_list, function(penalty) {
-		processed_data	<- processInputPositions(dataType = dataType, penalty = penalty, inputDir = posInput_dir, bandwith = bandwith, subgroupBranches = subgroupBranch_list)
+		processed_data	<- processInputPositions(dataType = dataType, penalty = penalty, inputDir = posInput_dir, bandwith = bandwith, subgroupBranches = subgroupBranch_list, removeSpecies = outlierTaxid)
 		return(processed_data)
 	})
 
@@ -102,13 +102,6 @@ names(perTypeCOG_data)	<- dataTypes_withAge
 # Process GI data
 message("\nProcessing GI data... ")
 
-# Output path for GI figures
-GIanalysisFig_path	<- file.path(figureOutput_path, "genomicIslands")
-if (!dir.exists(GIanalysisFig_path)) dir.create(GIanalysisFig_path)
-
-# Quartz options
-quartz.options(canvas = "#333233", bg = "#333233")
-
 # Read in GI boundary file
 giBoundary_file		<- file.path(giProcess_path, "perGenome_relGIBoundaries.tsv")
 giBoundary_data		<- read.table(giBoundary_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE)
@@ -122,7 +115,11 @@ GI_presence_list	<- lapply(1:nrow(giBoundary_data), function(index) {
 	}
 
 	GI_present	<- seq(from = round(GI_row$GI_relStart, 4), to = round(GI_row$GI_relEnd, 4), by = 0.0001)
-	out_df	<- data.frame(Species = rep(GI_row$Binomial, length(GI_present)), GI_location = GI_present, stringsAsFactors = FALSE)
+	out_df	<- data.frame(
+		taxid = rep(GI_row$Taxid, length(GI_present)),
+		binomial = rep(GI_row$Binomial, length(GI_present)),
+		GI_location = GI_present,
+		stringsAsFactors = FALSE)
 	return(out_df)
 })
 
@@ -130,24 +127,14 @@ GI_presence_list	<- lapply(1:nrow(giBoundary_data), function(index) {
 GI_presence_list	<- GI_presence_list[!is.na(GI_presence_list)]
 GI_presence_df		<- bind_rows(GI_presence_list)
 
+# Remove the outlier species
+GI_positions_data		<- subset(GI_presence_df, !taxid %in% outlierTaxid)
+
 # Number of unique (GI present) species
-speciesWithGI	<- unique(GI_presence_df$Species)
+speciesWithGI	<- unique(GI_positions_data$binomial)
 numSpeciesGI	<- length(speciesWithGI)
 
-# Overall plot
-GI_crossGenomeDens_plot	<- ggplot(data = GI_presence_df, aes(x = GI_location)) +
-	scale_x_continuous(limits = c(0, 1), name = "Relative Genome Position") +
-	geom_histogram(aes(y = ..ncount.. / 4, fill = Species), bins = 1000) +
-	geom_density(adjust = 0.25, color = "#D9D9D9", show.legend = FALSE) +
-	scale_fill_manual(values = alpha(wes_palette("Darjeeling1", n = numSpeciesGI, type = "continuous"), 0.8)) +
-	darkTheme
-
-
-quartz(width = 20, height = 10, type = "pdf", file = file.path(GIanalysisFig_path, "GI_crossGenomePositions.pdf"))
-print(GI_crossGenomeDens_plot)
-invisible(dev.off())
-
-
+# For each gene, does it lie within the GI boundaries for that genome?
 byType_withGI_data		<- lapply(list("lHGT", "sHGT", "Ver"), function(dataType) {
 
 	message(paste0("Data Type = ", dataType))
@@ -168,7 +155,7 @@ byType_withGI_data		<- lapply(list("lHGT", "sHGT", "Ver"), function(dataType) {
 				
 				withinAnyGI		<- unlist(lapply(1:nrow(bySpeciesGI_data), function(GI_index) {
 					giEntry		<- bySpeciesGI_data[GI_index,]
-					withinGI	<- ifelse(relGeneStart >= giEntry$GI_relStart & relGeneStart <=giEntry$GI_relEnd, TRUE, FALSE)
+					withinGI	<- ifelse(relGeneStart >= giEntry$GI_relStart & relGeneStart <= giEntry$GI_relEnd, TRUE, FALSE)
 					return(withinGI)
 				}))
 
@@ -196,8 +183,8 @@ byType_withGI_data		<- lapply(list("lHGT", "sHGT", "Ver"), function(dataType) {
 })
 names(byType_withGI_data)	<- c("lHGT", "sHGT", "Ver")
 
-# ------------------------------------------------------------------------------------- #
 
+# ------------------------------------------------------------------------------------- #
 # Save the subgroup and position data
 message("\nSaving objects...", appendLF = FALSE)
 
@@ -205,8 +192,6 @@ saveRDS(object = subgroupData, file = file.path(positionData_path, "AG_subgroupD
 saveRDS(object = perTypeData, file = file.path(positionData_path, "AG_perTypeData.rds"))
 saveRDS(object = perTypeCOG_data, file = file.path(positionData_path, "AG_perTypeCOGData.rds"))
 saveRDS(object = byType_withGI_data, file = file.path(positionData_path, "AG_perTypeGIData.rds"))
+saveRDS(object = GI_positions_data, file = file.path(positionData_path, "AG_GI_positions.rds"))
 
 message("\rSaving objects... done")
-
-# ------------------------------------------------------------------------------------- #
-# Done

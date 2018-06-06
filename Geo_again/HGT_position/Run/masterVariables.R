@@ -3,6 +3,7 @@
 master_path			<- "/Users/aesin/Desktop/Geo_again"
 genome_path			<- file.path(master_path, "Genomes")
 position_path		<- file.path(master_path, "HGT_position")
+sporulation_path	<- file.path(master_path, "Sporulation")
 taxdmp_path			<- file.path(genome_path, "taxdmp")
 giProcess_path		<- file.path(position_path, "GI_data")
 
@@ -30,7 +31,7 @@ positionData_path	<- file.path(position_path, "DataObjects")
 outlierTaxid		<- c(294699, 544556)
 
 # Location of figure outputs
-figureOutput_path	<- file.path(position_path, "Figures")
+figureOutput_path	<- file.path(position_path, "Figures", "23Genomes")
 
 # Genomic subcompartments list
 subDivision_list	<- list(
