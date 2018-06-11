@@ -13,9 +13,8 @@ message("\nReading in data...", appendLF = FALSE)
 # Per-type COG data
 perTypeCOG_data		<- readRDS(file.path(positionData_path, "AG_perTypeCOGData.rds"))
 
-# Read in subDivision data (bySubdivCOGCompare function requires the colors)
-subDivisionKey_data	<- readRDS(file.path(positionData_path, "subDivisionKeyData.rds"))
-subDivison_cols		<- subDivisionKey_data$subDivison_cols
+# Zone list
+zoneBoundaryList	<- readRDS(file.path(positionData_path, "AG_zoneBoundaries.rds"))
 
 message("\rReading in data... done\n")
 
@@ -23,50 +22,46 @@ message("\rReading in data... done\n")
 # Plotting
 
 # Output path for figures
-COGvSpaceFig_path	<- file.path(figureOutput_path, "Space_COGs")
+COGvSpaceFig_path	<- file.path(figureOutput_path, "COGs_byZone")
+if(!dir.exists(COGvSpaceFig_path)) dir.create(COGvSpaceFig_path)
 
 # Quartz plotting options common to this script
-quartz.options(canvas = "#333233", bg = "#333233", type = "png", dpi = 300)
+quartz.options(canvas = "white", bg = "white")
 
 # ------------------------------------------------------------------------------------- #
 # Compare the COG distributions between the lHGT and Vertical datasets
-
-lHGT_bySubdiv		<- perTypeCOG_data$lHGT$bySubdivision
-Ver_bySubdiv		<- perTypeCOG_data$Ver$bySubdivision
+lHGT_byZone		<- perTypeCOG_data$lHGT$byZone
+Ver_byZone		<- perTypeCOG_data$Ver$byZone
 
 # NB subDivision_list is inheritted from masterVariables.R
-lHGTvsVer_COGcompare	<- bySubdivCOGCompare(
-	bySuvdiv_dataType_A = lHGT_bySubdiv,
-	bySuvdiv_dataType_B = Ver_bySubdiv,
-	subDivision_list = subDivision_list,
-	clusterBy = "A",
-	subDivison_cols = subDivison_cols)
+lHGTvsVer_COGcompare	<- byZoneCOGCompare(
+	byZone_dataType_A = lHGT_byZone,
+	byZone_dataType_B = Ver_byZone,
+	zones = zoneBoundaryList$halfGenomeRange,
+	clusterBy = "A")
 
 # Re-plot but allow totally free clustering of all COGs
-lHGTvsVer_COGcompare_free	<- bySubdivCOGCompare(
-	bySuvdiv_dataType_A = lHGT_bySubdiv,
-	bySuvdiv_dataType_B = Ver_bySubdiv,
-	subDivision_list = subDivision_list,
-	subDivison_cols = subDivison_cols)
+lHGTvsVer_COGcompare_free	<- byZoneCOGCompare(
+	byZone_dataType_A = lHGT_byZone,
+	byZone_dataType_B = Ver_byZone,
+	zones = zoneBoundaryList$halfGenomeRange)
 
 # ------------------------------------------------------------------------------------- #
 # Compare the COG distributions between the lHGT Old and Recent datasets
-Old_bySubdiv		<- perTypeCOG_data$Old$bySubdivision
-Recent_bySubdiv		<- perTypeCOG_data$Recent$bySubdivision
+Old_bySubdiv		<- perTypeCOG_data$Old$byZone
+Recent_bySubdiv		<- perTypeCOG_data$Recent$byZone
 
-OldvsRcent_COGcompare	<- bySubdivCOGCompare(
-	bySuvdiv_dataType_A = Old_bySubdiv,
-	bySuvdiv_dataType_B = Recent_bySubdiv,
-	subDivision_list = subDivision_list,
-	clusterBy = "A",
-	subDivison_cols = subDivison_cols)
+OldvsRcent_COGcompare	<- byZoneCOGCompare(
+	byZone_dataType_A = Old_bySubdiv,
+	byZone_dataType_B = Recent_bySubdiv,
+	zones = zoneBoundaryList$halfGenomeRange,
+	clusterBy = "A")
 
 # Re-plot but allow totally free clustering of all COGs
-OldvsRcent_COGcompare_free	<- bySubdivCOGCompare(
-	bySuvdiv_dataType_A = Old_bySubdiv,
-	bySuvdiv_dataType_B = Recent_bySubdiv,
-	subDivision_list = subDivision_list,
-	subDivison_cols = subDivison_cols)
+OldvsRcent_COGcompare_free	<- byZoneCOGCompare(
+	byZone_dataType_A = Old_bySubdiv,
+	byZone_dataType_B = Recent_bySubdiv,
+	zones = zoneBoundaryList$halfGenomeRange)
 
 
 
@@ -75,7 +70,7 @@ OldvsRcent_COGcompare_free	<- bySubdivCOGCompare(
 # Draw plots
 
 # Plot the lHGT vs Vertical data - clustered by the lHGT distributions
-quartz(width = 18, height = 10, file = file.path(COGvSpaceFig_path, "VerticalvslHGT_clusterBylHGT.png"))
+quartz(width = 18, height = 10)
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
@@ -85,10 +80,11 @@ popViewport()
 pushViewport(viewport(layout.pos.row = 2))
 print(lHGTvsVer_COGcompare$ComparisonBarplot, newpage = FALSE)
 popViewport()
+quartz.save(file = file.path(COGvSpaceFig_path, "VerticalvslHGT_clusterBylHGT.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
 # Plot the lHGT vs Vertical data - clustered freely
-quartz(width = 20, height = 10, file = file.path(COGvSpaceFig_path, "VerticalvslHGT_clusterFree.png"))
+quartz(width = 20, height = 10)
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
@@ -98,13 +94,14 @@ popViewport()
 pushViewport(viewport(layout.pos.row = 2))
 print(lHGTvsVer_COGcompare_free$ComparisonBarplot, newpage = FALSE)
 popViewport()
+quartz.save(file = file.path(COGvSpaceFig_path, "VerticalvslHGT_clusterFree.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
 
 # ------------------------------------------------------------------------------------- #
 
 # Plot the lHGT Old vs Recent data - clustered by the Old distributions
-quartz(width = 18, height = 10, file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterByOld.png"))
+quartz(width = 18, height = 10)
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
@@ -114,11 +111,12 @@ popViewport()
 pushViewport(viewport(layout.pos.row = 2))
 print(OldvsRcent_COGcompare$ComparisonBarplot, newpage = FALSE)
 popViewport()
+quartz.save(file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterByOld.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
 
 # Plot the lHGT Old vs Recent data - clustered freely
-quartz(width = 20, height = 10, file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterFree.png"))
+quartz(width = 20, height = 10)
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
@@ -128,6 +126,7 @@ popViewport()
 pushViewport(viewport(layout.pos.row = 2))
 print(OldvsRcent_COGcompare_free$ComparisonBarplot, newpage = FALSE)
 popViewport()
+quartz.save(file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterFree.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
 # Interestingly, in the old vs recent, we find that the distribution of 

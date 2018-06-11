@@ -21,14 +21,7 @@ processCOGData		<- function(COG, data = NULL, dataType, penalty, byAge = FALSE, 
 	}
 
 	circStart		<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-	perCOGbySubdiv	<- splitBySubdivision(data = perCOGAll, subDivisions = subDivision_list, variable = "COGcat")
+	perCOGbyZone	<- splitByZone(data = perCOGAll, zones = zoneBoundaryList$halfGenomeRange, variable = "COGcat")
 
-	# Combine and extract the data frames containing the per-gene subdivision information. However, this loses the circular data
-	subdivColData	<- bind_rows(lapply(perCOGbySubdiv$full_data, function(subdivTable) return(subdivTable$data)))
-
-	# Add the subdivision assignment for each individual gene
-	mapCOGontoSubdiv		<- unlist(lapply(perCOGAll$protID, grep, x = subdivColData$protID, fixed = TRUE))
-	perCOGAll$SubDivision	<- subdivColData$SubDivision[mapCOGontoSubdiv]
-	
-	return(list(allData = perCOGAll, CircStart = circStart, perCOGbySubdiv_df = perCOGbySubdiv$tab_df))
+	return(list(allData = perCOGbyZone$full_data, CircStart = circStart, perCOGbyZone_df = perCOGbyZone$tab_df))
 }

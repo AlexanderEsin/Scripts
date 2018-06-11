@@ -5,7 +5,7 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("dplyr", "reshape2", "grid", "ggplot2", "ggrepel", "ggdendro", "ggpubr", "wesanderson")
+p_load("plyr", "dplyr", "reshape2", "grid", "ggplot2", "ggrepel", "ggdendro", "ggpubr", "wesanderson", "GGally")
 
 
 # ------------------------------------------------------------------------------------- #
@@ -19,13 +19,8 @@ perTypeData			<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
 # Subgroup data
 subgroupData		<- readRDS(file.path(positionData_path, "AG_subgroupData.rds"))
 
-# Subdivision key
-subDivisionKey_file	<- file.path(positionData_path, "subDivisionKeyData.rds")
-if(!file.exists(subDivisionKey_file)) {
-	stop("The subdivision data file \"", subDivisionKey_file, "\" is required.\nRun the subDivisionPrep.R script!")
-} else {
-	subDivisionKey_data	<- readRDS(file.path(positionData_path, "subDivisionKeyData.rds"))
-}
+# Zone list
+zoneBoundaryList	<- readRDS(file.path(positionData_path, "AG_zoneBoundaries.rds"))
 
 message("\rReading in data... done\n")
 
@@ -33,8 +28,6 @@ message("\rReading in data... done\n")
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 # Important variables
-
-lHGTpenalty		<- "4"
 minXferNum		<- 100
 contPalette		<- colorRampPalette(wes_palette("Zissou1"))
 
@@ -43,10 +36,12 @@ contPalette		<- colorRampPalette(wes_palette("Zissou1"))
 
 # Output path for figures
 byBranchFig_path	<- file.path(figureOutput_path, "byBranch")
-bysubdivFig_path	<- file.path(figureOutput_path, "bySubdiv")
+byZoneFig_path		<- file.path(figureOutput_path, "byZone")
+if (!dir.exists(byBranchFig_path)) dir.create(byBranchFig_path)
+if (!dir.exists(byZoneFig_path)) dir.create(byZoneFig_path)
 
 # Quartz plotting options common to this script
-quartz.options(canvas = "#333233", bg = "#333233", type = "pdf")
+quartz.options(canvas = "white", bg = "white")
 
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
@@ -58,17 +53,13 @@ AG_binomTime_tree	<- subgroupData$AG_binomTime_tree
 
 # Get a list of unique branches
 uniqueBranches			<- unique(perTypeData$lHGT$'3'$allPosData$recepEdge)
-numBranchesInTree		<- nrow(AG_conTime_tree$edge)
-if (!identical(length(uniqueBranches), numBranchesInTree)) {
-	stop("The number of receptor edges in dataset is not equal to number of edges in tree")
-}
 
 # ------------------------------------------------------------------------------------- #
 
 # For each recepEdge (as defined in the lHGT input data), get the transfer data - and circularise the start positions
 perBranchData_list	<- lapply(uniqueBranches, function(branch) {
 	# All transfered genes at this branch
-	perBranchAll	<- perTypeData$lHGT[[lHGTpenalty]]$allPosData[which(perTypeData$lHGT[[lHGTpenalty]]$allPosData$recepEdge == branch),]
+	perBranchAll	<- perTypeData$lHGT[[hgtPenalty]]$allPosData[which(perTypeData$lHGT[[hgtPenalty]]$allPosData$recepEdge == branch),]
 	# Circularise the start positions
 	hgtCircStart	<- circular(perBranchAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
 	return(list(allData = perBranchAll, CircStart = hgtCircStart))
@@ -111,15 +102,15 @@ perBranchAvHGT_plot	<- ggplot(perBranchCircSummary_df, aes(x = Mean, y = Rho, co
 	geom_point(size = 1.5) +
 	scale_color_gradientn(colours = contPalette(20)) +
 	geom_text_repel(aes(label = Index), point.padding = 0.2, min.segment.length = 0.2) +
-	darkTheme +
+	lightTheme +
 	theme(
 		axis.title.x = element_blank(),
 	)
 
 
 # ------------------------------------------------------------------------------------- #
-
 # Prepare dataframes to assign transfers to specific branches on the AG_timeTree
+
 AG_conTime_as4		<- phylo4(AG_conTime_tree)
 edgeLabels_df		<- data.frame(E1 = AG_conTime_tree$edge[,1], E2 = AG_conTime_tree$edge[,2], branchLength = AG_conTime_tree$edge.length, inNode = NA, stringsAsFactors = FALSE)
 nodeLabels_df		<- data.frame(NodeLabels = labels(AG_conTime_as4, "all"), stringsAsFactors = FALSE)
@@ -131,74 +122,76 @@ for (index in 1:nrow(nodeLabels_df)) {
 	edgeLabels_df$inNode[which(edgeLabels_df$E2 == rowID)]	<- node
 }
 
-## We will use the edgeLabels_df to label the tree to match the plot, add the Index labels to match the dataframe
+##We will use the edgeLabels_df to label the tree to match the plot, add the Index labels to match the dataframe
 edgeLabels_df$Index		<- NA
 for (i in 1:nrow(perBranchCircSummary_df)) {
 	row		<- perBranchCircSummary_df[i,]
 	edgeLabels_df$Index[which(edgeLabels_df$inNode == row$inNode)]	<- row$Index
 }
 
-## Add the Included column to color tree branches by whether they are in the Mean/Rho plot
+# Add the Included column to color tree branches by whether they are in the Mean/Rho plot
 edgeLabels_df$Included	<- unlist(lapply(edgeLabels_df$Index, function(x) ifelse(is.na(x), 0, 1)))
-
-# Color for the binomial tree
-Royal1Pal	<- colorRampPalette(rev(wes_palette("Royal1")[1:2]))
-
 
 # ------------------------------------------------------------------------------------- #
 
-perBranchSubDivision_list <- lapply(1:length(perBranchTrim), function(branchData_index) {
+perBranchZone_list <- lapply(1:length(perBranchTrim), function(branchData_index) {
 
-	branchData		<- perBranchTrim[[branchData_index]]
-	branch_name		<- names(perBranchTrim)[branchData_index]
-	branch_Index	<- perBranchCircSummary_df$Index[which(perBranchCircSummary_df$branch == branch_name)]
+	branchData	<- perBranchTrim[[branchData_index]]
+	branchName	<- names(perBranchTrim)[branchData_index]
+	branchIndex	<- perBranchCircSummary_df$Index[which(perBranchCircSummary_df$branch == branchName)]
 
-	numSubdivisions			<- length(subDivision_list)
-	bySubDivision_branch	<- splitBySubdivision(data = branchData$allData, subDivisions = subDivision_list, variable = NA)
-	bySubDivision_df		<- cbind(Branch = rep(branch_name, numSubdivisions), Index = rep(branch_Index, numSubdivisions), bySubDivision_branch, stringsAsFactors = FALSE)
-	return(bySubDivision_df)
+	byBranch_zoned		<- splitByZone(data = branchData$allData, zones = zoneBoundaryList$halfGenomeRange, variable = NULL)
+	byBranch_zone_df	<- as.data.frame(table(byBranch_zoned$zoneName))
+
+	names(byBranch_zone_df)	<- c("zoneName", "geneNumber")
+	byBranch_zone_df$branchName		<- branchName
+	byBranch_zone_df$branchIndex	<- branchIndex
+	return(list(fullData = byBranch_zoned, table = byBranch_zone_df))
 })
-perBranchSubDivision_df <- bind_rows(perBranchSubDivision_list)
+perBranchZone_full	<- bind_rows(lapply(perBranchZone_list, function(element) return(element$fullData)))
+perBranchZone_df 	<- bind_rows(lapply(perBranchZone_list, function(element) return(element$table)))
 
 
 ## Prepare data to cluster 
-clusterRecast_data				<- dcast(perBranchSubDivision_df, Index ~ subDiv, value.var = "numObsv")
-rownames(clusterRecast_data)	<- clusterRecast_data$Index
+clusterRecast_data				<- dcast(perBranchZone_df, branchIndex ~ zoneName, value.var = "geneNumber")
+rownames(clusterRecast_data)	<- clusterRecast_data$branchIndex
 clusterRecastProp_data			<- sweep(clusterRecast_data[,-1], 1, rowSums(clusterRecast_data[,-1]), "/")
 clusterRecastProp_dist			<- dist(as.matrix(clusterRecastProp_data))
 
-clusterCompartments_dendro		<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
+clusterZones_dendro	<- dendro_data(hclust(clusterRecastProp_dist, method = "ward.D2"))
 
 
 ## Plot the clustering dendrogram
-perBranchCompartment_cluster	<- ggplot() +
-	geom_segment(data = clusterCompartments_dendro$segments, aes(x = x, y = y, xend = xend, yend = yend), col = "#D9D9D9", size = 1) + 
-	darkTheme +
+perBranchZone_cluster	<- ggplot() +
+	geom_segment(data = clusterZones_dendro$segments, aes(x = x, y = y, xend = xend, yend = yend), col = axisCol, size = 1) +
+	lightTheme +
 	theme(
-		plot.margin = unit(c(0, 1.2, 0, 1.2), "cm"),
+		plot.margin = unit(c(0, 1.45, 0, 1.45), "cm"),
 		panel.grid.major = element_blank(),
 		panel.grid.minor = element_blank(),
+		axis.line = element_blank(),
 		axis.text = element_blank(),
 		axis.title = element_blank(),
 		axis.ticks = element_blank()
 	)
 
-# Factorise subDivision and Index for plotting.
+# Factor zoneName and branchIndex for plotting.
 # For the Index - this means we plot in the same order as the cluster dendrogram
-perBranchSubDivision_df$subDiv	<- factor(perBranchSubDivision_df$subDiv, levels = names(subDivision_list))
-perBranchSubDivision_df$Index	<- factor(perBranchSubDivision_df$Index, levels = clusterCompartments_dendro$labels$label)
+perBranchZone_df$zoneName		<- factor(perBranchZone_df$zoneName, levels = zoneBoundaryList$halfGenomeRange$zoneName)
+perBranchZone_df$branchIndex	<- factor(perBranchZone_df$branchIndex, levels = clusterZones_dendro$labels$label)
 
 ## Plot the proportional barplots. Each barplot = a single branch, showing proportion of lHGTs in each genome compartment/
-perBranchCompartment_barplot	<- ggplot(data = perBranchSubDivision_df, aes(x = Index, y = numObsv, fill = subDiv, label = as.character(numObsv))) +
+perBranchZone_barplot	<- ggplot(data = perBranchZone_df, aes(x = branchIndex, y = geneNumber, fill = zoneName, label = as.character(geneNumber))) +
 	geom_bar(stat = "identity", position = "fill") +
-	geom_text(position = position_fill(vjust = 0.5), color = "#333233") +
-	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
-	darkTheme +
+	geom_text(position = position_fill(vjust = 0.5), color = "black") +
+	scale_fill_manual(values = zoneBoundaryList$halfGenomeRange$zoneColbyName, guide = FALSE) +
+	lightTheme +
 	theme(
 		plot.margin = unit(c(0, 2, 0.5, 2), "cm"),
 		panel.grid.major.y = element_blank(),
-		panel.grid.major.x = element_line(size = 1, color = "#D9D9D9"),
+		panel.grid.major.x = element_line(size = 1, color = axisCol),
 		panel.grid.minor.y = element_blank(),
+		axis.line = element_blank(),
 		axis.text.y = element_blank(),
 		axis.title.y = element_blank(),
 		axis.ticks = element_blank()
@@ -206,20 +199,19 @@ perBranchCompartment_barplot	<- ggplot(data = perBranchSubDivision_df, aes(x = I
 
 # ------------------------------------------------------------------------------------- #
 
-# Make subdivision key plot
+# # Make a zone key plot
 
-# Subdivision data
-subDivisionKey_df	<- subDivisionKey_data$subDivisionKey_df
-subDivison_cols		<- subDivisionKey_data$subDivison_cols
+# Zone data
+zoneBoundaryList$fullRange$zoneName	<- factor(zoneBoundaryList$fullRange$zoneName, levels = zoneBoundaryList$fullRange$zoneName[1:5])
 
 # Prepare a bare circular plot with the subcompartment zones
-subDivisionKey_plot		<- ggplot(data = subDivisionKey_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = col, col = NA)) +
+zoneKey_plot		<- ggplot(data = zoneBoundaryList$fullRange, aes(xmin = (2 * pi * zoneMin), xmax = (2 * pi * zoneMax), ymin = -Inf, ymax = Inf, fill = zoneName, col = NA)) +
 	coord_polar("x") +
 	scale_x_continuous(labels = c("Origin", "Terminus"), breaks = c(0, pi), limits = c(0, 2 * pi)) +
 	scale_y_continuous(limits = c(0, 1)) +
 	geom_rect(col = NA, size = 0) +
-	scale_fill_manual(values = subDivison_cols) +
-	darkTheme +
+	scale_fill_manual(values = zoneBoundaryList$fullRange$zoneColbyName) +
+	lightTheme +
 	theme(
 		panel.grid = element_blank(),
 		panel.grid.major = element_blank(),
@@ -232,44 +224,51 @@ subDivisionKey_plot		<- ggplot(data = subDivisionKey_df, aes(xmin = xmin, xmax =
 		legend.title = element_blank()
 	)
 
-
 # ------------------------------------------------------------------------------------- # 
 # ------------------------------------------------------------------------------------- # 
 # Write out data plots
 # ------------------------------------------------------------------------------------- # 
 
-# Plot the Compartment (Subdivision) key wheel
-quartz(width = 5, height = 4, file = file.path(byBranchFig_path, "subDiv_key.pdf"))
-print(subDivisionKey_plot)
+# Plot the Compartment (Zone) key wheel
+quartz(width = 5, height = 4)
+print(zoneKey_plot)
+quartz.save(file = file.path(byBranchFig_path, "zoneKey.pdf"), type = "pdf", dpi = 100)
+quartz.save(file = file.path(byZoneFig_path, "zoneKey.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
 # ------------------------------------------------------------------------------------- # 
 
 # Plot the dendro tree together with the barplots showing lHGT proportion in different genomic compartments
-quartz(width = 20, height = 14, file = file.path(byBranchFig_path, "byBranch_subdiv.pdf"))
+quartz(width = 16, height = 10)
 pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
 pushViewport(viewport(layout.pos.row = 1))
-print(perBranchCompartment_cluster, newpage = FALSE)
+print(perBranchZone_cluster, newpage = FALSE)
 popViewport()
 
 pushViewport(viewport(layout.pos.row = 2))
-print(perBranchCompartment_barplot, newpage = FALSE)
+print(perBranchZone_barplot, newpage = FALSE)
 popViewport()
+
+quartz.save(file = file.path(byBranchFig_path, "byBranch_zone.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
 # ------------------------------------------------------------------------------------- # 
 
 # Plot the perBranch HGT mean weight side-by-side with the timeTree labelled with the branches
-quartz(width = 9, height = 8, file = file.path(byBranchFig_path, "byBranch_circAV.pdf"))
+quartz(width = 9, height = 8)
 print(perBranchAvHGT_plot)
+quartz.save(file = file.path(byBranchFig_path, "byBranch_circAV.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
 # ------------------------------------------------------------------------------------- # 
-
 # Plot reference tree - colour branches that are used in analysis in red, otherwise grey. Label included branches with the Index number
-quartz(width = 12, height = 8, file = file.path(byBranchFig_path, "indexTree.pdf"))
-plotBranchbyTrait_AE(AG_binomTime_tree, edgeLabels_df$Included, method = "edges", legend = FALSE, palette = Royal1Pal, title = "Included", tip.color = "#D9D9D9", cex = 0.8)
+
+# Color for the binomial tree
+Royal1Pal	<- colorRampPalette(wes_palette("Royal1")[1:2])
+
+quartz(width = 12, height = 8)
+plotBranchbyTrait_AE(AG_binomTime_tree, edgeLabels_df$Included, method = "edges", legend = FALSE, palette = Royal1Pal, title = "Included", tip.color = "black", cex = 0.8)
 # Annotate tree with Index
 for (rowIndex in 1:nrow(edgeLabels_df)) {
 	row		<- edgeLabels_df[rowIndex,]
@@ -278,15 +277,11 @@ for (rowIndex in 1:nrow(edgeLabels_df)) {
 	edgeNum	<- which(AG_conTime_tree$edge[,2] == E2)
 
 	if (!is.na(row$Index)) {
-		edgelabels(row$Index, edgeNum, adj = c(0.5, -0.25), bg = "#333233", frame = "none", col = "#D9D9D9", cex = 1)
+		edgelabels(row$Index, edgeNum, adj = c(0.5, -0.25), bg = "#white", frame = "none", col = "black", cex = 1)
 	}
 }
+quartz.save(file = file.path(byBranchFig_path, "indexTree.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
-
-
-
-
-
 
 
 
@@ -301,78 +296,82 @@ invisible(dev.off())
 
 
 # Boxplot of fraction of HGT into a given category
-perBranchSubdiv_forStats	<- dcast(perBranchSubDivision_df, Index ~ subDiv, value.var = "numObsv")
-perBranchSubdiv_forStats	<- cbind(Index = as.character(perBranchSubdiv_forStats$Index), sweep(perBranchSubdiv_forStats[,-1], 1, rowSums(perBranchSubdiv_forStats[,-1]), "/"), stringsAsFactors = FALSE)
-perBranchSubdiv_forStats	<- recast(perBranchSubdiv_forStats, variable ~ Index, id.var = "Index")
-perBranchSubdiv_forStats	<- melt(perBranchSubdiv_forStats, id.vars = "variable")
-names(perBranchSubdiv_forStats)	<- c("SubDivision", "Index", "Proportion")
+perBranchZone_forStats	<- dcast(perBranchZone_df, branchIndex ~ zoneName, value.var = "geneNumber")
+perBranchZone_forStats	<- cbind(Index = as.character(perBranchZone_forStats$branchIndex), sweep(perBranchZone_forStats[,-1], 1, rowSums(perBranchZone_forStats[,-1]), "/"), stringsAsFactors = FALSE)
+perBranchZone_forStats	<- recast(perBranchZone_forStats, variable ~ Index, id.var = "Index")
+perBranchZone_forStats	<- melt(perBranchZone_forStats, id.vars = "variable")
+names(perBranchZone_forStats)	<- c("Zone", "Index", "Proportion")
 
 # Add branch length to this dataframe
-perBranchSubdiv_forStats	<- bind_rows(lapply(unique(perBranchSubdiv_forStats$Index), function(branchIndex) {
-	subset_df		<- perBranchSubdiv_forStats[which(perBranchSubdiv_forStats$Index == branchIndex),]
+perBranchZone_forStats	<- bind_rows(lapply(unique(perBranchZone_forStats$Index), function(branchIndex) {
+	subset_df		<- perBranchZone_forStats[which(perBranchZone_forStats$Index == branchIndex),]
 	branchLength	<- ifelse(identical(as.character(branchIndex), "Root"), NA, edgeLabels_df$branchLength[which(edgeLabels_df$Index == branchIndex)]) 
 	subset_df$branchLength	<- branchLength
 	return(subset_df)
 }))
 
-# Factorise the Subdivisions
-levels(perBranchSubdiv_forStats$SubDivision)	<- c("Ori", "Near Ori", "Far Ori", "Far Ter", "Near Ter", "Ter")
+# Factorise the Zones
+levels(perBranchZone_forStats$Zone)	<- zoneBoundaryList$halfGenomeRange$zoneName
 
 # Prepare a boxplot showing the relative distribution of lHGT genes across Genome compartments
-perBranchBySubdiv_boxplot	<- ggplot(data = perBranchSubdiv_forStats, aes(x = SubDivision, y = Proportion, fill = SubDivision)) +
-	geom_boxplot(color = "#D9D9D9") +
-	scale_y_continuous(name = "Proportion of lHGT per branch", limits = c(0, 0.5)) +
-	scale_x_discrete(name = "Genome Subdivision") +
-	scale_fill_manual(values = subDivison_cols, guide = FALSE) +
-	stat_compare_means(size = 6, color = "#D9D9D9", geom = "label", fill = "#333233", label.size = 0.3) + 
-	darkTheme + 
-	theme(panel.grid.minor.y = element_blank())
+perBranchByZone_boxplot	<- ggplot(data = perBranchZone_forStats, aes(x = Zone, y = Proportion, fill = Zone)) +
+	geom_boxplot(color = axisCol, size = 0.7) +
+	scale_y_continuous(name = "Proportion of lHGT per branch", limits = c(0, round_any(max(perBranchZone_forStats$Proportion), 0.1, ceiling))) +
+	scale_x_discrete(name = "Genome Zone") +
+	scale_fill_manual(values = zoneBoundaryList$fullRange$zoneColbyName, guide = FALSE) +
+	stat_compare_means(size = 6, color = axisCol, geom = "label", fill = "white", label.size = 0.3) + 
+	lightTheme + 
+	theme(
+		panel.grid.minor.y = element_blank()
+	)
 
 
 # Correlating lHGT population in each compartments (per branch) against the length of that branch
 # Since the root has no length, we remove the root data
-perBranchSubdiv_noRoot		<- perBranchSubdiv_forStats[which(perBranchSubdiv_forStats$Index != "Root"),]
-perBranchBySubdiv_cor		<- ggplot(data = perBranchSubdiv_noRoot, aes(x = Proportion, y = branchLength, color = SubDivision, group = SubDivision)) +
-	scale_y_continuous(name = "Branch Length", limits = c(0, 0.2)) +
-	scale_x_continuous(name = "Proportion of lHGT per branch", limits = c(0, 0.5)) +
+perBranchZone_noRoot	<- perBranchZone_forStats[which(perBranchZone_forStats$Index != "Root"),]
+perBranchByZone_cor		<- ggplot(data = perBranchZone_noRoot, aes(x = Proportion, y = branchLength, color = Zone, group = Zone)) +
+	scale_y_continuous(name = "Branch Length", limits = c(0, round_any(max(perBranchZone_noRoot$branchLength), 0.1, ceiling))) +
+	scale_x_continuous(name = "Proportion of lHGT per branch", limits = c(0, round_any(max(perBranchZone_noRoot$Proportion), 0.1, ceiling))) +
 	geom_point(size = 2) +
-	scale_color_manual(values = subDivison_cols, guide = FALSE) +
-	facet_wrap(~SubDivision) + 
-	stat_cor(method = "spearman", geom = "text", label.x.npc = "right", label.y.npc = "top", size = 4) +
-	darkTheme +
+	scale_color_manual(values = zoneBoundaryList$fullRange$zoneColbyName, guide = FALSE) +
+	facet_wrap(~Zone) + 
+	stat_cor(method = "spearman", geom = "label", fill = "white", label.x.npc = "right", label.y.npc = "top", size = 4) +
+	lightTheme +
 	theme(
 		panel.spacing = unit(2, "lines"),
-		strip.background = element_rect(fill = "transparent", color = "#D9D9D9", size = 1),
-		strip.text = element_text(color = "#D9D9D9", size = 12)
-		)
+		strip.background = element_rect(fill = "transparent", color = axisCol, size = 1),
+		strip.text = element_text(color = textCol, size = 12)
+	)
 
 # ------------------------------------------------------------------------------------- #
 
 ## Pairwise comparison of lHGT increase / decrease per compartment against other compartments
 
 # Recast data to have the compartments as individual columns
-perBranchSubdiv_forPairwise	<- dcast(perBranchSubdiv_forStats, Index ~ SubDivision, value.var = "Proportion")
+perBranchZone_forPairwise	<- dcast(perBranchZone_forStats, Index ~ Zone, value.var = "Proportion")
+# Max value
+maxVal	<- round_any(max(perBranchZone_forStats$Proportion), 0.1, ceiling)
 
 # Plot pairwise correlations
-SubDivisionPairwise_plot <- ggpairs(data = perBranchSubdiv_forPairwise, columns = 2:ncol(perBranchSubdiv_forPairwise),
+perBranchZone_plot <- ggpairs(data = perBranchZone_forPairwise, columns = 2:ncol(perBranchZone_forPairwise),
 	
 	upper = list(continuous = function(data, mapping, ...) {
-		cor_fun(data = data, mapping = mapping, method = "pearson", ndp = 2, sz = 6, color = "#D9D9D9")
+		cor_fun(data = data, mapping = mapping, method = "pearson", ndp = 2, sz = 6, color = axisCol)
 	}),
 
 	lower = list(continuous = function(data, mapping, ...) {
-		smooth_lm_fun(data = data, mapping = mapping, smooth.colour = "green", color = "#D9D9D9") +
-		scale_y_continuous(limits = c(0, 0.5)) +
-		scale_x_continuous(limits = c(0, 0.5)) +
+		smooth_lm_fun(data = data, mapping = mapping, smooth.colour = alpha(wes_palette("Moonrise1")[3], 0.5), color = axisCol) +
+		scale_y_continuous(limits = c(0, maxVal)) +
+		scale_x_continuous(limits = c(0, maxVal)) +
 		theme(
-			panel.grid.major = element_line(size = 0.2, color = alpha("#D9D9D9", alpha = 0.5)),
+			panel.grid.major = element_line(size = 0.2, color = alpha(axisCol, alpha = 0.5)),
 			panel.grid.minor = element_blank()
 		)
 	}),
 	
 	diag = list(continuous = function(data, mapping, ...) {
-		ggally_densityDiag(data = data, mapping = mapping, color = "#D9D9D9") +
-		scale_x_continuous(limits = c(0, 0.5)) +
+		ggally_densityDiag(data = data, mapping = mapping, color = axisCol, size = 1.5) +
+		scale_x_continuous(limits = c(0, maxVal)) +
 		theme(
 			panel.grid.major = element_blank(),
 			panel.grid.minor = element_blank()
@@ -380,23 +379,28 @@ SubDivisionPairwise_plot <- ggpairs(data = perBranchSubdiv_forPairwise, columns 
 	})
 )
 
-# Recolour the diagonals to the subdivision colours
-for (i in 1:6) {
-	SubDivisionPairwise_plot[i,i]$layers[[1]]$aes_params$colour <- subDivison_cols[i]
+# Recolour the diagonals to the zone colours
+for (i in 1:5) {
+	perBranchZone_plot[i,i]$layers[[1]]$aes_params$colour <- zoneBoundaryList$fullRange$zoneColbyName[i]
 }
 
 # Apply a variant of darkTheme
-SubDivisionPairwise_plot	<- SubDivisionPairwise_plot + 
+zonePairwise_plot	<- perBranchZone_plot + 
 	theme(
-		plot.background = element_rect(fill = "#333233", color = NA),
+		plot.background = element_rect(fill = "white", color = NA),
 		panel.background = element_rect(fill = "transparent", color = NA),
-		axis.ticks = element_line(size = 0.2, color = "#D9D9D9"),
-		plot.title = element_text(size = 16, hjust = 0.5, color = "#D9D9D9"),
-		axis.title = element_text(size = 14, color = "#D9D9D9"),
-		axis.text = element_text(size = 14, colour = "#D9D9D9"),
+		axis.ticks = element_line(size = 0.2, color = axisCol),
+		plot.title = element_text(size = 16, hjust = 0.5, color = textCol),
+		legend.key = element_rect(fill = "transparent", color = NA),
+		legend.background = element_rect(fill = "transparent", color = NA),
+		legend.text = element_text(size = 14, color = textCol),
+		legend.title = element_text(size = 14, color = textCol),
+		legend.title.align = 0.5,
+		axis.title = element_text(size = 14, color = textCol),
+		axis.text = element_text(size = 14, colour = textCol),
 		panel.spacing = unit(2, "lines"),
-		strip.background = element_rect(fill = "transparent", color = "#D9D9D9", size = 1),
-		strip.text = element_text(color = "#D9D9D9", size = 14)
+		strip.background = element_rect(fill = "transparent", color = axisCol, size = 1),
+		strip.text = element_text(color = textCol, size = 12)
 	)
 
 
@@ -404,15 +408,18 @@ SubDivisionPairwise_plot	<- SubDivisionPairwise_plot +
 
 #  /// Write out the stats plots /// ###
 
-quartz(width = 12, height = 8, file = file.path(bysubdivFig_path, "bySubdiv_boxplot.pdf"))
-print(perBranchBySubdiv_boxplot)
+quartz(width = 12, height = 8)
+print(perBranchByZone_boxplot)
+quartz.save(file = file.path(byZoneFig_path, "byZone_boxplot.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
-quartz(width = 16, height = 10, file = file.path(bysubdivFig_path, "bySubdiv_branchVslHGTCor.pdf"))
-print(perBranchBySubdiv_cor)
+quartz(width = 16, height = 10)
+print(perBranchByZone_cor)
+quartz.save(file = file.path(byZoneFig_path, "byZone_branchVslHGTCor.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
-quartz(width = 16, height = 16, file = file.path(bysubdivFig_path, "bySubdiv_pairwiseCor.pdf"))
-print(SubDivisionPairwise_plot)
+quartz(width = 16, height = 16)
+print(zonePairwise_plot)
+quartz.save(file = file.path(byZoneFig_path, "byZone_pairwiseDependence.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 

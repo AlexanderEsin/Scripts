@@ -5,7 +5,7 @@ p_load("ape", "RSQLite", "phylobase", "stringr")
 getSubgroupData		<- function(genome_dir = NULL, databasePath = NULL) {
 
 	if (is.null(genome_dir))	stop("Need to provide \'Genome\' directory")
-	if (is.null(databasePath))		stop("Need to provide path to \'all_prot_db\' database")
+	if (is.null(databasePath))	stop("Need to provide path to \'all_prot_db\' database")
 
 	# Open sqlite database
 	dbConn	<- dbConnect(RSQLite::SQLite(), databasePath)
@@ -34,17 +34,19 @@ getSubgroupData		<- function(genome_dir = NULL, databasePath = NULL) {
 	AG_conTime_tree			<- read.tree(file = file.path(timeAnalysis_dir, "AG_conTimeTree.tree"))
 	AG_conTime_as4			<- phylo4(AG_conTime_tree)
 
+	# ------------------------------------------------ #
+	# Translate the extension-tip tree to taxid-tip tree
+	AG_taxidTime_tree		<- AG_conTime_tree
+	AG_taxidTime_tree$tip.label	<- unlist(lapply(AG_taxidTime_tree$tip.label, function(tip) {
+		newTipLabel_char	<- taxidMowExtend_df$Taxid[which(taxidMowExtend_df$Extension == tip)]
+	}))
+
 	# Translate the extension-tip tree to binomial-tip tree
 	AG_binomTime_tree		<- AG_conTime_tree
 	AG_binomTime_tree$tip.label	<- unlist(lapply(AG_binomTime_tree$tip.label, function(tip) {
 		newTipLabel_char	<- taxidMowExtend_df$Binomial[which(taxidMowExtend_df$Extension == tip)]
 	}))
 
-	# Translate the extension-tip tree to taxid-tip tree
-	AG_taxidTime_tree		<- AG_conTime_tree
-	AG_taxidTime_tree$tip.label	<- unlist(lapply(AG_taxidTime_tree$tip.label, function(tip) {
-		newTipLabel_char	<- taxidMowExtend_df$Taxid[which(taxidMowExtend_df$Extension == tip)]
-	}))
 
 	# Work out which branches are subgroup
 	subgroup_branches	<- vector(mode = "character")

@@ -81,19 +81,20 @@ perTypeCOG_data	<- lapply(dataTypes_withAge, function(dataType) {
 	# Remove any COGs that don't have any observations
 	perCOGData_list			<- perCOGData_list[!is.na(perCOGData_list)]
 
-	# Produce the circular plots
-	perCOGAvPos_Sum_Plot	<- COGdistribCircular_plot(perCOGData_list = perCOGData_list, dataType = dataType)
-	perCOGAvPos_Sum			<- perCOGAvPos_Sum_Plot$circSum
-	perCOGAvPos_Plot		<- perCOGAvPos_Sum_Plot$plot
+	# # Produce the circular plots
+	# perCOGAvPos_Sum_Plot	<- COGdistribCircular_plot(perCOGData_list = perCOGData_list, dataType = dataType)
+	# perCOGAvPos_Sum			<- perCOGAvPos_Sum_Plot$circSum
+	# perCOGAvPos_Plot		<- perCOGAvPos_Sum_Plot$plot
 
 	# Produce the by-Compartment dataframe
-	byCOGbySubdiv_df		<- bind_rows(lapply(perCOGData_list, function(COG) return(COG$perCOGbySubdiv_df)))
-	byCOGbySubdiv_df$Set	<- dataType
+	byCOGbyZone_df		<- bind_rows(lapply(perCOGData_list, function(COG) return(COG$perCOGbyZone_df)))
+	byCOGbyZone_df$Set	<- dataType
 
 	message(paste0("\r\tProcessing COG data for \'", dataType, "\'... done"))
 
 	# Return all the raw datam as well as COGs per compartment, the circular summary of gene positions, and the circular weighted mean position plot
-	return(list(perCOGdata = perCOGData_list, bySubdivision = byCOGbySubdiv_df, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
+	# return(list(perCOGdata = perCOGData_list, byZone = byCOGbyZone_df, circSummary = perCOGAvPos_Sum, plot = perCOGAvPos_Plot))
+	return(list(perCOGdata = perCOGData_list, byZone = byCOGbyZone_df))
 })
 names(perTypeCOG_data)	<- dataTypes_withAge
 

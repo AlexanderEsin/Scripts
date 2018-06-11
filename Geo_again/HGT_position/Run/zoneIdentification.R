@@ -14,6 +14,9 @@ message("\nReading in data...", appendLF = FALSE)
 # General position data
 perTypeData			<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
 
+# DnaA data
+dnaA_clean_trim		<- readRDS(file.path(positionData_path, "bySpecies_dnaA_data.rds"))
+
 message("\rReading in data... done\n")
 
 # Open All_prot database
@@ -155,11 +158,21 @@ zoneRange_df	<- bind_rows(zoneRange_list)
 zoneRange_df$zoneName	<- c("oriVer", "oriHGT", "midOther", "flankVer", "terHGT", "flankVer", "midOther", "oriHGT", "oriVer", "oriHGT", "midOther")
 zoneRange_df$zoneType	<- c("Ver", "HGT", "Other", "Ver", "HGT", "Ver", "Other", "HGT", "Ver", "HGT", "Other")
 
+# Color by type
 zoneCol_df		<- data.frame(
 	zoneType = c("HGT", "Ver", "Other"),
-	zoneCol = alpha(c(wes_palette("Darjeeling1")[2:3], wes_palette("IsleofDogs1")[6]), 0.2),
+	zoneCol = c(wes_palette("Darjeeling1")[2:3], wes_palette("IsleofDogs1")[6]),
+	zoneCol_alpha = alpha(c(wes_palette("Darjeeling1")[2:3], wes_palette("IsleofDogs1")[6]), 0.2),
 	stringsAsFactors = FALSE)
 zoneRange_df	<- left_join(zoneRange_df, zoneCol_df, by = "zoneType")
+
+# Color by name
+zoneColbyName_dF	<- data.frame(
+	zoneName = c("oriVer", "oriHGT", "midOther", "flankVer", "terHGT"),
+	zoneColbyName = c(wes_palette("BottleRocket2")[2], wes_palette("Darjeeling1")[2], wes_palette("IsleofDogs1")[6], wes_palette("Darjeeling1")[3], wes_palette("Darjeeling2")[2]),
+	zoneColbyName_alpha = alpha(c(wes_palette("BottleRocket2")[2], wes_palette("Darjeeling1")[2], wes_palette("IsleofDogs1")[6], wes_palette("Darjeeling1")[3], wes_palette("Darjeeling2")[2]), 0.2),
+	stringsAsFactors = FALSE)
+zoneRange_df	<- left_join(zoneRange_df, zoneColbyName_dF, by = "zoneName")
 
 # Finall join the boundary df with the zone df
 zoneBoundRange_df	<- left_join(zoneBounds_padded, zoneRange_df, by = "boundary")
@@ -183,7 +196,7 @@ prelimBoundary_withZones_plot	<- linearXSpecies_verHGT_dens_plot +
 	# Boundary padding
 	geom_rect(data = zoneBoundRange_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
 	# Zone colouring
-	geom_rect(data = zoneBoundRange_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneBoundRange_df$zoneCol, inherit.aes = FALSE) +
+	geom_rect(data = zoneBoundRange_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneBoundRange_df$zoneCol_alpha, inherit.aes = FALSE) +
 	theme(
 		panel.grid.major.x = element_line(size = 0.5),
 		panel.grid.minor.x = element_blank())
@@ -201,6 +214,8 @@ finalBoundary		<- subset(zoneBoundRange_df, zoneMin < 0.5 & zoneMax > 0.5, selec
 zoneRangeToTer_df	<- subset(zoneBoundRange_df, boundary <= finalBoundary)
 zoneRangeToTer_df[nrow(zoneRangeToTer_df), c("boundary", "boundaryMin", "boundaryMax", "zoneMax", "zoneMax_pad")] <- c(rep(NA, 3), rep(0.5, 2))
 
+# Create a list for the zones - to be exported to other scripts
+zoneBoundaryList	<- list(fullRange = zoneRangeToOri_df, halfGenomeRange = zoneRangeToTer_df, expandedRange = zoneBoundRange_df)
 
 toOriDensity_withZones_plot	<- ggplot(data = normalPos_df, aes(x = distToOri, color = type)) +
 	scale_x_continuous(
@@ -223,7 +238,7 @@ toOriDensity_withZones_plot	<- ggplot(data = normalPos_df, aes(x = distToOri, co
 	# Boundary padding
 	geom_rect(data = zoneRangeToTer_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
 	# Zone colouring
-	geom_rect(data = zoneRangeToTer_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneRangeToTer_df$zoneCol, inherit.aes = FALSE) +
+	geom_rect(data = zoneRangeToTer_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneRangeToTer_df$zoneCol_alpha, inherit.aes = FALSE) +
 	# Coloring, title, themes etc..
 	scale_color_manual(values = all_HGT_Ver_cols) +
 	ggtitle("Exploratory zone boundary analysis") +
@@ -239,13 +254,15 @@ toOriDensity_withZones_plot	<- ggplot(data = normalPos_df, aes(x = distToOri, co
 	)
 
 
+
 # ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+# tRNA data analysis
 
-
-
+# List of the no-plasmid AG genbanj files + extract the acc_ass
 AG_noPlasmid_path	<- file.path(genome_path, "AG_genome_noPlasmid_gbffs")
-AG_noPlasmid_gbk_df	<- data.frame(fileNames = dir(path = AG_noPlasmid_path, pattern = "*.gbk$"), stringsAsFactors = FALSE)
-AG_noPlasmid_gbk_df$acc_ass	<- str_replace(AG_noPlasmid_gbk_df$fileNames, pattern="_genomic.gbk", replacement = "")
+AG_noPlasmid_gbk_df	<- data.frame(gbkFileName = dir(path = AG_noPlasmid_path, pattern = "*.gbk$"), stringsAsFactors = FALSE)
+AG_noPlasmid_gbk_df$acc_ass	<- str_replace(AG_noPlasmid_gbk_df$gbkFileName, pattern="_genomic.gbk", replacement = "")
 
 # Open the taxid / acc_ass translation table
 accAss_taxid_file	<- file.path(genome_path, "Genome_lists", "Acc_ass_taxid_table.tsv")
@@ -258,12 +275,30 @@ AG_noPlasmid_gbk_df	<- left_join(AG_noPlasmid_gbk_df, accAss_taxid_df, by = "acc
 # Remove the rearrange genomes
 AG_noPlasmid_gbk_df	<- subset(AG_noPlasmid_gbk_df, !taxid %in% outlierTaxid)
 
+
+# ------------------------------------------------ #
+# Genome length and binomial
+genome_len_tbl	<- dbSendQuery(dbConn, 'SELECT taxid, binomial, genome_l FROM t1 WHERE taxid == :taxidList LIMIT 1')
+dbBind(genome_len_tbl, param = list(taxidList = AG_noPlasmid_gbk_df$taxid))
+genome_len_df	<- dbFetch(genome_len_tbl)
+dbClearResult(genome_len_tbl)
+
+# Add the genome length to the table
+AG_noPlasmid_gbk_df	<- left_join(AG_noPlasmid_gbk_df, genome_len_df, by = "taxid")
+
+# Add the dnaA data to the table
+AG_noPlasmid_gbk_df	<- left_join(AG_noPlasmid_gbk_df, dnaA_clean_trim, by = "taxid")
+
+
+# ------------------------------------------------ #
 # Create an output folder to hold the tRNA fasta
 tRNA_output_path	<- file.path(giProcess_path, "tRNA_fasta")
 if (!dir.exists(tRNA_output_path)) dir.create(tRNA_output_path)
 
 # Extract the tRNA positions from the genbank file
-invisible(lapply(1:nrow(AG_noPlasmid_gbk_df), function(index) {
+tRNAOutput_files	<- lapply(1:nrow(AG_noPlasmid_gbk_df), function(index) {
+
+	message("Isolating tRNA locations in AG genomes...")
 
 	# Entry and output file name
 	AG_genbankEntry	<- AG_noPlasmid_gbk_df[index,]
@@ -272,182 +307,215 @@ invisible(lapply(1:nrow(AG_noPlasmid_gbk_df), function(index) {
 	# See the python script for usage instructions
 	system2("genbank_to_fasta.py",
 		args = paste0(
-			"-i ", file.path(AG_noPlasmid_path, AG_genbankEntry$fileNames),
+			"-i ", file.path(AG_noPlasmid_path, AG_genbankEntry$gbkFileName),
 			" -o ", file.path(tRNA_output_path, outputName),
 			" -m 'genbank' -s 'nt' -f 'tRNA' -d 'spacepipe' -q 'protein_id,locus_tag,gene,product,location' &>/dev/null"
 		)
 	)
-}))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	return(outputName)
+})
+# Add fasta name to df
+AG_noPlasmid_gbk_df$tRNA_fastaOut	<- unlist(tRNAOutput_files)
 
 
 # ------------------------------------------------ #
+# For each genome process the extract tRNA data - names / positions / etc..
+tRNA_entries	<- lapply(1:nrow(AG_noPlasmid_gbk_df), function(index) {
 
-# How much of the genome are the boundary zones?
-transZoneTotal_length	<- sum(zoneBoundary_df$boundaryMax - zoneBoundary_df$boundaryMin, na.rm = TRUE)
+	# Entry and output file name
+	AG_genbankEntry	<- AG_noPlasmid_gbk_df[index,]
 
-HTgenesInTransZones_list	<- lapply(1:nrow(zoneBoundary_df), function(boundaryIndex) {
+	# Read fasta file
+	dataRead		<- read.fasta(file = file.path(tRNA_output_path, AG_genbankEntry$tRNA_fastaOut), strip.desc = TRUE)
 
-	boundaryRow	<- zoneBoundary_df[boundaryIndex,]
-	boundaryVal	<- boundaryRow$boundary
+	# For each sequence, process the annotations - we want to get the locus tag, names of the tRNA, and position
+	byRNA_dataList	<- lapply(dataRead, function(sequence) {
 
-	transZoneMin	<- boundaryRow$boundaryMin
-	transZoneMax	<- boundaryRow$boundaryMax
+		seqHeader_raw	<- attr(sequence, "Annot")
+		seqHeader_split	<- unlist(str_split(seqHeader_raw, pattern = " \\| "))
+		
+		# Assign some values
+		locus	<- seqHeader_split[2]
+		name	<- seqHeader_split[4]
 
-	if (is.na(boundaryVal)) return(NA)
+		# Process the position character string
+		rawPos		<- seqHeader_split[5]
+		splitPos	<- unlist(str_split(rawPos, pattern = ":+|\\s+"))
 
-	HGTgenesInTransZone <- subset(perTypeData$lHGT$'4'$allPosData, relGeneStart >= transZoneMin & relGeneEnd >= transZoneMin & relGeneStart <= transZoneMax & relGeneEnd <= transZoneMax & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
+		# Assign the strand + relative strand to dnaA
+		strand		<- splitPos[3]
+		if (identical(strand, AG_genbankEntry$oriStrand)) relStrand <- "same" else relStrand <- "diff"
 
-	HGTgenesInTransZone$transZoneID	<- boundaryRow$boundIndex
+		# Assign start/end based on strand
+		positionsNumeric	<- as.numeric(splitPos[1:2])
+		if (identical(strand, "Forward")) {
+			geneStart	<- positionsNumeric[1]
+			geneEnd		<- positionsNumeric[2]
+		} else {
+			geneStart	<- positionsNumeric[2]
+			geneEnd		<- positionsNumeric[1]
+		}
 
-	return(HGTgenesInTransZone)
+		# Get relative start position
+		relStart	<- genomeRelativePosition(geneStart, oriStart = AG_genbankEntry$oriStart, oriEnd = AG_genbankEntry$oriEnd, oriStrand = AG_genbankEntry$oriStrand, genomeLength =AG_genbankEntry$genome_l)
+		relEnd		<- genomeRelativePosition(geneEnd, oriStart = AG_genbankEntry$oriStart, oriEnd = AG_genbankEntry$oriEnd, oriStrand = AG_genbankEntry$oriStrand, genomeLength =AG_genbankEntry$genome_l)
+		distToOri	<- ifelse(relStart > 0.5, 1 - relStart, relStart)
+
+		# Return data frame for each tRNA
+		out_df	<- data.frame(
+			locus = locus,
+			name = name,
+			taxid = AG_genbankEntry$taxid,
+			binomial = AG_genbankEntry$binomial,
+			geneStart = geneStart,
+			geneEnd = geneEnd,
+			strand = strand,
+			relStart = relStart,
+			relEnd = relEnd,
+			relStrand = relStrand,
+			distToOri = distToOri,
+			stringsAsFactors = FALSE)
+
+		return(out_df)
+	})
+
+	byRNA_df	<- bind_rows(byRNA_dataList)
+	return(byRNA_df)
 })
+crossSpecies_tRNA_data	<- bind_rows(tRNA_entries)
 
-HTgenesInTransZones_list	<- HTgenesInTransZones_list[!is.na(HTgenesInTransZones_list)]
-HTgenesInTransZones_df	<- bind_rows(HTgenesInTransZones_list)
+# ------------------------------------------------------------------------------------- #
 
+# Expand the tRNA data an extra 25% to avoid boundary effects @ Origin
+firstQ	<- subset(crossSpecies_tRNA_data, relStart > 0 & relStart < 0.25)
+firstQ$relStart	<- firstQ$relStart + 1
+crossSpecies_tRNA_ext	<- bind_rows(crossSpecies_tRNA_data, firstQ)
 
-
-HTgenesInZones_list	<- lapply(1:nrow(zoneBoundary_df), function(boundaryIndex) {
-
-	boundaryRow	<- zoneBoundary_df[boundaryIndex,]
-
-	zoneMin	<- boundaryRow$zoneMin
-	zoneMax	<- boundaryRow$zoneMax
-
-	HGTgenesInZone <- subset(perTypeData$lHGT$'4'$allPosData, relGeneStart >= zoneMin & relGeneEnd >= zoneMin & relGeneStart <= zoneMax & relGeneEnd <= zoneMax & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
-
-	HGTgenesInZone$zoneID	<- boundaryRow$zoneType
-
-	return(HGTgenesInZone)
-})
-
-HTgenesInZones_list	<- HTgenesInZones_list[!is.na(HTgenesInZones_list)]
-HTgenesInZones_df	<- bind_rows(HTgenesInZones_list)
-
-
-
-
-
-
-
-## Non-rearranged HT genes
-HTgenes_noOutlier	<- subset(perTypeData$lHGT$`4`$allPosData, !taxid %in% outlierTaxid)
-
-# Total HT genes in 23 non-rearranged genomes == 9034. 1838 orthGroups. 1238 recent HTgenes (13.4%)
-nrow(HTgenes_noOutlier)
-length(unique(HTgenes_noOutlier$orthGroup))
-length(which(HTgenes_noOutlier$Subgroup == TRUE))
-
-# Total HT genes within transition zones in 23 non-rearranged genomes == 983 (10.8% of all HT genes). 415 orthGroups (22.5% of all orthGroups). 115 recent HTgenes (27.7%)
-nrow(HTgenesInTransZones_df)
-length(unique(HTgenesInTransZones_df$orthGroup))
-length(which(HTgenesInTransZones_df$Subgroup == TRUE))
-
-
-ggplot(data = subset(HTgenes_noOutlier, Subgroup == TRUE), aes(x = relGeneStart)) +
+# Plot the tRNA density over zones
+tRNA_withZones_plot	<- ggplot(data = crossSpecies_tRNA_ext, aes(x = relStart, y = ..scaled..)) +
 	scale_x_continuous(
+		expand = expand_scale(mult = c(0.025, 0.025))
 		name = "Normalized genome position",
-		limits = c(0, 1),
-		breaks = seq(0, 1, by = 0.5),
+		limits = c(0, 1.25),
+		breaks = seq(0, 1.25, by = 0.5),
 		labels = c("Origin", "Terminus", "Origin"),
-		minor_breaks = seq(0, 1.25, by = 0.05)) +
-	geom_density(adjust = 1/20) +
+		minor_breaks = seq(0, 1.25, by = ((1 / 360) * 30)),
+		sec.axis = dup_axis(
+			name = NULL,
+			breaks = rowMeans(zoneBoundRange_df[c("zoneMin", "zoneMax")]),
+			labels = zoneBoundRange_df$zoneName)
+	) +
+	scale_y_continuous(name = "tRNA Density") +
+	# Plot density lines
+	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/15, size = 1) +
 	# Boundary lines
-	geom_vline(xintercept = zoneBoundary_df$boundary, color = boundaryCol, linetype = "dashed") +
+	geom_vline(xintercept = zoneBoundRange_df$boundary, color = boundCol, linetype = "dashed") +
 	# Boundary padding
-	geom_rect(data = zoneBoundary_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundaryCol, 0.4), inherit.aes = FALSE) +
+	geom_rect(data = zoneBoundRange_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
 	# Zone colouring
-	geom_rect(data = zoneBoundary_df, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = zone_cols[1:9], inherit.aes = FALSE) +
+	geom_rect(data = zoneBoundRange_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneBoundRange_df$zoneCol_alpha, inherit.aes = FALSE) +
+	ggtitle("tRNA position on boundary analysis") +
+	scale_color_manual(values = all_HGT_Ver_cols) +
 	theme_classic() +
 	theme(
 		panel.grid.major.x = element_line(size = 0.5),
-		panel.grid.minor.x = element_line(size = 0.0, linetype = "longdash"),
+		panel.grid.minor.x = element_blank(),
 		axis.text = element_text(size = 12),
-		axis.title = element_text(size = 14))
+		axis.title = element_text(size = 14),
+		axis.ticks.y = element_blank(),
+		axis.ticks.length = unit(0.6, "lines"),
+		plot.title = element_text(hjust = 0.5, size = 16)
+	)
 
 
+# ------------------------------------------------------------------------------------- #
+message("\nSaving objects...", appendLF = FALSE)
 
-## Quck COG
-transZoneCOG_df	<- as.data.frame(sort(table(unlist(HTgenesInTransZones_df$COGcat)), decreasing = TRUE))
-names(transZoneCOG_df)	<- c("COG", "transZone")
+saveRDS(object = zoneBoundaryList, file = file.path(positionData_path, "AG_zoneBoundaries.rds"))
 
-allHGTCOGs_df	<- as.data.frame(sort(table(unlist(HTgenes_noOutlier$COGcat)), decreasing = TRUE))
-names(allHGTCOGs_df)	<- c("COG", "all_HTgenes")
-
-
-ggplot(data = subset(HTgenes_noOutlier, COGcat == "M"), aes(x = relGeneStart)) +
-	scale_x_continuous(
-		name = "Normalized genome position",
-		limits = c(0, 1),
-		breaks = seq(0, 1, by = 0.5),
-		labels = c("Origin", "Terminus", "Origin"),
-		minor_breaks = seq(0, 1.25, by = 0.05)) +
-	geom_density(n = 2^12, adjust = 1/50) +
-	# Boundary lines
-	geom_vline(xintercept = zoneBoundary_df$boundary, color = boundaryCol, linetype = "dashed") +
-	# Boundary padding
-	geom_rect(data = zoneBoundary_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundaryCol, 0.4), inherit.aes = FALSE) +
-	# Zone colouring
-	geom_rect(data = zoneBoundary_df, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = zone_cols[1:9], inherit.aes = FALSE) +
-	theme_classic() +
-	theme(
-		panel.grid.major.x = element_line(size = 0.5),
-		panel.grid.minor.x = element_line(size = 0.0, linetype = "longdash"),
-		axis.text = element_text(size = 12),
-		axis.title = element_text(size = 14))
+message("\rSaving objects... done")
 
 
 
 
 
-nearOriHGT_M_genes		<- subset(HTgenesInZones_df, COGcat == "M")
-nearOriHGT_M_protIDs	<- nearOriHGT_M_genes$protID
-
-nearOriHGT_M_prod_tbl	<- dbSendQuery(dbConn, 'SELECT * FROM t1 WHERE protID = :protIDs')
-dbBind(nearOriHGT_M_prod_tbl, param = list(protIDs = nearOriHGT_M_protIDs))
-nearOriHGT_M_prod_df	<- dbFetch(nearOriHGT_M_prod_tbl)
-dbClearResult(nearOriHGT_M_prod_tbl)
-
-nearOriHGT_M_groups		<- unique(nearOriHGT_M_prod_df$OrthGroup)
-# Are all orthologs of these genes in the same region in Geobacillus spp?
-nearOriHGT_M_allGenes	<- subset(perTypeData$lHGT$'4'$allPosData, orthGroup %in% nearOriHGT_M_groups & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
-
-ggplot(data = nearOriHGT_M_allGenes, aes(x = relGeneStart)) +
-	scale_x_continuous(
-		name = "Normalized genome position",
-		limits = c(0, 1),
-		breaks = seq(0, 1, by = 0.5),
-		labels = c("Origin", "Terminus", "Origin"),
-		minor_breaks = seq(0, 1.25, by = 0.05)) +
-	geom_density(n = 2^12, adjust = 1/50) +
-	# Boundary lines
-	geom_vline(xintercept = zoneBoundary_df$boundary, color = boundaryCol, linetype = "dashed") +
-	# Boundary padding
-	geom_rect(data = zoneBoundary_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundaryCol, 0.4), inherit.aes = FALSE) +
-	# Zone colouring
-	geom_rect(data = zoneBoundary_df, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = zone_cols[1:9], inherit.aes = FALSE) +
-	theme_classic() +
-	theme(
-		panel.grid.major.x = element_line(size = 0.5),
-		panel.grid.minor.x = element_line(size = 0.0, linetype = "longdash"),
-		axis.text = element_text(size = 12),
-		axis.title = element_text(size = 14))
 
 
+
+
+
+
+# # ------------------------------------------------ #
+
+# # How much of the genome are the boundary zones?
+# transZoneTotal_length	<- sum(zoneBoundary_df$boundaryMax - zoneBoundary_df$boundaryMin, na.rm = TRUE)
+
+# HTgenesInTransZones_list	<- lapply(1:nrow(zoneBoundary_df), function(boundaryIndex) {
+
+# 	boundaryRow	<- zoneBoundary_df[boundaryIndex,]
+# 	boundaryVal	<- boundaryRow$boundary
+
+# 	transZoneMin	<- boundaryRow$boundaryMin
+# 	transZoneMax	<- boundaryRow$boundaryMax
+
+# 	if (is.na(boundaryVal)) return(NA)
+
+# 	HGTgenesInTransZone <- subset(perTypeData$lHGT$'4'$allPosData, relGeneStart >= transZoneMin & relGeneEnd >= transZoneMin & relGeneStart <= transZoneMax & relGeneEnd <= transZoneMax & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
+
+# 	HGTgenesInTransZone$transZoneID	<- boundaryRow$boundIndex
+
+# 	return(HGTgenesInTransZone)
+# })
+
+# HTgenesInTransZones_list	<- HTgenesInTransZones_list[!is.na(HTgenesInTransZones_list)]
+# HTgenesInTransZones_df	<- bind_rows(HTgenesInTransZones_list)
+
+
+
+# HTgenesInZones_list	<- lapply(1:nrow(zoneBoundary_df), function(boundaryIndex) {
+
+# 	boundaryRow	<- zoneBoundary_df[boundaryIndex,]
+
+# 	zoneMin	<- boundaryRow$zoneMin
+# 	zoneMax	<- boundaryRow$zoneMax
+
+# 	HGTgenesInZone <- subset(perTypeData$lHGT$'4'$allPosData, relGeneStart >= zoneMin & relGeneEnd >= zoneMin & relGeneStart <= zoneMax & relGeneEnd <= zoneMax & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
+
+# 	HGTgenesInZone$zoneID	<- boundaryRow$zoneType
+
+# 	return(HGTgenesInZone)
+# })
+
+# HTgenesInZones_list	<- HTgenesInZones_list[!is.na(HTgenesInZones_list)]
+# HTgenesInZones_df	<- bind_rows(HTgenesInZones_list)
+
+
+
+
+
+
+
+# ## Non-rearranged HT genes
+# HTgenes_noOutlier	<- subset(perTypeData$lHGT$`4`$allPosData, !taxid %in% outlierTaxid)
+
+# # Total HT genes in 23 non-rearranged genomes == 9034. 1838 orthGroups. 1238 recent HTgenes (13.4%)
+# nrow(HTgenes_noOutlier)
+# length(unique(HTgenes_noOutlier$orthGroup))
+# length(which(HTgenes_noOutlier$Subgroup == TRUE))
+
+# # Total HT genes within transition zones in 23 non-rearranged genomes == 983 (10.8% of all HT genes). 415 orthGroups (22.5% of all orthGroups). 115 recent HTgenes (27.7%)
+# nrow(HTgenesInTransZones_df)
+# length(unique(HTgenesInTransZones_df$orthGroup))
+# length(which(HTgenesInTransZones_df$Subgroup == TRUE))
+
+
+
+# ## Quck COG
+# transZoneCOG_df	<- as.data.frame(sort(table(unlist(HTgenesInTransZones_df$COGcat)), decreasing = TRUE))
+# names(transZoneCOG_df)	<- c("COG", "transZone")
+
+# allHGTCOGs_df	<- as.data.frame(sort(table(unlist(HTgenes_noOutlier$COGcat)), decreasing = TRUE))
+# names(allHGTCOGs_df)	<- c("COG", "all_HTgenes")
 
 

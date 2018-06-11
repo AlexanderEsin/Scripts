@@ -5,7 +5,7 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("RSQLite", "dplyr","ggplot2", "ggpubr", "wesanderson", "gridExtra")
+p_load("RSQLite", "plyr", "dplyr","ggplot2", "ggpubr", "wesanderson", "gridExtra")
 
 
 # ------------------------------------------------------------------------------------- #
@@ -19,32 +19,23 @@ perTypeData			<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
 # Per-type COG data
 perTypeCOG_data		<- readRDS(file.path(positionData_path, "AG_perTypeCOGData.rds"))
 
-# taxdmp nodes & names data
-nodes_data			<- readRDS(file.path(taxdmp_path, "nodes.rds"))
-names_data			<- readRDS(file.path(taxdmp_path, "names.rds"))
-
-# Subdivision key
-subDivisionKey_file	<- file.path(positionData_path, "subDivisionKeyData.rds")
-if(!file.exists(subDivisionKey_file)) {
-	stop("The subdivision data file \"", subDivisionKey_file, "\" is required.\nRun the subDivisionPrep.R script!")
-} else {
-	subDivisionKey_data	<- readRDS(file.path(positionData_path, "subDivisionKeyData.rds"))
-}
+# Zone list
+zoneBoundaryList	<- readRDS(file.path(positionData_path, "AG_zoneBoundaries.rds"))
 
 message("\rReading in data... done\n")
 
 # ------------------------------------------------------------------------------------- #
 # Output path for figures
 orthPositionFig_path	<- file.path(figureOutput_path, "orthPosition")
+if(!dir.exists(orthPositionFig_path)) dir.create(orthPositionFig_path)
 
 # ------------------------------------------------------------------------------------- #
 # Set global quartz options
-quartz.options(canvas = "#333233", bg = "#333233", type = "png", dpi = 300)
+quartz.options(canvas = "white", bg = "white")
 
 # ------------------------------------------------------------------------------------- #
 # Open All_prot database
 dbConn			<- dbConnect(RSQLite::SQLite(), allProtDB_path)
-
 
 # ------------------------------------------------------------------------------------- #
 
@@ -53,12 +44,11 @@ uniqueCOGs		<- unique(unlist(perTypeData$All$allPosData$COGcat))
 
 # For each COG and each individual HGT event belonging to that COG, find the range of distance to origin
 # Calculate the max range and SD of the gene positions per-event/per-COG
-byCOG_geneSpread_list	<- lapply(uniqueCOGs, function(COG) {
+byCOG_geneSpread_list	<- mclapply(uniqueCOGs, function(COG) {
 
 	perCOG_data		<- perTypeCOG_data$lHGT$perCOGdata[[COG]]$allData
 	eventUnique		<- unique(perCOG_data$eventIndex)
 	eventNumber		<- length(eventUnique)
-
 
 	byEventSpread_list	<- lapply(eventUnique, function(hgtEvent) {
 
@@ -70,18 +60,14 @@ byCOG_geneSpread_list	<- lapply(uniqueCOGs, function(COG) {
 
 		# Calculate relative distance to origin (ori-ter symmetry agnostic) and calculate SD on that
 		oriDists		<- unlist(lapply(perEvent_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
-		eventDistSD		<- sd(oriDists)
-		eventDistMax	<- max(oriDists) - min(oriDists)
+		eventDistSD		<- sd(perEvent_data$distToOri)
+		eventDistMax	<- max(perEvent_data$distToOri) - min(perEvent_data$distToOri)
 
 		# All members of event must belong to single Orth group. Sanity check
 		orthGroup	<- unique(perEvent_data$orthGroup)
 		if (length(orthGroup) > 1) {
 			stop("Should not have more than one group for HGT event")
 		}
-
-		# Drop the CircStart and CircEnd columns, because combining circular vectors with bind_rows throws warnings
-		perEvent_data	<- subset(perEvent_data, select = -c(CircStart, CircEnd))
-		perEvent_data$dist2ori	<- oriDists
 
 		# Summary df
 		summary_df	<- data.frame(COG = COG, orthGroup = orthGroup, eventIndex = hgtEvent, totalGenes = numTotal, geneSD = eventDistSD, geneDistMax = eventDistMax, stringsAsFactors = FALSE)
@@ -92,7 +78,7 @@ byCOG_geneSpread_list	<- lapply(uniqueCOGs, function(COG) {
 	byEventAllData_df 	<- bind_rows(lapply(byEventSpread_list, function(element) return(element$allData)))
 	byEventSummary_df 	<- bind_rows(lapply(byEventSpread_list, function(element) return(element$summary_df)))
 	return(list(allData = byEventAllData_df, summaryData = byEventSummary_df))
-})
+}, mc.cores = 14)
 # Combine the cross-COG results
 byCOG_geneSpreadAll_df		<- bind_rows(lapply(byCOG_geneSpread_list, function(element) return(element$allData)))
 byCOG_geneSpreadSummary_df	<- bind_rows(lapply(byCOG_geneSpread_list, function(element) return(element$summaryData)))
@@ -108,15 +94,27 @@ byCOG_geneSpreadSummary_df$COG	<- factor(byCOG_geneSpreadSummary_df$COG, levels 
 
 # Plot the maximum distance between genes (relative to distance from Ori) for every lHGT event
 byMaxGeneDist_perEvent_boxplot	<- ggplot(data = subset(byCOG_geneSpreadSummary_df, totalGenes > 1), aes(x = COG, y = geneDistMax, group = COG)) +
-	geom_boxplot(fill = "grey40", color = "#D9D9D9") +
-	geom_label(data = eventNumberByCOG_df, aes(x = COG, y = 0.5, label = Freq), fill = "#333233", color = "#D9D9D9", inherit.aes = FALSE) +
-	darkTheme
+	scale_y_continuous(
+		name = "Max. distance between two homologs in the same gene family",
+		limits = c(0, 0.55),
+		breaks = seq(0, 0.5, by = 0.1)
+	) +
+	geom_boxplot(fill = wes_palette("Royal1")[1], color = axisCol) +
+	geom_label(data = eventNumberByCOG_df, aes(x = COG, y = 0.55, label = Freq), fill = "white", color = axisCol, inherit.aes = FALSE) +
+	ggtitle("Comparing the distribution of genes within gene families - accounting for symmetrical inversions") +
+	lightTheme
 
 # Plot the SD of the distance between genes (relative to distance from Ori) for every lHGT event
 byGeneSD_perEvent_boxplot	<- ggplot(data = subset(byCOG_geneSpreadSummary_df, totalGenes > 1), aes(x = COG, y = geneSD, group = COG)) +
-	geom_boxplot(fill = "grey40", color = "#D9D9D9") +
-	geom_label(data = eventNumberByCOG_df, aes(x = COG, y = 0.3, label = Freq), fill = "#333233", color = "#D9D9D9", inherit.aes = FALSE) +
-	darkTheme
+	scale_y_continuous(
+		name = "Standard deviation between homologs in the same gene family",
+		limits = c(0, 0.35),
+		breaks = seq(0, 0.3, by = 0.1)
+	) +
+	geom_boxplot(fill = wes_palette("Royal1")[1], color = axisCol) +
+	geom_label(data = eventNumberByCOG_df, aes(x = COG, y = 0.35, label = Freq), fill = "white", color = axisCol, inherit.aes = FALSE) +
+	ggtitle("Comparing the SD of genes within gene families - accounting for symmetrical inversions") +
+	lightTheme
 
 
 
@@ -129,14 +127,16 @@ multiEventGroups_list	<- unique(byCOG_geneSpreadSummary_df$orthGroup[duplicated(
 # Compare this to the other events in the same gene family.
 # Naive assumption: independent events in same gene family should be positioned nearby
 perGroup_list	<- lapply(multiEventGroups_list, function(orthGroup) {
+
 	perGroup_data	<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$orthGroup == orthGroup),]
 	perGroup_events	<- unique(perGroup_data$eventIndex)
 
 	perEvent_list	<- lapply(perGroup_events, function(hgtEvent) {
 		perEvent_data	<- perGroup_data[which(perGroup_data$eventIndex == hgtEvent),]
-		oriDists		<- unlist(lapply(perEvent_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
-		perEvent_sd		<- sd(oriDists)
-		perEvent_mean	<- mean(oriDists)
+
+		perEvent_sd		<- sd(perEvent_data$distToOri)
+		perEvent_mean	<- mean(perEvent_data$distToOri)
+
 		out_df			<- data.frame(orthGroup = orthGroup, eventIndex = hgtEvent, COGcat = unique(unlist(perEvent_data$COGcat)), numGenes = nrow(perEvent_data), meanLocation = perEvent_mean, sdLocation = perEvent_sd, stringsAsFactors = FALSE)
 		return(out_df)
 	})
@@ -176,8 +176,7 @@ randEventRange	<- unlist(lapply(1:length(events_A), function(eventNum) {
 
 	eventComparison	<- unlist(lapply(c(eventA, eventB), function(event) {
 		event_data		<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$eventIndex == event),]
-		event_oriDist	<- unlist(lapply(event_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
-		event_mean		<- mean(event_oriDist)
+		event_mean		<- mean(event_data$distToOri)
 		return(event_mean)
 	}))
 
@@ -192,13 +191,11 @@ events_A	<- sample(unique(byCOG_geneSpreadAll_df$eventIndex), numObserv)
 randInCOGEventRange	<- unlist(lapply(1:length(events_A), function(eventNum) {
 	eventA		<- events_A[eventNum]
 	event_COG	<- unique(unlist(byCOG_geneSpreadAll_df$COG[which(byCOG_geneSpreadAll_df$eventIndex == eventA)]))
-	print(event_COG)
 	eventB		<- sample(unique(subset(byCOG_geneSpreadAll_df, COGcat == event_COG, select = eventIndex, drop = TRUE)), 1)
 
 	eventComparison	<- unlist(lapply(c(eventA, eventB), function(event) {
-		event_data		<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$eventIndex == event),]
-		event_oriDist	<- unlist(lapply(event_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
-		event_mean		<- mean(event_oriDist)
+		event_data		<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$eventIndex == event),] 
+		event_mean		<- mean(event_data$distToOri)
 		return(event_mean)
 	}))
 
@@ -243,10 +240,11 @@ plotCols			<- wes_palette("Rushmore1")[1:5]
 # Produce the boxplot
 multiInGroupEvents_boxplot <- ggplot(data = compToRandom_df, aes(x = type, y = range, fill = type)) +
 	scale_y_continuous(name = "Max range in mean location of HGT events") +
-	geom_boxplot(color = "#D9D9D9") +
+	geom_boxplot(color = axisCol) +
 	scale_fill_manual(values = plotCols, guide = FALSE) +
-	stat_compare_means(mapping = aes(x = type, y = range), comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni", color = "#D9D9D9", size = 0.5, label = "p.format") +
-	darkTheme +
+	stat_compare_means(mapping = aes(x = type, y = range), comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni", color = textCol, size = 0.5, label = "p.format") +
+	lightTheme +
+	ggtitle("Comparing distance between lHGT homologs acquired in multiple events") +
 	theme(
 		axis.title.x = element_blank(),
 		panel.grid.major.x = element_blank()
@@ -257,32 +255,42 @@ multiInGroupEvents_boxplot <- ggplot(data = compToRandom_df, aes(x = type, y = r
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 
-# Extract all the dnaA genes for the 
-dnaA_protID_list_file	<- file.path(position_path, "dnaA_protIDs.txt")
-dnaA_protIDs			<- read.table(file = dnaA_protID_list_file, sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+dnaA_clean_file	<- file.path(positionData_path, "bySpecies_dnaA_data.rds")
+if (file.exists(dnaA_clean_file)) {
+	dnaA_clean_trim	<- readRDS(dnaA_clean_file)
 
-# 4982 entries in this table, of which 4975 are unique (so 7 genomes have 2x dnaA gene?)
-dnaA_data		<- dbSendQuery(dbConn, 'SELECT * FROM t1 WHERE protID = :protIDs')
-dbBind(dnaA_data, param = list(protIDs = dnaA_protIDs))
-dnaA_data_df	<- dbFetch(dnaA_data)
-dbClearResult(dnaA_data)
+	# Read in the species subgroupings file (result of Scripts/Geo_again/Genomes/8.Identify_species_subgroupings.R)
+	speciesSubgroups_file	<- file.path(genome_path, "Genome_lists", "Species_groupings.tsv")
+	speciesSubgroups_df		<- read.table(speciesSubgroups_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE, quote = "")
 
-# Clean DNAa table to contain only taxid entries with one DNAa gene
-duplDNAa_taxids	<- dnaA_data_df$taxid[which(duplicated(dnaA_data_df$taxid))]
-dnaA_clean_df	<- dnaA_data_df[which(!dnaA_data_df$taxid %in% duplDNAa_taxids),]
+} else {
+	# Extract all the dnaA genes for the 
+	dnaA_protID_list_file	<- file.path(position_path, "dnaA_protIDs.txt")
+	dnaA_protIDs			<- read.table(file = dnaA_protID_list_file, sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
 
-# Clean dnaA table to not contain entries that are designated to be on plasmids
-dnaA_clean_df	<- dnaA_clean_df[which(!dnaA_clean_df$plasmid == "T"),]
+	# 4982 entries in this table, of which 4975 are unique (so 7 genomes have 2x dnaA gene?)
+	dnaA_data		<- dbSendQuery(dbConn, 'SELECT * FROM t1 WHERE protID = :protIDs')
+	dbBind(dnaA_data, param = list(protIDs = dnaA_protIDs))
+	dnaA_data_df	<- dbFetch(dnaA_data)
+	dbClearResult(dnaA_data)
 
-# Read in the species subgroupings file (result of Scripts/Geo_again/Genomes/8.Identify_species_subgroupings.R)
-speciesSubgroups_file	<- file.path(genome_path, "Genome_lists", "Species_groupings.tsv")
-speciesSubgroups_df		<- read.table(speciesSubgroups_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE, quote = "")
+	# Clean DNAa table to contain only taxid entries with one DNAa gene
+	duplDNAa_taxids	<- dnaA_data_df$taxid[which(duplicated(dnaA_data_df$taxid))]
+	dnaA_clean_df	<- dnaA_data_df[which(!dnaA_data_df$taxid %in% duplDNAa_taxids),]
 
-# Select just the columns we need
-dnaA_clean_trim	<- subset(dnaA_clean_df, select = c(taxid, gene_start, gene_end, strand))
-names(dnaA_clean_trim)	<- c("taxid", "oriStart", "oriEnd", "oriStrand")
+	# Clean dnaA table to not contain entries that are designated to be on plasmids
+	dnaA_clean_df	<- dnaA_clean_df[which(!dnaA_clean_df$plasmid == "T"),]
 
-saveRDS(object = dnaA_clean_trim, file = file.path(positionData_path, "bySpecies_dnaA_data.rds"))
+	# Read in the species subgroupings file (result of Scripts/Geo_again/Genomes/8.Identify_species_subgroupings.R)
+	speciesSubgroups_file	<- file.path(genome_path, "Genome_lists", "Species_groupings.tsv")
+	speciesSubgroups_df		<- read.table(speciesSubgroups_file, sep = "\t", header = TRUE, stringsAsFactors = FALSE, quote = "")
+
+	# Select just the columns we need
+	dnaA_clean_trim	<- subset(dnaA_clean_df, select = c(taxid, gene_start, gene_end, strand))
+	names(dnaA_clean_trim)	<- c("taxid", "oriStart", "oriEnd", "oriStrand")
+
+	saveRDS(object = dnaA_clean_trim, file = file.path(positionData_path, "bySpecies_dnaA_data.rds"))
+}
 
 
 # ------------------------------------------------------------------------------------- #
@@ -295,28 +303,27 @@ soloEventGroups_list	<- byCOG_geneSpreadSummary_df[which(!byCOG_geneSpreadSummar
 soloEventData_list		<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$orthGroup %in% soloEventGroups_list$orthGroup),]
 
 
-byCOGDispersionSolo_l	<- lapply(unique(unlist(soloEventData_list$COGcat)), function(COG) {
+byCOGDispersionSolo_l	<- mclapply(unique(unlist(soloEventData_list$COGcat)), function(COG) {
 
 	byCOGsoloEvent_data	<- soloEventData_list[which(soloEventData_list$COGcat == COG),]
 	uniqueGroups		<- unique(byCOGsoloEvent_data$orthGroup)
 
 	perCOGbyGroup_list	<- lapply(uniqueGroups, function(group) {
 		byGroup_data	<- byCOGsoloEvent_data[which(byCOGsoloEvent_data$orthGroup == group),]
-		oriDists		<- unlist(lapply(byGroup_data$relGeneStart, function(geneStart) ifelse(geneStart > 0.5, 1 - geneStart, geneStart)))
-		meanLocation	<- mean(oriDists)
-		sdLocation		<- sd(oriDists)
+		meanLocation	<- mean(byGroup_data$distToOri)
+		sdLocation		<- sd(byGroup_data$distToOri)
 		out_df			<- data.frame(orthGroup = group, COGcat = COG, numGenes = nrow(byGroup_data), meanLocation = meanLocation, sdLocation = sdLocation, stringsAsFactors = FALSE)
 		return(out_df)
 	})
 
 	perCOGbyGroup_df	<- bind_rows(perCOGbyGroup_list)
 	return(perCOGbyGroup_df)
-})
+}, mc.cores = 14)
 byCOGDispersionSolo_df	<- bind_rows(byCOGDispersionSolo_l)
 
 # ------------------------------------------------------------------------------------- #
 # SuperGroup determination - we want to be able to filter orthologs by some taxonomic groups
-superGroups		<- c("Bacillaceae", "Clostridia", "Bacillales")
+superGroups		<- c("Bacillaceae", "Clostridia")
 
 recalculateSGroups		<- TRUE
 rdsSuperGroup_file		<- file.path(positionData_path, "parentSpecies_bySupergroup.rds")
@@ -332,6 +339,10 @@ if (file.exists(rdsSuperGroup_file)) {
 
 if (recalculateSGroups) {
 	message("Recalculating taxonomic groupings")
+	# Read in the names and nodes data
+	nodes_data			<- readRDS(file.path(taxdmp_path, "nodes.rds"))
+	names_data			<- readRDS(file.path(taxdmp_path, "names.rds"))
+
 	# Identify the parentSpecies taxids that belong to desired superGroups
 	bySupergroupTaxid_list	<- lapply(superGroups, taxidsBySupergroup, speciesGroupings = speciesSubgroups_df, nodes_data = nodes_data, names_data = names_data)
 	names(bySupergroupTaxid_list)	<- superGroups
@@ -346,32 +357,44 @@ if (recalculateSGroups) {
 # All COG categories in all solo event Data
 allSoloCOGCat	<- unlist(unique(soloEventData_list$COGcat))
 
+
 # All ortholog data
 perCOGOrth_data			<- lapply(allSoloCOGCat, processOrthologPosition,
 	orthData = byCOG_geneSpreadAll_df,
 	dbConn = dbConn,
-	superGroupTaxid_list = bySupergroupTaxid_list)
+	dnaA_data = dnaA_clean_trim,
+	speciesSubgroups = speciesSubgroups_df,
+	superGroupTaxid_list = bySupergroupTaxid_list,
+	outlierTaxid = outlierTaxid)
 names(perCOGOrth_data)	<- allSoloCOGCat
+gc()
 
 
 # Orthologs of AG HGT groups, of which all members are in Ori/Near-Ori
 perCOGOriOrth_data		<- lapply(allSoloCOGCat, processOrthologPosition,
 	orthData = soloEventData_list,
-	distRange = c(0, 0.25),
 	dbConn = dbConn,
-	superGroupTaxid_list = bySupergroupTaxid_list
+	dnaA_data = dnaA_clean_trim,
+	speciesSubgroups = speciesSubgroups_df,
+	superGroupTaxid_list = bySupergroupTaxid_list,
+	outlierTaxid = outlierTaxid,
+	distRange = c(0, 0.25)
 )
 names(perCOGOriOrth_data)	<- allSoloCOGCat
+gc()
 
 # Orthologs of AG HGT groups, of which all members are in Ter/Near-Ter
 perCOGTerOrth_data		<- lapply(allSoloCOGCat, processOrthologPosition,
 	orthData = soloEventData_list,
-	distRange = c(0.25, 0.5),
 	dbConn = dbConn,
-	superGroupTaxid_list = bySupergroupTaxid_list
+	dnaA_data = dnaA_clean_trim,
+	speciesSubgroups = speciesSubgroups_df,
+	superGroupTaxid_list = bySupergroupTaxid_list,
+	outlierTaxid = outlierTaxid,
+	distRange = c(0.25, 0.5)
 )
 names(perCOGTerOrth_data)	<- allSoloCOGCat
-
+gc()
 
 # ------------------------------------------------------------------------------------- #
 # Define the ORI-enriched and TER-enriched functional COGs
@@ -383,71 +406,96 @@ all_terBias_data	<- bind_rows(lapply(terBiasCOGs, function(COG) return(perCOGOrt
 all_oriBias_data	<- bind_rows(lapply(oriBiasCOGs, function(COG) return(perCOGOrth_data[[COG]]$supergroupCompareData)))
 all_posBias_data	<- bind_rows(list(all_oriBias_data, all_terBias_data))
 all_posBias_data$COGcat	<- factor(all_posBias_data$COGcat, levels = c(oriBiasCOGs, terBiasCOGs))
+all_posBias_data$SuperGroup	<- factor(all_posBias_data$SuperGroup, levels = c(superGroups, "HGT"))
+
 
 # Do metabolic genes that are usually near Ori or near Ter have co-positioned orthologs?
-ter_terBias_data	<- bind_rows(lapply(terBiasCOGs, function(COG) return(perCOGTerOrth_data[[COG]]$supergroupCompareData)))
 ori_terBias_data	<- bind_rows(lapply(terBiasCOGs, function(COG) return(perCOGOriOrth_data[[COG]]$supergroupCompareData)))
+ter_terBias_data	<- bind_rows(lapply(terBiasCOGs, function(COG) return(perCOGTerOrth_data[[COG]]$supergroupCompareData)))
+
 
 # Set up colors
 allCol	<- wes_palette("Chevalier1")[3]
-grpCol	<- wes_palette("FantasticFox1")[1:length(superGroups)]
-hgtCol	<- wes_palette("Darjeeling1")[1]
+grpCol	<- wes_palette("BottleRocket2")[1:length(superGroups)]
+hgtCol	<- wes_palette("Moonrise2")[4]
 
 # ------------------------------------------------------------------------------------- #
 # Overall co-occurence of ortholog genes
-positionBiasOrthCompare_plot	<- ggplot(data = all_posBias_data, mapping = aes(x = dist2ori, color = SuperGroup)) +
+positionBiasOrthCompare_plot	<- ggplot(data = all_posBias_data, mapping = aes(x = distToOri, y = ..scaled.., color = SuperGroup)) +
 	facet_wrap(~COGcat, ncol = 2, nrow = 3, scales = "free_y") +
 	scale_y_continuous(name = "Gene density") +
 	scale_x_continuous(name = "Relative distance from origin") +
-	stat_density(geom = "line", adjust = 1/5, position = "identity") +
+	stat_density(geom = "line", adjust = 1/10, size = 0.7, alpha = 0.8, position = "identity") +
 	scale_color_manual(values = c(grpCol, hgtCol), name = "Gene Group") +
-	darkTheme + 
+	lightTheme + 
 	theme(
-		panel.grid.minor.x = element_blank(),
-		legend.background = element_rect(color = "#D9D9D9", fill = "#333233"),
-		strip.background = element_rect(color = "#D9D9D9", fill = "#333233"),
-		strip.text = element_text(color = "#D9D9D9", size = 12)
+		panel.spacing = unit(2, "lines"),
+		panel.grid.minor = element_blank(),
+		legend.background = element_rect(color = axisCol, fill = "white"),
+		strip.background = element_rect(color = axisCol, fill = "white"),
+		strip.text = element_text(color = textCol, size = 12)
 	)
 
-Ter_MetabolicOrth_plot		<- ggplot(data = ter_terBias_data, mapping = aes(x = dist2ori, color = SuperGroup)) +
+Ter_MetabolicOrth_plot		<- ggplot(data = ter_terBias_data, mapping = aes(x = distToOri, color = SuperGroup)) +
 	facet_wrap(~COGcat, nrow = 2, scales = "free") +
 	scale_y_continuous(name = "Gene density") +
 	scale_x_continuous(name = "Relative distance from origin") +
-	stat_density(geom = "line", adjust = 1/5, position = "identity") +
+	stat_density(geom = "line", adjust = 1/10, size = 0.7, alpha = 0.8, position = "identity") +
 	scale_color_manual(values = c(grpCol, hgtCol), name = "Gene Group") +
-	darkTheme + 
+	lightTheme + 
 	theme(
-		legend.background = element_rect(color = "#D9D9D9", fill = "#333233"),
-		strip.background = element_rect(color = "#D9D9D9", fill = "#333233"),
-		strip.text = element_text(color = "#D9D9D9", size = 12)
+		panel.spacing = unit(2, "lines"),
+		panel.grid.minor = element_blank(),
+		legend.background = element_rect(color = axisCol, fill = "white"),
+		strip.background = element_rect(color = axisCol, fill = "white"),
+		strip.text = element_text(color = textCol, size = 12)
 	)
 
-Ori_MetabolicOrth_plot	<- ggplot(data = ori_terBias_data, mapping = aes(x = dist2ori, color = SuperGroup)) +
+Ori_MetabolicOrth_plot	<- ggplot(data = ori_terBias_data, mapping = aes(x = distToOri, color = SuperGroup)) +
 	facet_wrap(~COGcat, nrow = 2, scales = "free") +
 	scale_y_continuous(name = "Gene density") +
 	scale_x_continuous(name = "Relative distance from origin") +
-	stat_density(geom = "line", adjust = 1/5, position = "identity") +
+	stat_density(geom = "line", adjust = 1/10, size = 0.7, alpha = 0.8, position = "identity") +
 	scale_color_manual(values = c(grpCol, hgtCol), name = "Gene Group") +
-	darkTheme + 
+	lightTheme + 
 	theme(
-		legend.background = element_rect(color = "#D9D9D9", fill = "#333233"),
-		strip.background = element_rect(color = "#D9D9D9", fill = "#333233"),
-		strip.text = element_text(color = "#D9D9D9", size = 12)
+		panel.spacing = unit(2, "lines"),
+		panel.grid.minor = element_blank(),
+		legend.background = element_rect(color = axisCol, fill = "white"),
+		strip.background = element_rect(color = axisCol, fill = "white"),
+		strip.text = element_text(color = textCol, size = 12)
 	)
 
 
-quartz(width = 16, height = 12, file = file.path(orthPositionFig_path, "posBiasOrthCompare_biasCOGs.png"))
+quartz(width = 16, height = 12)
 print(positionBiasOrthCompare_plot)
+quartz.save(file = file.path(COGvSpaceFig_path, "posBiasOrthCompare_biasCOGs.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
-quartz(width = 16, height = 12, file = file.path(orthPositionFig_path, "posBiasOrthCompare_biasCOGs_terOnly.png"))
+quartz(width = 16, height = 12)
 print(Ter_MetabolicOrth_plot)
+quartz.save(file = file.path(COGvSpaceFig_path, "posBiasOrthCompare_biasCOGs_terOnly.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
 
-
-quartz(width = 16, height = 12, file = file.path(orthPositionFig_path, "posBiasOrthCompare_biasCOGs_oriOnly.png"))
+quartz(width = 16, height = 12)
 print(Ori_MetabolicOrth_plot)
+quartz.save(file = file.path(COGvSpaceFig_path, "posBiasOrthCompare_biasCOGs_oriOnly.pdf"), type = "pdf", dpi = 100)
 invisible(dev.off())
+
+
+
+# ------------------------------------------------------------------------------------- #
+# Save orthData objects
+orthCOGData_path	<- file.path(positionData_path, "orthCOGData")
+if(!dir.exists(orthCOGData_path)) dir.create(orthCOGData_path)
+
+message("\nSaving objects...", appendLF = FALSE)
+
+saveRDS(object = perCOGOrth_data, file = file.path(orthCOGData_path, "Full_COGorth_data.rds"))
+saveRDS(object = perCOGOriOrth_data, file = file.path(orthCOGData_path, "Ori_COGorth_data.rds"))
+saveRDS(object = perCOGTerOrth_data, file = file.path(orthCOGData_path, "Ter_COGorth_data.rds"))
+
+message("\rSaving objects... done")
 
 
 
