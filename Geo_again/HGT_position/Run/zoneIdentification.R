@@ -5,7 +5,7 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("RSQLite", "dplyr","ggplot2", "ggpubr", "wesanderson", "gridExtra", "stringr")
+p_load("RSQLite", "tidyverse", "ggpubr", "wesanderson", "gridExtra", "stringr", "seqinr")
 
 
 # ------------------------------------------------------------------------------------- #
@@ -203,6 +203,7 @@ prelimBoundary_withZones_plot	<- linearXSpecies_verHGT_dens_plot +
 
 
 # ------------------------------------------------ #
+# ------------------------------------------------ #
 
 # Create a truncated zone df - where the final zone ends at 1 (represent whole genome)
 finalBoundary		<- subset(zoneBoundRange_df, zoneMin < 1 & zoneMax > 1, select = boundary, drop = TRUE)
@@ -215,7 +216,10 @@ zoneRangeToTer_df	<- subset(zoneBoundRange_df, boundary <= finalBoundary)
 zoneRangeToTer_df[nrow(zoneRangeToTer_df), c("boundary", "boundaryMin", "boundaryMax", "zoneMax", "zoneMax_pad")] <- c(rep(NA, 3), rep(0.5, 2))
 
 # Create a list for the zones - to be exported to other scripts
-zoneBoundaryList	<- list(fullRange = zoneRangeToOri_df, halfGenomeRange = zoneRangeToTer_df, expandedRange = zoneBoundRange_df)
+zoneBoundaryList	<- list(fullRange = zoneRangeToOri_df, halfGenomeRange = zoneRangeToTer_df, expandedRange = zoneBoundRange_df, boundCol = boundCol)
+
+# ------------------------------------------------ #
+# ------------------------------------------------ #
 
 toOriDensity_withZones_plot	<- ggplot(data = normalPos_df, aes(x = distToOri, color = type)) +
 	scale_x_continuous(
@@ -395,7 +399,7 @@ crossSpecies_tRNA_ext	<- bind_rows(crossSpecies_tRNA_data, firstQ)
 # Plot the tRNA density over zones
 tRNA_withZones_plot	<- ggplot(data = crossSpecies_tRNA_ext, aes(x = relStart, y = ..scaled..)) +
 	scale_x_continuous(
-		expand = expand_scale(mult = c(0.025, 0.025))
+		expand = expand_scale(mult = c(0.025, 0.025)),
 		name = "Normalized genome position",
 		limits = c(0, 1.25),
 		breaks = seq(0, 1.25, by = 0.5),
@@ -433,6 +437,7 @@ tRNA_withZones_plot	<- ggplot(data = crossSpecies_tRNA_ext, aes(x = relStart, y 
 message("\nSaving objects...", appendLF = FALSE)
 
 saveRDS(object = zoneBoundaryList, file = file.path(positionData_path, "AG_zoneBoundaries.rds"))
+saveRDS(object = crossSpecies_tRNA_data, file = file.path(positionData_path, "AG_tRNA_data.rds"))
 
 message("\rSaving objects... done")
 

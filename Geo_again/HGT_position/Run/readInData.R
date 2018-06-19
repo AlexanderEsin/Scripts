@@ -131,6 +131,9 @@ GI_presence_df		<- bind_rows(GI_presence_list)
 # Remove the outlier species
 GI_positions_data		<- subset(GI_presence_df, !taxid %in% outlierTaxid)
 
+# Prepare a data object for the GI positions to be written out
+GI_positions_out		<- list(rawBoundary_data = giBoundary_data, GI_positions_data = GI_positions_data)
+
 # Number of unique (GI present) species
 speciesWithGI	<- unique(GI_positions_data$binomial)
 numSpeciesGI	<- length(speciesWithGI)
@@ -185,6 +188,8 @@ byType_withGI_data		<- lapply(list("lHGT", "sHGT", "Ver"), function(dataType) {
 names(byType_withGI_data)	<- c("lHGT", "sHGT", "Ver")
 
 
+
+
 # ------------------------------------------------------------------------------------- #
 # Save the subgroup and position data
 message("\nSaving objects...", appendLF = FALSE)
@@ -193,6 +198,6 @@ saveRDS(object = subgroupData, file = file.path(positionData_path, "AG_subgroupD
 saveRDS(object = perTypeData, file = file.path(positionData_path, "AG_perTypeData.rds"))
 saveRDS(object = perTypeCOG_data, file = file.path(positionData_path, "AG_perTypeCOGData.rds"))
 saveRDS(object = byType_withGI_data, file = file.path(positionData_path, "AG_perTypeGIData.rds"))
-saveRDS(object = GI_positions_data, file = file.path(positionData_path, "AG_GI_positions.rds"))
+saveRDS(object = GI_positions_out, file = file.path(positionData_path, "AG_GI_positions.rds"))
 
 message("\rSaving objects... done")

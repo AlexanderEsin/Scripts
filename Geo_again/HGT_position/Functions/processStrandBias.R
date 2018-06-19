@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("dplyr", "zoo")
+p_load("dplyr", "zoo", "parallel")
 
 processStrandBias	<- function(dataType, data = NULL, verPenalty = "3", hgtPenalty = "4", binNumber = 100) {
 
@@ -25,7 +25,7 @@ processStrandBias	<- function(dataType, data = NULL, verPenalty = "3", hgtPenalt
 		}
 	}
 
-	byTypebySpeciesStrandBias	<- lapply(binomial_list, function(binomialName) {
+	byTypebySpeciesStrandBias	<- mclapply(binomial_list, function(binomialName) {
 
 		byBinStrandBias		<- lapply(seq(1:binNumber), function(genome_bin) {
 
@@ -41,14 +41,14 @@ processStrandBias	<- function(dataType, data = NULL, verPenalty = "3", hgtPenalt
 			}
 
 			if (length(perBinStrand) == 0) {
-				return(data.frame(BinIndex = genome_bin, StrandBias = NA, stringsAsFactors = FALSE))
+				return(data.frame(BinIndex = bin_end, StrandBias = NA, stringsAsFactors = FALSE))
 			}
 
 			numSameStrand	<- length(which(perBinStrand == "same"))
 			numDiffStrand	<- length(which(perBinStrand == "diff"))
 
 			sameOvDiff		<- (numSameStrand - numDiffStrand) / sum(c(numSameStrand, numDiffStrand))
-			return(data.frame(BinIndex = genome_bin, StrandBias = sameOvDiff, stringsAsFactors = FALSE))
+			return(data.frame(BinIndex = bin_end, StrandBias = sameOvDiff, stringsAsFactors = FALSE))
 		})
 		byBinStrandBias_df	<- bind_rows(byBinStrandBias)
 		byBinStrandBias_df$Species	<- binomialName
@@ -58,7 +58,7 @@ processStrandBias	<- function(dataType, data = NULL, verPenalty = "3", hgtPenalt
 			byBinStrandBias_df$rollMean	<- as.vector(rollapply(zoo(byBinStrandBias_df$StrandBias), width = 20, mean, by = 1, fill = NA))
 		}
 		return(byBinStrandBias_df)
-	})
+	}, mc.cores = 20)
 	byTypebySpeciesStrandBias		<- bind_rows(byTypebySpeciesStrandBias)
 	byTypebySpeciesStrandBias$Type	<- dataType
 	return(byTypebySpeciesStrandBias)

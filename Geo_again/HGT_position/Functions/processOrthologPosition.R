@@ -9,7 +9,7 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 	if (is.null(dbConn)) stop("Provide a valid sqlite database connection")
 	if (is.null(dnaA_data)) stop("Provide a data frame with taxids and their corresponding dnaA data")
 	if (is.null(speciesSubgroups)) stop("Provide a data frame with species and corresponding subgroups (to account for species over-representation")
-	if (is.null(superGroupTaxid_list)) stop("Provide superGroup breakdown")
+	if (is.null(superGroupTaxid_list)) stop("Provide superGroup breakdown") else superGroups	<- names(superGroupTaxid_list)
 
 	message(paste0("COG == ", COGname))
 
@@ -37,10 +37,10 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 	# HGT only data to be combined later
 	HGTOnlyData		<- onlyCOG_data[which(onlyCOG_data$orthGroup %in% inRangeGroups),]
 	HGTOnlyData$SuperGroup	<- "HGT"
+	HGTOnlyData$childNumber	<- 1
 
 	# Free up memory
-	rm(orthData)
-	rm(onlyCOG_data)
+	rm(list = c("orthData", "onlyCOG_data"))
 	gc()
 
 	byGroupOrthPosition	<- mclapply(inRangeGroups, function(group) {
@@ -56,16 +56,10 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 		pruneOrth_data	<- orthGroup_df[which(orthGroup_df$taxid %in% dnaA_data$taxid),]
 		# Select only those that are on the main chromosome
 		pruneOrth_data	<- pruneOrth_data[which(pruneOrth_data$plasmid == "F"),]
-		# Clean memory
-		rm(orthGroup_df)
-		rm(combineOri_df)
-		rm(combineOriNoAG_df)
-		rm(combineOriSubgroup_df)
 
 		# ------------------------------------------------------------------------------------- #
 		# For each gene entry, combine with dnaA data (start, end, strand) and calculate relative gene position
 		combineOri_df	<- left_join(pruneOrth_data, dnaA_clean_trim, by = "taxid")
-		rm(pruneOrth_data)
 		combineOri_df$relGeneStart	<- apply(combineOri_df, 1, genomeRelativePosition_format)
 		combineOri_df$distToOri		<- ifelse(combineOri_df$relGeneStart > 0.5, 1 - combineOri_df$relGeneStart, combineOri_df$relGeneStart)
 
@@ -84,26 +78,23 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 		uniqueParentSpecies		<- unique(combineOriSubgroup_df$parentSpecies)
 		numberOfGenes			<- nrow(combineOriSubgroup_df)
 
-
 		bySubspeciesGroup_list	<- lapply(uniqueParentSpecies, summariseSubgroups, data = combineOriSubgroup_df, summaryStat = "distToOri")
 		bySubspeciesGroup_df	<- bind_rows(bySubspeciesGroup_list)
 		bySubspeciesGroup_df$Group	<- group
 		
-
 		# ------------------------------------------------------------------------------------- #
-		bySuperGroup	<- bind_rows(lapply(superGroups, function(superGroup) {
+		bySuperGroup_list	<- lapply(superGroups, function(superGroup) {
 			SGtaxid_list	<- superGroupTaxid_list[[superGroup]]
 			subsetOrthPos	<- subset(bySubspeciesGroup_df, parentTaxid %in% SGtaxid_list)
 			subsetOrthPos$SuperGroup	<- if (nrow(subsetOrthPos) > 0) superGroup else character(0)
 			return(subsetOrthPos)
-		}))
+		})
+		bySuperGroup	<- bind_rows(bySuperGroup_list)
 		
 		# ------------------------------------------------------------------------------------- #
 		# Gene data for the HGT only for this group
-		HGT_entries		<- perTypeData$lHGT$`4`$allPosData$protID[which(perTypeData$lHGT$`4`$allPosData$orthGroup == group)]
-
 		combineOriAG_df$HGT	<- FALSE
-		combineOriAG_df$HGT[which(combineOriAG_df$protID %in% HGT_entries)]	<- TRUE
+		combineOriAG_df$HGT[which(combineOriAG_df$protID %in% HGTOnlyData$protID)]	<- TRUE
 
 		# ------------------------------------------------------------------------------------- #
 		# Make the plot
@@ -133,9 +124,9 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 
 		# ------------------------------------------------------------------------------------- #
 		# Clean memory
-		rm(list = c("orthGroup_df", "combineOri_df", "combineOriNoAG_df", "combineOriSubgroup_df", "HGT_entries"))
+		rm(list = c("orthGroup_df", "combineOri_df", "combineOriNoAG_df", "combineOriSubgroup_df", "pruneOrth_data"))
 
-		return(list(allData = bySubspeciesGroup_df, AG_HGT_data = combineOriAG_df[which(combineOriAG_df$HGT == TRUE),], numberOfGenes = numberOfGenes, numberOfSpecies = nrow(bySubspeciesGroup_df), plot = perGroupPlot))
+		return(list(allData = bySubspeciesGroup_df, bySuperGroupData = bySuperGroup, AG_HGT_data = combineOriAG_df[which(combineOriAG_df$HGT == TRUE),], numberOfGenes = numberOfGenes, numberOfSpecies = nrow(bySubspeciesGroup_df), plot = perGroupPlot))
 
 	}, mc.cores = 10, mc.allow.recursive = FALSE)
 
@@ -147,39 +138,33 @@ processOrthologPosition	<- function(COGname, orthData = NULL, dbConn = NULL, sup
 	# Remove any groups with no orthologs
 	byGroupOrthPosition		<- byGroupOrthPosition[!is.na(byGroupOrthPosition)]
 	byGroupOrthPosition_df	<- bind_rows(lapply(byGroupOrthPosition, function(element) return(element$allData)))
+	bySuperGroupCompare		<- bind_rows(lapply(byGroupOrthPosition, function(element) return(element$bySuperGroupData)))
 
-	bySuperGroupCompare	<- bind_rows(lapply(superGroups, function(superGroup) {
-		SGtaxid_list	<- superGroupTaxid_list[[superGroup]]
-		subsetOrthPos	<- subset(byGroupOrthPosition_df, parentTaxid %in% SGtaxid_list)
-		subsetOrthPos$SuperGroup	<- superGroup
-		return(subsetOrthPos)
-	}))
+	bySuperGroup_withHGT			<- bind_rows(list(bySuperGroupCompare, HGTOnlyData[,c("distToOri", "SuperGroup")]))
+	bySuperGroup_withHGT$SuperGroup	<- factor(bySuperGroup_withHGT$SuperGroup, levels = c(superGroups, "HGT"))
+	bySuperGroup_withHGT$COGcat		<- COGname
 
-	bySuperGroupCompare	<- bind_rows(list(bySuperGroupCompare, HGTOnlyData))
-	bySuperGroupCompare$SuperGroup	<- factor(bySuperGroupCompare$SuperGroup, levels = c(superGroups, "HGT"))
-	bySuperGroupCompare$COGcat		<- COGname
+	# # Set up colors
+	# allCol	<- wes_palette("Chevalier1")[3]
+	# grpCol	<- wes_palette("FantasticFox1")[1:length(superGroups)]
+	# hgtCol	<- wes_palette("Darjeeling1")[1]
 
-	# Set up colors
-	allCol	<- wes_palette("Chevalier1")[3]
-	grpCol	<- wes_palette("FantasticFox1")[1:length(superGroups)]
-	hgtCol	<- wes_palette("Darjeeling1")[1]
-
-	supergroupCompbyCOG_plot <- ggplot(data = byGroupOrthPosition_df, mapping = aes(distToOri)) +
-		scale_y_continuous(name = "Gene density") +
-		scale_x_continuous(name = "Relative distance from origin") +
-		stat_density(geom = "line", color = allCol, adjust = 1/10, position = "identity", size = 0.7) +
-		stat_density(data = bySuperGroupCompare, aes(distToOri, color = SuperGroup), geom = "line", adjust = 1/10, position = "identity", size = 0.7) +
-		scale_color_manual(values = c(grpCol, hgtCol), name = "Gene Group") +
-		ggtitle(paste0("COG = \'", COGname, "\'")) +
-		lightTheme + 
-		theme(
-			panel.grid.minor.y = element_blank(),
-			legend.background = element_rect(color = axisCol, fill = "white")
-		)
+	# supergroupCompbyCOG_plot <- ggplot(data = byGroupOrthPosition_df, mapping = aes(distToOri)) +
+	# 	scale_y_continuous(name = "Gene density") +
+	# 	scale_x_continuous(name = "Relative distance from origin") +
+	# 	stat_density(geom = "line", color = allCol, adjust = 1/10, position = "identity", size = 0.7) +
+	# 	stat_density(data = bySuperGroup_withHGT, aes(distToOri, color = SuperGroup), geom = "line", adjust = 1/10, position = "identity", size = 0.7) +
+	# 	scale_color_manual(values = c(grpCol, hgtCol), name = "Gene Group") +
+	# 	ggtitle(paste0("COG = \'", COGname, "\'")) +
+	# 	lightTheme + 
+	# 	theme(
+	# 		panel.grid.minor.y = element_blank(),
+	# 		legend.background = element_rect(color = axisCol, fill = "white")
+	# 	)
 
 	# Clean memory
 	rm(byGroupOrthPosition_df)
 	gc()
 
-	return(list(perGroupData = byGroupOrthPosition, supergroupCompareData = bySuperGroupCompare, supergroupComparePlot = supergroupCompbyCOG_plot))
+	return(list(perGroupData = byGroupOrthPosition, supergroupCompareData = bySuperGroup_withHGT))
 }

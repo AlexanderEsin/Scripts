@@ -27,8 +27,9 @@ if (!dir.exists(GIanalysisFig_path)) dir.create(GIanalysisFig_path)
 
 # ------------------------------------------------------------------------------------- #
 # Overall density distribution of genomic islands across genomes
+GI_positions_parts	<- GI_positions_data$GI_positions_data
 
-GI_crossGenomeDens_plot	<- ggplot(data = GI_positions_data, aes(x = GI_location)) +
+GI_crossGenomeDens_plot	<- ggplot(data = GI_positions_parts, aes(x = GI_location)) +
 	scale_x_continuous(
 		name = "Relative Genomic Position",
 		limits = c(0, 1),

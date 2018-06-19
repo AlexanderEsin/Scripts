@@ -261,23 +261,31 @@ sigF_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_sigF_comb, aes(x = binomial, 
 gKauOnly_ver_data	<- subset(perTypeData$Ver$'3'$allPosData, binomial == binomial_list[1])
 gKauOnly_verGroup_l	<- unique(gKauOnly_ver_data$orthGroup)
 
-# For each orthologous group, find orthologs in bacillus subtilis
-bsub_allVer_protID_tbl	<- dbSendQuery(dbConn, 'SELECT OrthGroup, protID, gene_start FROM t1 WHERE taxid == :bsub_taxid AND OrthGroup == :orthGroup')
+# A full list of ortholog genes to write out
+bsub_allVer_protID_tbl	<- dbSendQuery(dbConn, 'SELECT * FROM t1 WHERE taxid == :bsub_taxid AND OrthGroup == :orthGroup')
 dbBind(bsub_allVer_protID_tbl, param = list(bsub_taxid = rep(bsub_168_taxid, length(gKauOnly_verGroup_l)), orthGroup = gKauOnly_verGroup_l))
 bsub_allVer_df	<- dbFetch(bsub_allVer_protID_tbl)
 dbClearResult(bsub_allVer_protID_tbl)
+# Remove the sequences
+bsub_allVer_df <- select(bsub_allVer_df, -c(sequence, NuclSeq))
+
 
 # Find the relative start position of the B subtilis genes
 bsub_ver_relStart_list	<- lapply(bsub_allVer_df$gene_start, genomeRelativePosition, oriStart = bsub_168_dnaA_data$oriStart, oriEnd = bsub_168_dnaA_data$oriEnd, oriStrand = bsub_168_dnaA_data$oriStrand, genomeLength = bsub_168_genomeLength)
 bsub_allVer_df$relStart		<- unlist(bsub_ver_relStart_list)
-bsub_allVer_df$toOriStart	<- ifelse(bsub_allVer_df$relStart > 0.5, 1 - bsub_allVer_df$relStart, bsub_allVer_df$relStart)
-bsub_allVer_df				<- bsub_allVer_df[order(-bsub_allVer_df$toOriStart),]
-names(bsub_allVer_df)[1]	<- "orthGroup"
+bsub_allVer_df$distToOri	<- ifelse(bsub_allVer_df$relStart > 0.5, 1 - bsub_allVer_df$relStart, bsub_allVer_df$relStart)
+bsub_allVer_df				<- bsub_allVer_df[order(-bsub_allVer_df$distToOri),]
+names(bsub_allVer_df)[names(bsub_allVer_df) == "OrthGroup"]	<- "orthGroup"
 bsub_allVer_df$binomial		<- "Bacillus subtilis 168"
 
-# For the 1094 Gkau Vertical orthGroups, we dind 898 Bsub genes from 893 groups
+
+# Save as RDS
+write.csv(bsub_allVer_df, file = file.path(sporulation_path, "bSubtilus_fullOrth_list.csv"), row.names = FALSE)
+
+
+# For the 1094 Gkau Vertical orthGroups, we find 898 Bsub genes from 893 groups
 # To plot, we only want groups that are present in both
-gKauOnly_verInBsub_data	<- subset(gKauOnly_ver_data, orthGroup %in% bsub_allVer_protID_df$OrthGroup)
+gKauOnly_verInBsub_data				<- subset(gKauOnly_ver_data, orthGroup %in% bsub_allVer_df$orthGroup)
 gKauOnly_verInBsub_data$relStart	<- gKauOnly_verInBsub_data$relGeneStart
 
 # Join the Gkau and Bsub data

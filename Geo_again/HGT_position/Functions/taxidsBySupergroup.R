@@ -3,7 +3,7 @@ require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("parallel")
 
 
-taxidsBySupergroup	<- function(supergroup, speciesGroupings = NULL, nodes_data = NULL, names_data = NULL) {
+taxidsBySupergroup	<- function(supergroup, speciesGroupings = NULL, nodes_dt = NULL, names_dt = NULL) {
 
 	# Check all necessary data is provided
 	if (is.null(speciesGroupings)) stop("Provide subgroupings data by species: output in Genome_lists/Species_groupings.tsv")
@@ -13,32 +13,37 @@ taxidsBySupergroup	<- function(supergroup, speciesGroupings = NULL, nodes_data =
 	message(paste0("Identifying taxids belonging to ", supergroup, "..."))
 
 	# Get the taxid and rank of the supergroup
-	supergroupTaxid	<- names_data$taxid[which(names_data$name == supergroup & names_data$nameClass == "scientific name")]
-	supergroupRank	<- nodes_data$nodeRank[which(nodes_data$taxid == supergroupTaxid)]
+	supergroupTaxid	<- names_dt[name == supergroup & nameClass == "scientific name", taxid]
+	supergroupRank	<- nodes_dt[.(supergroupTaxid), nodeRank]
 
 	# Unique parental nodes in species groupings
 	uniqueParentSpecies		<- unique(speciesGroupings$parentSpecies)
 
 	# For each parent species, find whether it belongs to this supergroup
 	superGroupTaxids_list	<- mclapply(uniqueParentSpecies, function(taxid) {
-		
+
 		childTaxid	<- taxid
 
 		while (TRUE) {
-			parentEntry	<- nodes_data[which(nodes_data$taxid == childTaxid),]
+			parentEntry	<- nodes_dt[.(childTaxid),]
 
-			if (identical(parentEntry$parentTaxid, supergroupTaxid)) {
+			if (identical(parentEntry[ ,parentTaxid], supergroupTaxid)) {
 				return(taxid)
-			} else if (identical(parentEntry$nodeRank, supergroupRank) || identical(parentEntry$parentTaxid, "1")) {
+			} else if (identical(parentEntry[, nodeRank], supergroupRank) || identical(parentEntry[ ,parentTaxid], 1)) {
 				break
 			} else {
-				childTaxid	<- parentEntry$parentTaxid
+				childTaxid	<- parentEntry[ ,parentTaxid]
 			}
 		}
 		return(NA)
-	}, mc.cores = 20)
+	}, mc.cores = 15)
 
 	# Remove all empty elements (not part of supergroup) and return
 	superGroupTaxids	<- unlist(superGroupTaxids_list[!is.na(superGroupTaxids_list)])
+	
+	# Clean memory
+	rm(list = c("nodes_dt", "names_dt")); gc()
+
+	# Return data
 	return(superGroupTaxids)
 }

@@ -2,6 +2,7 @@
 library(parallel)
 library(stringr)
 library(dplyr)
+library(data.table)
 
 bullShitTableRead <- function(fileName, header = NA) {
 	# Read in file
@@ -33,8 +34,8 @@ taxdmp_dir	<- file.path(genome_dir, "taxdmp")
 # Taxdmp files. If the RDS objects exist, use those:
 if (file.exists(file.path(taxdmp_dir, "names.rds"))) {
 	# Read in RDS objects
-	names_data	<- readRDS(file.path(taxdmp_dir, "names.rds"))
-	nodes_data	<- readRDS(file.path(taxdmp_dir, "nodes.rds"))
+	names_dt	<- readRDS(file.path(taxdmp_dir, "names.rds"))
+	nodes_dt	<- readRDS(file.path(taxdmp_dir, "nodes.rds"))
 } else {
 	message("\nNames and nodes RDS files not found: reading in from raw...", appendLF = FALSE)
 	# Define file names
@@ -49,9 +50,25 @@ if (file.exists(file.path(taxdmp_dir, "names.rds"))) {
 	names_data		<- bullShitTableRead(fileName = names_file, header = namesHeader)
 	nodes_data		<- bullShitTableRead(fileName = nodes_file, header = nodesHeader)
 
+	# Change the relevant columns to numeric
+	mode(names_data$taxid)			<- "numeric"
+	mode(nodes_data$taxid) 			<- "numeric"
+	mode(nodes_data$parentTaxid)	<- "numeric"
+
+	# Convert to datatable
+	names_dt	<- as.data.table(names_data)
+	nodes_dt	<- as.data.table(nodes_data)
+
+	# Set keys
+	setkey(nodes_dt, taxid, parentTaxid)
+	setkey(names_dt, taxid)
+
 	# Write the names and nodes data tables to R objects to avoid reading in everytime
-	saveRDS(object = names_data, file = file.path(taxdmp_dir, "names.rds"))
-	saveRDS(object = nodes_data, file = file.path(taxdmp_dir, "nodes.rds"))
+	saveRDS(object = names_dt, file = file.path(taxdmp_dir, "names.rds"))
+	saveRDS(object = nodes_dt, file = file.path(taxdmp_dir, "nodes.rds"))
+
+	# Clean
+	rm(list = c("names_data", "nodes_data")); gc()
 
 	message("\rNames and nodes RDS files not found: reading in from raw... done & saved as RDS")
 }
@@ -74,48 +91,42 @@ taxid_list	<- accass_tax_tbl$Taxid
 taxidNum	<- length(taxid_list)
 
 # For each taxid in our dataset, we identify the topmost (species) level taxid.
-
-# Open cluster
-numCores	<- 20
-clust		<- makeCluster(numCores, type = "FORK")
-
-# For each taxid in our set, identify the parent species taxid
-perTaxidSpecies <- parLapply(clust, 1:length(taxid_list), function(taxidIndex) {
+perTaxidSpecies <- mclapply(1:length(taxid_list), function(taxidIndex) {
 
 	taxid		<- taxid_list[taxidIndex]
 	childTaxid	<- taxid
-	childRank	<- nodes_data$nodeRank[which(nodes_data$taxid == childTaxid)]
+	childRank	<- nodes_dt[.(childTaxid), nodeRank]
 
 	if (identical(childRank, "species")) {
-		return(data.frame(taxid = taxid, parentSpecies = as.character(childTaxid), stringsAsFactors = FALSE))
+		return(data.frame(taxid = taxid, parentSpecies = childTaxid, stringsAsFactors = FALSE))
 	}
 
 	while(TRUE) {
-		parentTaxid	<- nodes_data$parentTaxid[which(nodes_data$taxid == childTaxid)]
-		parentRank	<- nodes_data$nodeRank[which(nodes_data$taxid == parentTaxid)]
+		parentTaxidVal	<- nodes_dt[.(childTaxid), parentTaxid]
+		parentRank		<- nodes_dt[.(parentTaxidVal), nodeRank]
 
 		if (identical(parentRank, "species")) {
 			break
 		} else {
-			childTaxid	<- parentTaxid
+			childTaxid	<- parentTaxidVal
 		}
 	}
 
-	return(data.frame(taxid = taxid, parentSpecies = as.character(parentTaxid), stringsAsFactors = FALSE))
-})
+	return(data.frame(taxid = taxid, parentSpecies = parentTaxidVal, stringsAsFactors = FALSE))
+}, mc.cores = 20)
+
 # Combine to df and close cluster
 perTaxidSpecies_df	<- bind_rows(perTaxidSpecies)
-stopCluster(clust)
 
 # How many unique species do we have?
 uniqueParentTaxids	<- unique(perTaxidSpecies_df$parentSpecies)
 
 # Keep only the scientific name entries in the names table
-names_dataReduct	<- names_data[which(names_data$nameClass == "scientific name"),]
+names_dataReduct	<- names_dt[.(nameClass) == "scientific name"),]
 
 # Add the species names to the groups
 perTaxidSpeciesNames_df	<- left_join(perTaxidSpecies_df, names_dataReduct[,1:2], by = c("parentSpecies" = "taxid"))
-names(perTaxidSpeciesNames_df)[3]	<- "parentName" 
+names(perTaxidSpeciesNames_df)[3]	<- "parentName"
 
 # Write out results
 write.table(x = perTaxidSpeciesNames_df, file = file.path(genome_dir, "Genome_lists", "Species_groupings.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
