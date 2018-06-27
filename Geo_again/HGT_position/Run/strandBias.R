@@ -253,6 +253,7 @@ SB_OldvsNew_plot	<- ggplot(SB_OldvsNew_ext, aes(x = BinIndex, y = StrandBias, co
 	)
 
 
+
 # ------------------------------------------------------------------------------------- #
 # Write plots
 quartz(width = 18, height = 10)
@@ -278,6 +279,69 @@ invisible(dev.off())
 
 
 
+
+
+
+
+
+# ------------------------------------------------ #
+# ------------------------------------------------ #
+# ------------------------------------------------ #
+# Figure 2E
+
+SB_VerOldNew		<- bind_rows(list(byTypeStrandBias_list$Ver, byTypeStrandBias_list$Old, byTypeStrandBias_list$Recent))
+
+SB_VerOldNew_ext	<- SB_VerOldNew %>%
+	subset(BinIndex <= 0.125 | BinIndex >= 0.875) %>%
+	mutate(BinIndex = case_when(
+		BinIndex < 0.5 ~ BinIndex + 1,
+		BinIndex > 0.5 ~ BinIndex - 1)) %>%
+	bind_rows(SB_VerOldNew, .) %>%
+	arrange(BinIndex) %>% 
+	mutate(Type = factor(Type, levels = dataTypes_withAge))
+
+
+# Compare Old lHGTs to Recent lHGTS. NB: Recent lHGTS are sparse - hence large SE and inclusion of histogram 
+SB_VerOldNew_plot	<- ggplot(SB_VerOldNew_ext, aes(x = BinIndex, y = StrandBias, color = Type)) +
+	scale_x_continuous(
+		expand = expand_scale(mult = c(0.01, 0.01)),
+		name = "Normalized genome position",
+		breaks = seq(0, 1, by = 0.5),
+		labels = c("Origin", "Terminus", "Origin"),
+		minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
+		sec.axis = dup_axis(
+			name = NULL,
+			breaks = rowMeans(zoneBoundaryList$fullRange[c("zoneMin", "zoneMax")]),
+			labels = zoneBoundaryList$fullRange$zoneName)) +
+	scale_y_continuous(
+		name = "Enrichment for genes on same strand as DnaA",
+		limits = c(-1.5, 1.5)) +
+	geom_rect(
+		data = zoneBoundaryList$fullRange,
+		aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf),
+		fill = zoneBoundaryList$fullRange$zoneCol_alpha,
+		inherit.aes = FALSE) +
+	# Plot 0-line later to go over bottom of histograms
+	geom_hline(yintercept = 0, col = alpha(axisCol, 0.75), size = 1) +
+	# Smooth lines for all Types of genes: cross species
+	geom_smooth(aes(color = Type, fill = Type), method = "loess", size = 1.5, span = 0.1, alpha = 0.2) +
+	scale_color_manual(values = c(dataTypeCols$Ver, dataTypeCols$Old, dataTypeCols$Recent), guide = guide_legend(title = "Gene Type")) +
+	scale_fill_manual(values = c(dataTypeCols$Ver, dataTypeCols$Old, dataTypeCols$Recent)) +
+	guides(color = guide_legend(override.aes = list(fill = NA))) +
+	coord_cartesian(xlim = c(0, 1), expand = FALSE) +
+	lightTheme +
+	theme(
+		axis.ticks = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		legend.justification = c(1, 1),
+		legend.position = c(0.7, 0.825),
+		legend.background = element_rect(fill = "white", color = axisCol)
+	)
+
+quartz(width = 18, height = 10)
+print(SB_VerOldNew_plot)
+quartz.save(file = file.path(SBiasFigPath, "SB_VerOldNew_plot.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
 
 
 

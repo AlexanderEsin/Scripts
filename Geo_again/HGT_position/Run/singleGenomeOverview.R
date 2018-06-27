@@ -63,7 +63,7 @@ genomeOverview_plotList	<- lapply(AG_taxids, function(speciesTaxid) {
 	densityFind		<- ggplot(data = spec_combined, aes(x = relGeneStart, color = type)) + stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/5)
 	densityBuild	<- ggplot_build(densityFind)
 	maxDensity		<- max(densityBuild$data[[1]][which(densityBuild$data[[1]]$scaled == 1), "y"])
-	density_scale	<- maxDensity / 0.5
+	density_scale	<- maxDensity / 0.49
 
 	# Plot
 	speciesOverview_plot	<- ggplot(data = spec_combined, aes(x = relGeneStart, y = ..density.. / density_scale, color = type)) +

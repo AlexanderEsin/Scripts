@@ -12,17 +12,17 @@ genome_out_dir	<- file.path(genome_dir, "Genome_gbffs")
 genome_list_dir	<- file.path(genome_dir, "Genome_lists")
 
 # Create dirs if they don't exist
-if (!dir.exists(genome_out_dir) dir.create(genome_out_dir)
-if (!dir.exists(genome_list_dir) dir.create(genome_list_dir)
+if (!dir.exists(genome_out_dir)) dir.create(genome_out_dir)
+if (!dir.exists(genome_list_dir)) dir.create(genome_list_dir)
 
 if (!file.exists(file.path(genome_list_dir, "All_complete_genomes.tsv"))) {
 	
 	## Open the RefSeq annotation summary table
 	bact_genome_tbl <- read.table(file.path(genome_dir, "assembly_summary_refseq_131117.txt"), sep = "\t", as.is = TRUE, header = TRUE, fill = TRUE, quote = "", stringsAsFactors = FALSE, comment.char = "")
 
-	## Select all genomes which are 'complete' - this is 8283 genomes
+	## Select all genomes which are 'complete' - this is 8296 genomes
 	bact_genome_complete	<- bact_genome_tbl[which(bact_genome_tbl$assembly_level == "Complete Genome"),]
-	## These 8283 genomes represent 5065 unique taxonomic IDs (i.e. different species)
+	## These 8296 genomes represent 5073 unique taxonomic IDs (i.e. different species)
 	unique_taxids			<- unique(bact_genome_complete$taxid)
 
 	## Filter out all genomes with a single completely assembled genomes
@@ -30,7 +30,7 @@ if (!file.exists(file.path(genome_list_dir, "All_complete_genomes.tsv"))) {
 	single_ass_taxids		<- as.numeric(count_assemblies$Var1[count_assemblies$Freq == 1])
 	single_complete_ass_df	<- bact_genome_complete[which(bact_genome_complete$taxid %in% single_ass_taxids),]
 
-	## 4569 / 5065 taxids have a single assembly only
+	## 4577 / 5073 taxids have a single assembly only
 	## For the remainder of taxids (496) we select the latest complete assembly.
 	## If > 1 assembly has the same (latest) date, select one at random
 	multi_complete_ass		<- bact_genome_complete[!(bact_genome_complete$taxid %in% single_ass_taxids),]
@@ -43,6 +43,8 @@ if (!file.exists(file.path(genome_list_dir, "All_complete_genomes.tsv"))) {
 		
 		## Pick the assembly with the latest date
 		picked_assembly	<- subset_data[which(subset_data$seq_rel_date == latest_date),]
+
+		paste0("\n")
 
 		## If there's more than one, pick one at random
 		if (nrow(picked_assembly) > 1) {

@@ -204,7 +204,7 @@ byTypeSpeciesGCNorm		<- lapply(byTypebySpeciesGC_data, function(GC_byType) {
 	bySpeciesNorm_df	<- bind_rows(bySpeciesNorm_list)
 })
 
-dbDisconnect(conn)
+
 
 
 
@@ -228,6 +228,26 @@ GC_all_plot		<- ggplot(data = GC_all, aes(x = Species, y = GC_content, color = S
 	theme(
 		axis.text.x = element_blank()
 	)
+
+## --- This should be done on the 25 Genome dataset --- #
+# The means of the low GC vs high GC genomes
+meanGC_bySpecies	<- GC_all %>% group_by(Species) %>% summarise(mean = mean(GC_content))
+lowGC_AG			<- meanGC_bySpecies %>% filter(mean < 0.46) %>% summarise(mean = mean(mean)) %>% pull(mean)
+highGC_AG			<- meanGC_bySpecies %>% filter(mean >= 0.46) %>% summarise(mean = mean(mean)) %>% pull(mean)
+
+# Genome size comparison of the outlierBranch1 genomes
+outlierBranch1_species	<- c("Anoxybacillus flavithermus", "Anoxybacillus flavithermus WK1", "Anoxybacillus gonensis")
+sampleProtIDs			<- perTypeData$All$allPosData %>% group_by(binomial) %>% summarise(randProtID = sample(protID, 1)) %>% pull(randProtID)
+
+genomeSize_tbl		<- dbSendQuery(conn, 'SELECT binomial, genome_l FROM t1 WHERE protID = :protIDs')
+dbBind(genomeSize_tbl, param = list(protIDs = sampleProtIDs))
+genomeSize_df		<- dbFetch(genomeSize_tbl)
+dbClearResult(genomeSize_tbl)
+
+outlierBranch1_meanSize	<- genomeSize_df %>% filter(binomial %in% outlierBranch1_species) %>% summarise(meanSize = mean(genome_l)) %>% pull(meanSize)
+allOthers_meanSize		<- genomeSize_df %>% filter(!binomial %in% outlierBranch1_species) %>% summarise(meanSize = mean(genome_l)) %>% pull(meanSize)
+
+
 
 quartz(width = 18, height = 8)
 print(GC_all_plot)
@@ -782,6 +802,8 @@ print(verVsHGT_normGC_cor_plot)
 quartz.save(file = file.path(GC_byBinFig_path, "byAgeHGTsVsVertical_GCcontent_byBin.pdf"), type = "pdf", dpi = 300)
 invisible(dev.off())
 
+
+dbDisconnect(conn)
 
 # ------------------------------------------------------------------------------------- #
 

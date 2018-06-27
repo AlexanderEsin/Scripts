@@ -5,7 +5,7 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("dplyr", "reshape2", "grid", "ggplot2", "ggrepel", "ggdendro", "ggpubr", "wesanderson")
+p_load("dplyr", "reshape2", "grid", "ggplot2", "ggrepel", "ggdendro", "ggpubr", "wesanderson", "RColorBrewer")
 
 # ------------------------------------------------------------------------------------- #
 message("\nReading in data...", appendLF = FALSE)
@@ -15,6 +15,9 @@ perTypeData			<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
 
 # Subgroup data
 dnaA_pos_data		<- readRDS(file.path(positionData_path, "bySpecies_dnaA_data.rds"))
+
+# Zone boundaries
+zoneBoundaryList	<- readRDS(file.path(positionData_path, "AG_zoneBoundaries.rds"))
 
 message("\rReading in data... done\n")
 # ------------------------------------------------------------------------------------- #
@@ -122,7 +125,7 @@ numInAllAG		<- length(unique(siG_allInAG_df$geneName))
 sigF_inAG_plot_list	<- lapply(1:numGenes, function(geneIndex) {
 	gene		<- unique(sigF_inAG_df$geneName)[geneIndex]
 	geneData	<- subset(sigF_inAG_df, geneName == gene)
-
+	
 	geneData$xmin	<- geneIndex - 0.9
 	geneData$xmax	<- geneIndex
 	geneData$toOriStart	<- ifelse(geneData$relGeneStart > 0.5, 1 - geneData$relGeneStart, geneData$relGeneStart)
@@ -264,51 +267,63 @@ gKauOnly_verGroup_l	<- unique(gKauOnly_ver_data$orthGroup)
 # A full list of ortholog genes to write out
 bsub_allVer_protID_tbl	<- dbSendQuery(dbConn, 'SELECT * FROM t1 WHERE taxid == :bsub_taxid AND OrthGroup == :orthGroup')
 dbBind(bsub_allVer_protID_tbl, param = list(bsub_taxid = rep(bsub_168_taxid, length(gKauOnly_verGroup_l)), orthGroup = gKauOnly_verGroup_l))
-bsub_allVer_df	<- dbFetch(bsub_allVer_protID_tbl)
+bsub_allVer_raw_df	<- dbFetch(bsub_allVer_protID_tbl) %>% select(-c(sequence, NuclSeq))
 dbClearResult(bsub_allVer_protID_tbl)
-# Remove the sequences
-bsub_allVer_df <- select(bsub_allVer_df, -c(sequence, NuclSeq))
 
+# ---------------------------------- #
 
 # Find the relative start position of the B subtilis genes
 bsub_ver_relStart_list	<- lapply(bsub_allVer_df$gene_start, genomeRelativePosition, oriStart = bsub_168_dnaA_data$oriStart, oriEnd = bsub_168_dnaA_data$oriEnd, oriStrand = bsub_168_dnaA_data$oriStrand, genomeLength = bsub_168_genomeLength)
-bsub_allVer_df$relStart		<- unlist(bsub_ver_relStart_list)
-bsub_allVer_df$distToOri	<- ifelse(bsub_allVer_df$relStart > 0.5, 1 - bsub_allVer_df$relStart, bsub_allVer_df$relStart)
-bsub_allVer_df				<- bsub_allVer_df[order(-bsub_allVer_df$distToOri),]
-names(bsub_allVer_df)[names(bsub_allVer_df) == "OrthGroup"]	<- "orthGroup"
-bsub_allVer_df$binomial		<- "Bacillus subtilis 168"
+
+# Adjust the dataframe to conform to the gKau data
+bsub_allVer_adj_df	<- bsub_allVer_df %>%
+	mutate(relStart = unlist(bsub_ver_relStart_list)) %>%
+	mutate(distToOri = case_when(
+		relStart > 0.5 ~ 1 - relStart,
+		relStart <= 0.5 ~ relStart)) %>%
+	mutate(binomial = "Bacillus subtilis 168") %>%
+	select(-c(is_ag, strain, acc_ass, product)) %>%
+	rename(orthGroup = OrthGroup, geneStart = gene_start, geneEnd = gene_end, locusTag = locus)
 
 
 # Save as RDS
-write.csv(bsub_allVer_df, file = file.path(sporulation_path, "bSubtilus_fullOrth_list.csv"), row.names = FALSE)
+write.csv(bsub_allVer_adj_df, file = file.path(sporulation_path, "bSubtilus_fullOrth_list.csv"), row.names = FALSE)
 
-
-# For the 1094 Gkau Vertical orthGroups, we find 898 Bsub genes from 893 groups
-# To plot, we only want groups that are present in both
-gKauOnly_verInBsub_data				<- subset(gKauOnly_ver_data, orthGroup %in% bsub_allVer_df$orthGroup)
+# ---------------------------------- #
+# For 1094 Gkau Vertical orthGroups there are 898 Bsub genes from 893 groups. Select groups only present in both
+gKauOnly_verInBsub_data				<- subset(gKauOnly_ver_data, orthGroup %in% bsub_allVer_adj_df$orthGroup)
 gKauOnly_verInBsub_data$relStart	<- gKauOnly_verInBsub_data$relGeneStart
 
 # Join the Gkau and Bsub data
-gKau_bSub_allVer_comb		<- full_join(gKauOnly_verInBsub_data, bsub_allVer_df)
+gKau_bSub_allVer_comb		<- full_join(gKauOnly_verInBsub_data, bsub_allVer_adj_df %>% select(-COGcat))
+
+# ---------------------------------- #
+# Find gKau genome length
+gKau_genomeLength_tbl	<- dbSendQuery(dbConn, 'SELECT genome_l FROM t1 WHERE protId == :sampleProtID LIMIT 1')
+dbBind(gKau_genomeLength_tbl, param = list(sampleProtID = sample(gKauOnly_ver_data$protID, 1)))
+gKau_genomeLength		<- dbFetch(gKau_genomeLength_tbl) %>% pull(genome_l)
+dbClearResult(gKau_genomeLength_tbl)
+
+
+# Scale by distance from terminus
+gKau_bSub_final	<- gKau_bSub_allVer_comb %>% 
+	mutate(genome_l = replace(genome_l, is.na(genome_l), gKau_genomeLength)) %>%
+	mutate(terRelStart = geneStart - (genome_l / 2))
 
 # Plot
 quartz(width = 21, height = 8, canvas = "white", bg = "white")
-allVer_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_allVer_comb, aes(x = binomial, y = relStart, yend = relStart, group = orthGroup, color = binomial)) +
+allVer_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_final, aes(x = binomial, y = terRelStart, group = orthGroup, color = binomial)) +
 	scale_y_continuous(
-		name = "Relative Genomic Position",
-		limits = c(0, 1),
-		breaks = seq(0, 1, by = 0.5),
-		minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
-		labels = c("Origin", "Terminus", "Origin")) +
+		name = "Position Relative to Terminus") +
 	geom_point(shape = 124, size = 8) +
 	geom_line(linetype = "solid", color = alpha(wes_palette("IsleofDogs1")[6], 0.9), size = 0.1) +
-	scale_color_manual(values = wes_palette("Darjeeling1")[c(1,5)], guide = FALSE) +
+	scale_color_manual(values = wes_palette("Darjeeling1")[c(5,1)], guide = FALSE) +
 	coord_flip() +
 	ggtitle("Comparison of shared (AG vertical) genes between Geobacillus kaustophilus and Bacillus subtilis") +
 	theme_classic() +
 	theme(
 		panel.grid.major.y = element_line(size = 0.05),
-		panel.grid.minor.x  = element_line(size = 0.4, linetype = "dashed", color = wes_palette("Darjeeling1")[2]),
+		panel.grid.major.x  = element_line(size = 0.4, linetype = "dashed", color = wes_palette("Darjeeling1")[2]),
 		axis.text = element_text(size = 11),
 		axis.text.y = element_text(angle = 45),
 		axis.title = element_text(size = 14),
@@ -316,27 +331,83 @@ allVer_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_allVer_comb, aes(x = binomi
 		plot.title = element_text(hjust = 0.5, size = 16))
 print(allVer_bSub_gKau_comparison_plot)
 
-fileName	<- file.path(sporFigureOut_path, "allVer_bSub_gKau_comparison")
+fileName	<- file.path(sporFigureOut_path, "allVer_bSub_gKau_terCentred")
 invisible(quartz.save(file = paste0(fileName, ".pdf"), type = "pdf", dpi = 100))
 invisible(quartz.save(file = paste0(fileName, ".png"), type = "png", dpi = 100))
+invisible(dev.off())
 
 
+# ------------------------------------------------------------------------------------- #
+# Bacillus subtilus expression analysis
+geneExpr_data	<- read.delim(file.path(sporulation_path, "GSE78108_growth_rate_annotated_genes.txt"), header = TRUE, stringsAsFactors = FALSE)
+allGene_data	<- read.delim(file.path(sporulation_path, "All_genes_of_B._subtilis_subtilis_168.txt"), header = TRUE, stringsAsFactors = FALSE)
 
+# Rename to locus tag
+allGene_data	%<>% rename(Locus.Tag = Accession.1) %>% arrange(Left.End.Position)
 
+# Combine expression data with bsub position data
+combined_data		<- left_join(geneExpr_data, allGene_data[,2:4], by = "Locus.Tag")
+combined_data$CHG	<- log(rowSums(combined_data[,grep("CHG\\.medium", names(combined_data))]) / 4)
+combined_data$CH	<- log(rowSums(combined_data[,grep("CH\\.medium", names(combined_data))]) / 4)
+combined_data$S		<- log(rowSums(combined_data[,grep("S\\.medium", names(combined_data))]) / 4)
+combined_data$SE	<- log(rowSums(combined_data[,grep("SE\\.medium", names(combined_data))]) / 4)
 
+# Get genome length and normalise genome size
+combined_data		%<>% mutate(relGeneStart = Left.End.Position / bsub_168_genomeLength)
 
+# Extend the data to avoid edge effects
+combined_extend		<- combined_data %>%
+	subset(relGeneStart <= 0.125 | relGeneStart >= 0.875) %>%
+	mutate(relGeneStart = case_when(
+		relGeneStart < 0.5 ~ relGeneStart + 1,
+		relGeneStart > 0.5 ~ relGeneStart - 1)) %>%
+	bind_rows(combined_data, .) %>%
+	arrange(relGeneStart)
 
+# Take our Bsub vertical genes and find the corresponding gene in the expression dataset by checking the closest genes
+allGene_data_starts	<- allGene_data$Left.End.Position
+num_allGeneData		<- nrow(allGene_data)
 
+withAdjustedGenePositions	<- lapply(1:nrow(bsub_allVer_df), function(geneIndex) {
+	geneEntry	<- bsub_allVer_df[geneIndex,]
+	geneStart	<- geneEntry$gene_start
 
+	absDists	<- abs(rep(geneStart, num_allGeneData) - allGene_data_starts)
+	closestGene	<- allGene_data[which(absDists == min(absDists)),]
 
+	geneEntry$adj_distance	<- closestGene$Left.End.Position
+	geneEntry$relAdj_dist	<- genomeRelativePosition(genePosition = geneEntry$adj_distance, oriStart = bsub_168_dnaA_data$oriStart, oriEnd = bsub_168_dnaA_data$oriEnd, oriStrand = bsub_168_dnaA_data$oriStrand, genomeLength = bsub_168_genomeLength)
 
+	return(geneEntry)
+})
+withAdjustedGenePositions_df	<- bind_rows(withAdjustedGenePositions)
 
+combined_extend.melt	<- melt(combined_extend, id.vars = c("Gene.Name", "relGeneStart"), measure.vars = c("CHG", "CH", "S", "SE"))
 
+plotCols	<- brewer.pal(6, "Blues")
+bSub_expression_plot	<- ggplot(data = combined_extend.melt, aes(x = relGeneStart, y = value, color = variable)) +
+	scale_y_continuous(name = "Relative Gene Expression") +
+	geom_smooth(method = "loess", span = 0.2, se = FALSE) +
+	geom_point(data = withAdjustedGenePositions_df, aes(x = relAdj_dist, y = 7), shape = 124, size = 8, inherit.aes = FALSE) +
+	scale_color_manual(name = "Growth\nMedium", values = rev(plotCols[3:6])) +
+	coord_cartesian(xlim = c(0, 1), ylim = c(4.9, 9), expand = FALSE) +
+	lightTheme +
+	theme(
+		panel.grid.minor.y = element_blank(),
+		panel.grid.major.x  = element_line(),
+		axis.text = element_text(size = 11),
+		axis.title = element_text(size = 14),
+		axis.title.y = element_blank(),
+		plot.title = element_text(hjust = 0.5, size = 16)
+	)
 
+quartz(width = 21, height = 8, canvas = "white", bg = "white")
+print(bSub_expression_plot)
 
-
-
-
+fileName	<- file.path(sporFigureOut_path, "bSub_expression_plot")
+invisible(quartz.save(file = paste0(fileName, ".pdf"), type = "pdf", dpi = 100))
+invisible(quartz.save(file = paste0(fileName, ".png"), type = "png", dpi = 100))
+invisible(dev.off())
 
 
 

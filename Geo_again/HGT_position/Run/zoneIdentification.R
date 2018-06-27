@@ -63,7 +63,7 @@ extendedPos_df$type	<- factor(extendedPos_df$type, levels = dataTypes_trunc)
 # Exploratory plot of linear HGT vs Ver densities to identify boundaries
 
 # Set density curve colours
-all_HGT_Ver_cols	<- c(alpha(wes_palette("Chevalier1")[4], 0.5), wes_palette("Darjeeling1")[2:3])
+all_HGT_Ver_cols	<- c(dataTypeCols$All, dataTypeCols$HGT, dataTypeCols$Ver)
 
 # Plot
 linearXSpecies_verHGT_dens_plot <- ggplot(data = extendedPos_df, aes(x = relGeneStart, color = type)) +
@@ -155,26 +155,28 @@ zoneRange_list	<- lapply(zoneBounds$boundary, function(position) {
 	return(out_df)
 })
 zoneRange_df	<- bind_rows(zoneRange_list)
-zoneRange_df$zoneName	<- c("oriVer", "oriHGT", "midOther", "flankVer", "terHGT", "flankVer", "midOther", "oriHGT", "oriVer", "oriHGT", "midOther")
+zoneRange_df$zoneName	<- c("Origin", "Near Origin", "Far Origin", "Flank", "Terminal", "Flank", "Far Origin", "Near Origin", "Origin", "Near Origin", "Far Origin")
 zoneRange_df$zoneType	<- c("Ver", "HGT", "Other", "Ver", "HGT", "Ver", "Other", "HGT", "Ver", "HGT", "Other")
 
+
 # Color by type
-zoneCol_df		<- data.frame(
-	zoneType = c("HGT", "Ver", "Other"),
-	zoneCol = c(wes_palette("Darjeeling1")[2:3], wes_palette("IsleofDogs1")[6]),
-	zoneCol_alpha = alpha(c(wes_palette("Darjeeling1")[2:3], wes_palette("IsleofDogs1")[6]), 0.2),
-	stringsAsFactors = FALSE)
-zoneRange_df	<- left_join(zoneRange_df, zoneCol_df, by = "zoneType")
+zoneRange_df	<- zoneRange_df %>% 
+	mutate(zoneCol = case_when(
+		zoneType == "HGT" ~ dataTypeCols$HGT,
+		zoneType == "Ver" ~ dataTypeCols$Ver,
+		zoneType == "Other" ~ dataTypeCols$Other
+	)) %>%
+	mutate(zoneCol_alpha = alpha(zoneCol, 0.2)) %>%
+	mutate(zoneColbyName = case_when(
+		zoneName == "Origin" ~ wes_palette("BottleRocket2")[2],
+		zoneName == "Near Origin" ~ wes_palette("Darjeeling1")[2],
+		zoneName == "Far Origin" ~ wes_palette("IsleofDogs1")[6],
+		zoneName == "Flank" ~ wes_palette("Darjeeling1")[3],
+		zoneName == "Terminal" ~  wes_palette("Darjeeling2")[2]
+	)) %>%
+	mutate(zoneColbyName_alpha = alpha(zoneColbyName, 0.2))
 
-# Color by name
-zoneColbyName_dF	<- data.frame(
-	zoneName = c("oriVer", "oriHGT", "midOther", "flankVer", "terHGT"),
-	zoneColbyName = c(wes_palette("BottleRocket2")[2], wes_palette("Darjeeling1")[2], wes_palette("IsleofDogs1")[6], wes_palette("Darjeeling1")[3], wes_palette("Darjeeling2")[2]),
-	zoneColbyName_alpha = alpha(c(wes_palette("BottleRocket2")[2], wes_palette("Darjeeling1")[2], wes_palette("IsleofDogs1")[6], wes_palette("Darjeeling1")[3], wes_palette("Darjeeling2")[2]), 0.2),
-	stringsAsFactors = FALSE)
-zoneRange_df	<- left_join(zoneRange_df, zoneColbyName_dF, by = "zoneName")
-
-# Finall join the boundary df with the zone df
+# Finally join the boundary df with the zone df
 zoneBoundRange_df	<- left_join(zoneBounds_padded, zoneRange_df, by = "boundary")
 
 # Plot the prelim boundaries with the enrichment zones
