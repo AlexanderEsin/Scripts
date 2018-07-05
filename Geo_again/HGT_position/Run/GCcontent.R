@@ -5,7 +5,7 @@ invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("RSQLite", "dplyr","ggplot2", "ggtree", "wesanderson", "Biostrings", "ggpubr", "Hmisc", "data.table", "broom")
+p_load("RSQLite", "tidyverse", "ggtree", "wesanderson", "Biostrings", "ggpubr", "Hmisc", "data.table", "broom")
 
 
 # ------------------------------------------------------------------------------------- #
@@ -15,9 +15,6 @@ message("\nReading in data...", appendLF = FALSE)
 
 # General position data
 perTypeData			<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
-
-# Per-type COG data
-perTypeCOG_data		<- readRDS(file.path(positionData_path, "AG_perTypeCOGData.rds"))
 
 # Subgroup data
 subgroupData		<- readRDS(file.path(positionData_path, "AG_subgroupData.rds"))
@@ -119,7 +116,7 @@ byTypebySpeciesGC_data	<- mclapply(dataTypes_withAge, function(dataType) {
 		penalty		<- NA
 	} else if (identical(dataType, "Ver")) {
 		penalty		<- "3"
-		geneCutOff	<- minGeneNum
+		geneCutOff	<- 1
 	} else {
 		penalty		<- "4"
 		if (identical(dataType, "Old") || identical(dataType, "Recent")) {
@@ -150,6 +147,10 @@ byTypebySpeciesGC_data	<- mclapply(dataTypes_withAge, function(dataType) {
 			# Further subset by position
 			subsetByPos			<- subset(subsetData, binomial == species & relGeneStart >= bin_start & relGeneStart <= bin_end)
 			subsetByPos			<- subsetByPos[order(subsetByPos$relGeneStart),]
+
+			if ("WP_011229694.1.235909_192711" %in% subsetByPos$protID) {
+				print(genome_bin)
+			}
 
 			# If the number of genes of this dataType in this Bin is 0 - return
 			if (length(subsetByPos$protID) < geneCutOff) {
@@ -204,6 +205,76 @@ byTypeSpeciesGCNorm		<- lapply(byTypebySpeciesGC_data, function(GC_byType) {
 	bySpeciesNorm_df	<- bind_rows(bySpeciesNorm_list)
 })
 
+# ------------------------------------------------------------------------------------- #
+
+HGT_Ver_combined	<- byTypeSpeciesGCNorm$lHGT %>%
+	mutate(Type = "HGT") %>%
+	bind_rows(byTypeSpeciesGCNorm$Ver) %>%
+	bind_rows(byTypeSpeciesGCNorm$Old) %>%
+	bind_rows(byTypeSpeciesGCNorm$Recent) %>%
+	subset(!is.na(locusTag)) 
+
+
+combined_all	<- byTypeSpeciesGCNorm$All %>%
+	subset(!is.na(locusTag)) %>%
+	subset(!locusTag %in% HGT_Ver_combined$locusTag) %>%
+	mutate(Type = "Other") %>%
+	bind_rows(HGT_Ver_combined, .) %>%
+	mutate(Type = factor(Type, levels = c("HGT", "Other", "Ver", "Recent", "Old"))) %>%
+	mutate(plotDiv = case_when(
+		Type == "Recent" | Type == "Old" ~ "byAge",
+		TRUE ~ "byType")) %>% 
+	mutate(plotDiv = factor(plotDiv, levels = c("byType", "byAge")))
+
+
+statComparisons		<- c(combn(c("HGT", "Other", "Ver"), 2, simplify = FALSE), list(c("Recent", "Old")))
+dodge	<- position_dodge(width = 1)
+
+GC_content_allGenome_comparison <- ggplot(data = combined_all, aes(x = Type, y = GC_norm, group = Type, fill = factor(Type))) +
+	# facet_wrap(~plotDiv, scales = "free_x") +
+	geom_violin(position = dodge, trim = FALSE) +
+	scale_y_continuous(
+		name = "Normalised GC content",
+		limits = c(-0.4, 0.4),
+		breaks = seq(-0.4, 0.2, by = 0.1)
+	) +
+	geom_boxplot(position = dodge, width = 0.1, outlier.color = NA, show.legend = FALSE) +
+	scale_fill_manual(values = c(dataTypeCols$HGT, dataTypeCols$Other, dataTypeCols$Ver, dataTypeCols$Recent, dataTypeCols$Old)) +
+	stat_compare_means(comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni", color = axisCol, size = 0.8, label = "p.signif") +
+	lightTheme +
+	theme(
+		panel.grid.minor.y = element_blank(),
+		axis.title = element_text(angle = 90),
+		axis.text = element_text(angle = 90)
+	)
+
+
+
+quartz(width = 20, height = 12)
+print(GC_content_allGenome_comparison)
+quartz.save(file = file.path(GC_SpeciesFig_path, "allGenome_GCcontent_compare.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -229,6 +300,14 @@ GC_all_plot		<- ggplot(data = GC_all, aes(x = Species, y = GC_content, color = S
 		axis.text.x = element_blank()
 	)
 
+
+quartz(width = 18, height = 8)
+print(GC_all_plot)
+quartz.save(file = file.path(GC_SpeciesFig_path, "GC_allBySpecies.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
+
+
+
 ## --- This should be done on the 25 Genome dataset --- #
 # The means of the low GC vs high GC genomes
 meanGC_bySpecies	<- GC_all %>% group_by(Species) %>% summarise(mean = mean(GC_content))
@@ -249,10 +328,7 @@ allOthers_meanSize		<- genomeSize_df %>% filter(!binomial %in% outlierBranch1_sp
 
 
 
-quartz(width = 18, height = 8)
-print(GC_all_plot)
-quartz.save(file = file.path(GC_SpeciesFig_path, "GC_allBySpecies.pdf"), type = "pdf", dpi = 300)
-invisible(dev.off())
+
 
 
 

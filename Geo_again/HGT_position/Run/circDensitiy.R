@@ -4,20 +4,13 @@
 invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("ggplot2", "wesanderson", "gridExtra")
+p_load("tidyverse", "wesanderson", "gridExtra")
 
 # ------------------------------------------------------------------------------------- #
 # Read in data
 message("\nReading in data...", appendLF = FALSE)
 
 perTypeData				<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
-
-subDivisionKey_file		<- file.path(positionData_path, "subDivisionKeyData.rds")
-if(!file.exists(subDivisionKey_file)) {
-	stop("The subdivision data file \"", subDivisionKey_file, "\" is required.\nRun the subDivisionPrep.R script!")
-} else {
-	subDivisionKey_data	<- readRDS(file.path(positionData_path, "subDivisionKeyData.rds"))
-}
 
 message("\rReading in data... done\n")
 
@@ -28,7 +21,71 @@ if (!dir.exists(circDensityFig_path)) dir.create(circDensityFig_path)
 
 # ------------------------------------------------------------------------------------- #
 # Set global quartz options
-quartz.options(canvas = "#333233", bg = "#333233")
+quartz.options(canvas = "white", bg = "white")
+
+
+
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+
+# Pick bandwith
+snglPlot_bw	<- 3000
+
+# Plot the density for a single penalty - manuscript
+HGT_data	<- perTypeData$lHGT$'4'$allPosData
+Ver_data	<- perTypeData$Ver$'3'$allPosData
+all_data	<- perTypeData$All$allPosData
+
+# Calculate densities
+HGT_density	<- density.circular(lHGT_data$CircStart, kernel = "vonmises", bw = snglPlot_bw)
+Ver_density	<- density.circular(Ver_data$CircStart, kernel = "vonmises", bw = snglPlot_bw)
+All_density	<- density.circular(all_data$CircStart, kernel = "vonmises", bw = snglPlot_bw)
+
+# Number of genes for each density plot
+
+
+# Plotting this is tricky: straight-to-pdf gives split output. Plot to quartz device and read off device to PDF file
+quartz(width = 12, height = 12)
+
+par(mar = c(0,0,0,0))
+
+circularDensityPlot(
+	dataDensityA = lHGTDensity,
+	dataDensityB = vertDensity,
+	bgDensity = allDensity,
+	uin = 3,
+	shrink = 0.5,
+	tcl.offset = 0.8,
+	bg = "white",
+	axisCol = axisCol,
+	enrichUpColor = dataTypeCols$HGT,
+	enrichDownColor = wes_palette("Darjeeling1")[1],
+	densBLineColor = dataTypeCols$Ver)
+
+
+outputFileName	<- file.path(circDensityFig_path, "singlePenalty_HGTDensity_plot.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ------------------------------------------------------------------------------------- #
@@ -342,93 +399,6 @@ invisible(lapply(binomial_list[1], function(species) {
 outputFileName	<- file.path(circDensityFig_path, "gKaustophlis_verticalGenes")
 invisible(quartz.save(file = paste0(outputFileName, ".pdf"), type = "pdf", dpi = 100))
 invisible(dev.off())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

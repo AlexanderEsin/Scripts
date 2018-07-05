@@ -3,7 +3,7 @@
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("circular", "wesanderson", "ggplot2", "polyclip")
 
-circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, shrink = 1.4, titleCex = 1.2, titleName = "", tcl.offset = 1, uin = 2.1, bg = "#333233", axisCol = "#D9D9D9", enrichUpColor = NULL, enrichDownColor = NULL, axis.at = NULL, axis.labels = NULL) {
+circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, shrink = 1.4, titleCex = 1.2, titleName = "", tcl.offset = 1, uin = 2.1, bg = "white", axisCol = "black", enrichUpColor = NULL, enrichDownColor = NULL, densBLineColor = "black", axis.at = NULL, axis.labels = NULL) {
 
 	# Check all data input is density.circular
 	dataClass_l	<- lapply(list(dataDensityA, bgDensity), class)
@@ -46,8 +46,8 @@ circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, sh
 	if (is.null(enrichDownColor))	enrichDownColor	<- wes_palette("Darjeeling1")[1]
 
 	# Adjust the alpha of the colors for some transparency
-	enrichUpColor	<- alpha(enrichUpColor, 0.5)
-	enrichDownColor	<- alpha(enrichDownColor, 0.5)
+	# enrichUpColor	<- alpha(enrichUpColor, 0.5)
+	# enrichDownColor	<- alpha(enrichDownColor, 0.5)
 	
 	enrichDown	<- alpha(wes_palette("Darjeeling1")[1], 0.5)
 
@@ -60,8 +60,7 @@ circularDensityPlot	<- function(dataDensityA, dataDensityB = NULL, bgDensity, sh
 
 	# If provided, plot the other data as a seperate line
 	if (!is.null(dataDensityB) & identical(class(dataDensityB), "density.circular")) {
-		Bline_col	<- alpha(wes_palette("Darjeeling1")[3], 0.8)
-		B_line		<- lines(dataDensityB, lwd = 1.5, col = Bline_col, plot.info = mainPlot, shrink = shrink)
+		B_line		<- lines(dataDensityB, lwd = 3.5, col = densBLineColor, plot.info = mainPlot, shrink = shrink)
 	}
 
 	# Replot the background line so it appears on top of the polygons

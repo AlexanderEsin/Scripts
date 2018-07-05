@@ -25,5 +25,7 @@ processCOGData		<- function(COG, data = NULL, dataType, penalty, byAge = FALSE, 
 	circStart		<- circular(perCOGAll$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
 	perCOGbyZone	<- splitByZone(data = perCOGAll, zones = zone_data, variable = "COGcat")
 
+	perCOGbyZone$tab_df$zone	<- factor(perCOGbyZone$tab_df$zone, levels = zone_data$zoneName)
+
 	return(list(allData = perCOGbyZone$full_data, CircStart = circStart, perCOGbyZone_df = perCOGbyZone$tab_df))
 }

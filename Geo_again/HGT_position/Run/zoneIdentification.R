@@ -36,26 +36,24 @@ withExtendedPos_data <- lapply(dataTypes_trunc, function(dataType) {
 		data	<- perTypeData[[dataType]][[hgtPenalty]]$allPosData
 	}
 
-	# Subset to remove the circular start and end
-	data_trim	<- subset(data, select = -c(CircStart, CircEnd))
-	
-	# Add the dataType as a column
-	data_trim$type	<- dataType
 
-	# Add the first quarter of the data onto the end to calculate densities over the Origin
-	firstQ		<- subset(data_trim, relGeneStart >= 0 & relGeneStart <= 0.25)
-	firstQ$relGeneStart	<- firstQ$relGeneStart + 1
-	firstQ$relGeneEnd	<- firstQ$relGeneEnd + 1
-	extended	<- bind_rows(list(data_trim, firstQ))
+	data_trim	<- data %>%
+		select(-c(CircStart, CircEnd)) %>% 
+		mutate(type = dataType)
 
-	return(list(normal_df = data_trim, extended_df = extended))
+	data_ext	<- data_trim %>%
+		subset(relGeneStart <= 0.25) %>%
+		mutate(relGeneStart = relGeneStart + 1, relGeneEnd = relGeneEnd + 1) %>%
+		bind_rows(data_trim)
+
+	return(list(normal_df = data_trim, extended_df = data_ext))
 })
 
 # Without extension
 normalPos_df		<- bind_rows(lapply(withExtendedPos_data, function(x) return(x$normal_df)))
 normalPos_df$type	<- factor(normalPos_df$type, levels = dataTypes_trunc)
 
-# With 25% extension of data
+# With +/- 12.5% extension of data
 extendedPos_df		<- bind_rows(lapply(withExtendedPos_data, function(x) return(x$extended_df)))
 extendedPos_df$type	<- factor(extendedPos_df$type, levels = dataTypes_trunc)
 
@@ -155,7 +153,7 @@ zoneRange_list	<- lapply(zoneBounds$boundary, function(position) {
 	return(out_df)
 })
 zoneRange_df	<- bind_rows(zoneRange_list)
-zoneRange_df$zoneName	<- c("Origin", "Near Origin", "Far Origin", "Flank", "Terminal", "Flank", "Far Origin", "Near Origin", "Origin", "Near Origin", "Far Origin")
+zoneRange_df$zoneName	<- c("Origin", "Near Origin", "Far Origin", "Flank", "Terminus", "Flank", "Far Origin", "Near Origin", "Origin", "Near Origin", "Far Origin")
 zoneRange_df$zoneType	<- c("Ver", "HGT", "Other", "Ver", "HGT", "Ver", "Other", "HGT", "Ver", "HGT", "Other")
 
 
@@ -172,7 +170,7 @@ zoneRange_df	<- zoneRange_df %>%
 		zoneName == "Near Origin" ~ wes_palette("Darjeeling1")[2],
 		zoneName == "Far Origin" ~ wes_palette("IsleofDogs1")[6],
 		zoneName == "Flank" ~ wes_palette("Darjeeling1")[3],
-		zoneName == "Terminal" ~  wes_palette("Darjeeling2")[2]
+		zoneName == "Terminus" ~  wes_palette("Darjeeling2")[2]
 	)) %>%
 	mutate(zoneColbyName_alpha = alpha(zoneColbyName, 0.2))
 
@@ -258,6 +256,65 @@ toOriDensity_withZones_plot	<- ggplot(data = normalPos_df, aes(x = distToOri, co
 		axis.ticks.length = unit(0.6, "lines"),
 		plot.title = element_text(hjust = 0.5, size = 16)
 	)
+
+
+
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+
+# For Figures
+normal_df_ext	<- normalPos_df %>%
+	subset(distToOri < 0.1 | distToOri > 0.9) %>%
+	mutate(distToOri = case_when(
+		distToOri < 0.1 ~ distToOri + 0.5,
+		TRUE ~ distToOri - 0.5)
+	) %>%
+	bind_rows(normalPos_df)
+
+
+oriToTerZoneDensity_plot <- ggplot(data = normal_df_ext, aes(x = distToOri, color = type)) +
+	scale_x_continuous(
+		expand = expand_scale(mult = c(0.025, 0.025)),
+		name = "Normalized genome position",
+		# limits = c(0, 1),
+		breaks = seq(0, 0.5, by = 0.5),
+		labels = c("Origin", "Terminus"),
+		minor_breaks = seq(0, 0.5, by = ((1 / 360) * 30)),
+		sec.axis = dup_axis(
+			name = NULL,
+			breaks = rowMeans(zoneBoundaryList$halfGenomeRange[c("zoneMin", "zoneMax")]),
+			labels = zoneBoundaryList$halfGenomeRange$zoneName)
+	) +	
+	scale_y_continuous(
+		name = "Gene Enrichment") +
+	# Plot density lines
+	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/10, size = 1) +
+	# Boundary lines
+	geom_vline(xintercept = zoneBoundaryList$halfGenomeRange$boundary, color = boundCol, linetype = "dashed") +
+	# Zone colouring
+	geom_rect(
+		data = zoneBoundaryList$fullRange,
+		aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf),
+		fill = zoneBoundaryList$fullRange$zoneCol_alpha,
+		inherit.aes = FALSE) +
+	# Coloring, title, themes etc..
+	scale_color_manual(values = all_HGT_Ver_cols) +
+	ggtitle("Exploratory zone boundary analysis") +
+	coord_cartesian(xlim = c(0, 0.5), expand = FALSE) +
+	lightTheme +
+	theme(
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank())
+
+SMBE_figPath	<- "/Users/aesin/Desktop/SMBE_2018/Figures"
+if (!dir.exists(SMBE_figPath)) dir.create(SMBE_figPath)
+
+quartz(width = 20, height = 12)
+print(oriToTerZoneDensity_plot)
+quartz.save(file = file.path(SMBE_figPath, "oriToTerZoneDensity_plot.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
+
+
 
 
 

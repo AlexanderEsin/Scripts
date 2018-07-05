@@ -52,6 +52,12 @@ names(perTypeData)	<- dataTypes
 # Data structure for COG analysis
 message("\nProcessing COG data... ")
 
+# Zone list
+zoneBoundary_file	<- file.path(positionData_path, "AG_zoneBoundaries.rds")
+if (!file.exists(zoneBoundary_file)) stop("Run the zoneIdentification.R script first")
+
+zoneBoundaryList	<- readRDS(zoneBoundary_file)
+
 # List of all the unique COG categorties found in the entire AG dataset
 uniqueCOGs		<- unique(unlist(perTypeData$All$allPosData$COGcat))
 
@@ -133,15 +139,55 @@ speciesWithGI	<- unique(GI_positions_data$binomial)
 numSpeciesGI	<- length(speciesWithGI)
 
 # For each gene, does it lie within the GI boundaries for that genome?
-byType_withGI_data		<- lapply(list("lHGT", "sHGT", "Ver"), function(dataType) {
+byType_withGI_data		<- lapply(dataTypes, function(dataType) {
 
 	message(paste0("Data Type = ", dataType))
 
+	if (identical(dataType, "All")) {
+
+		bySpeciesWithGI_list	<- mclapply(speciesWithGI, function(species) {			
+
+			bySpeciesPos_data	<- subset(perTypeData$All$allPosData, binomial == species)
+			bySpeciesGI_data	<- subset(giBoundary_data, Binomial == species)
+
+			withinGI	<- unlist(lapply(1:nrow(bySpeciesPos_data), function(geneIndex) {
+
+				geneData		<- bySpeciesPos_data[geneIndex,]
+				relGeneStart	<- geneData$relGeneStart
+				
+				withinAnyGI		<- unlist(lapply(1:nrow(bySpeciesGI_data), function(GI_index) {
+					giEntry		<- bySpeciesGI_data[GI_index,]
+					withinGI	<- ifelse(relGeneStart >= giEntry$GI_relStart & relGeneStart <= giEntry$GI_relEnd, TRUE, FALSE)
+					return(withinGI)
+				}))
+
+				if(any(withinAnyGI)) return(TRUE) else return(FALSE)
+			}))
+
+			# Remove the circStart and circEnd columns as we'll break the circular class by bind_rows
+			bySpeciesPos_data	<- subset(bySpeciesPos_data, select = -c(CircStart, CircEnd))
+
+			bySpeciesWithGI_data	<- cbind(bySpeciesPos_data, In_GI = withinGI, stringsAsFactors = FALSE)
+			return(bySpeciesWithGI_data)
+		}, mc.cores = 14)
+
+		# Dataframe including only species with annotated GIs - each entry has a TRUE/FALSE for whether the gene is within a GI
+		bySpeciesWithGI_df		<- bind_rows(bySpeciesWithGI_list)
+
+		# Circularise start and end positions
+		bySpeciesWithGI_df$CircStart	<- circular(bySpeciesWithGI_df$relGeneStart * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+		bySpeciesWithGI_df$CircEnd		<- circular(bySpeciesWithGI_df$relGeneEnd * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
+
+		return(bySpeciesWithGI_df)
+	}
+	
 	byPenalty_withGI	<- lapply(penalty_list, function(penalty) {
 
 		message(paste0("\tWorking on penalty = ", penalty))
 
 		bySpeciesWithGI_list	<- mclapply(speciesWithGI, function(species) {
+
+			
 
 			bySpeciesPos_data	<- subset(perTypeData[[dataType]][[penalty]]$allPosData, binomial == species)
 			bySpeciesGI_data	<- subset(giBoundary_data, Binomial == species)
@@ -179,7 +225,7 @@ byType_withGI_data		<- lapply(list("lHGT", "sHGT", "Ver"), function(dataType) {
 	names(byPenalty_withGI)	<- penalty_list
 	return(byPenalty_withGI)
 })
-names(byType_withGI_data)	<- c("lHGT", "sHGT", "Ver")
+names(byType_withGI_data)	<- dataTypes
 
 
 
