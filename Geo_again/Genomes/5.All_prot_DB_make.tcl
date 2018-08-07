@@ -178,7 +178,8 @@ puts "\nMaking index on the protID and taxid columns ..."
 ## Make an index on the protID
 db1 eval {create index protID_index on t1 (protID)}
 db1 eval {create index taxid_index on t1 (taxid)}
-db1 eval {create index locTag_index on t1 (taxid)}
+db1 eval {create index locTag_index on t1 (locus)}
+db1 eval {create index isAG_index on t1 (is_ag)}
 ## Close the database
 db1 close
 puts "\nAll database entry complete: see $anogeo_prot_db"

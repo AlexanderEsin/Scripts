@@ -100,6 +100,14 @@ sigF_inAG_data <- lapply(1:nrow(bsub_sigF_full_df), function(sigF_index) {
 	}
 
 	AG_inOrth	<- subset(perTypeData$All$allPosData, orthGroup == sigF_orthGroup & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
+	if (nrow(AG_inOrth) == 0) {
+		emptyRow			<- subset(perTypeData$All$allPosData[1,], select = -c(CircStart, CircEnd))
+		emptyRow[1,]		<- NA
+		emptyRow$geneName	<- sigF_geneName
+		emptyRow$inAllAG	<- FALSE
+		return(list(perOrth_data = emptyRow, uniqueTaxa = 0))
+	}
+
 	AG_inOrth$geneName	<- sigF_geneName
 
 	uniqueTaxa	<- length(unique(AG_inOrth$binomial))
@@ -199,9 +207,9 @@ sigF_regulon_crossAG_comparison_plot	<- ggplot(subset(sigF_inAG_plot_df), aes(x 
 	scale_x_continuous(name = "SigmaF regulon gene", limits = c(0, numGenes), breaks = seq(0.5, numGenes, by = 1), labels = unique(sigF_inAG_plot_df$geneName), sec.axis = dup_axis(name = NULL)) +
 	scale_y_continuous(name = "Relative Genomic Position", limits = c(-0.05, 1.05), breaks = seq(0, 1, by = 0.5), labels = c("Origin", "Terminus", "Origin"), expand = c(0, 0)) +
 	# Boundary lines
-	geom_hline(yintercept = zoneBoundary_noPad_df$boundary, color = alpha(boundaryCol, 0.5), size = 0.5, linetype = "dashed") +
+	geom_hline(yintercept = zoneBoundaryList$fullRange$boundary, color = alpha(zoneBoundaryList$boundCol, 0.5), size = 0.5, linetype = "dashed") +
 	# Zone colouring
-	geom_rect(data = zoneBoundary_noPad_df, aes(xmin = -Inf, xmax = Inf, ymin = zoneMin, ymax = zoneMax), fill = alpha(zone_cols[1:9], 0.15), inherit.aes = FALSE) +
+	geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = -Inf, xmax = Inf, ymin = zoneMin, ymax = zoneMax), fill = zoneBoundaryList$fullRange$zoneCol_alpha, inherit.aes = FALSE) +
 	# Gene positions
 	geom_segment(color = alpha(wes_palette("Moonrise1")[4], 0.6)) +
 	# Show which replichore the gene is on for Bsub
@@ -273,17 +281,17 @@ dbClearResult(bsub_allVer_protID_tbl)
 # ---------------------------------- #
 
 # Find the relative start position of the B subtilis genes
-bsub_ver_relStart_list	<- lapply(bsub_allVer_df$gene_start, genomeRelativePosition, oriStart = bsub_168_dnaA_data$oriStart, oriEnd = bsub_168_dnaA_data$oriEnd, oriStrand = bsub_168_dnaA_data$oriStrand, genomeLength = bsub_168_genomeLength)
+bsub_ver_relStart_list	<- lapply(bsub_allVer_raw_df$gene_start, genomeRelativePosition, oriStart = bsub_168_dnaA_data$oriStart, oriEnd = bsub_168_dnaA_data$oriEnd, oriStrand = bsub_168_dnaA_data$oriStrand, genomeLength = bsub_168_genomeLength)
 
 # Adjust the dataframe to conform to the gKau data
-bsub_allVer_adj_df	<- bsub_allVer_df %>%
+bsub_allVer_adj_df	<- bsub_allVer_raw_df %>%
 	mutate(relStart = unlist(bsub_ver_relStart_list)) %>%
 	mutate(distToOri = case_when(
 		relStart > 0.5 ~ 1 - relStart,
 		relStart <= 0.5 ~ relStart)) %>%
 	mutate(binomial = "Bacillus subtilis 168") %>%
 	select(-c(is_ag, strain, acc_ass, product)) %>%
-	rename(orthGroup = OrthGroup, geneStart = gene_start, geneEnd = gene_end, locusTag = locus)
+	dplyr::rename(orthGroup = OrthGroup, geneStart = gene_start, geneEnd = gene_end, locusTag = locus)
 
 
 # Save as RDS
@@ -310,12 +318,18 @@ gKau_bSub_final	<- gKau_bSub_allVer_comb %>%
 	mutate(genome_l = replace(genome_l, is.na(genome_l), gKau_genomeLength)) %>%
 	mutate(terRelStart = geneStart - (genome_l / 2))
 
+bsub_sigF_relTer	<- bsub_sigF_full_df %>%
+	mutate(terRelStart = gene_start - (bsub_168_genomeLength / 2)) %>%
+	mutate(binomial = "Bacillus subtilis 168") %>%
+	dplyr::rename(orthGroup = OrthGroup)
+
 # Plot
 quartz(width = 21, height = 8, canvas = "white", bg = "white")
 allVer_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_final, aes(x = binomial, y = terRelStart, group = orthGroup, color = binomial)) +
 	scale_y_continuous(
 		name = "Position Relative to Terminus") +
 	geom_point(shape = 124, size = 8) +
+	geom_point(data = bsub_sigF_relTer, aes(x = 0.5, y = terRelStart, group = orthGroup), shape = 124, size = 8, color = "orange") +
 	geom_line(linetype = "solid", color = alpha(wes_palette("IsleofDogs1")[6], 0.9), size = 0.1) +
 	scale_color_manual(values = wes_palette("Darjeeling1")[c(5,1)], guide = FALSE) +
 	coord_flip() +
@@ -343,7 +357,7 @@ geneExpr_data	<- read.delim(file.path(sporulation_path, "GSE78108_growth_rate_an
 allGene_data	<- read.delim(file.path(sporulation_path, "All_genes_of_B._subtilis_subtilis_168.txt"), header = TRUE, stringsAsFactors = FALSE)
 
 # Rename to locus tag
-allGene_data	%<>% rename(Locus.Tag = Accession.1) %>% arrange(Left.End.Position)
+allGene_data	%<>% dplyr::rename(Locus.Tag = Accession.1) %>% arrange(Left.End.Position)
 
 # Combine expression data with bsub position data
 combined_data		<- left_join(geneExpr_data, allGene_data[,2:4], by = "Locus.Tag")
@@ -368,8 +382,8 @@ combined_extend		<- combined_data %>%
 allGene_data_starts	<- allGene_data$Left.End.Position
 num_allGeneData		<- nrow(allGene_data)
 
-withAdjustedGenePositions	<- lapply(1:nrow(bsub_allVer_df), function(geneIndex) {
-	geneEntry	<- bsub_allVer_df[geneIndex,]
+withAdjustedGenePositions	<- lapply(1:nrow(bsub_allVer_raw_df), function(geneIndex) {
+	geneEntry	<- bsub_allVer_raw_df[geneIndex,]
 	geneStart	<- geneEntry$gene_start
 
 	absDists	<- abs(rep(geneStart, num_allGeneData) - allGene_data_starts)

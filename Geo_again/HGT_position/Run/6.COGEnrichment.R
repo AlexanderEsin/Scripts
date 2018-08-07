@@ -46,20 +46,20 @@ HGTwithVer_COG	<- full_join(HGT_COGcount, Ver_COGcount, by = "COGcat") %>%
 		HGT_enrichment > 0 ~ HGT_enrichment + 0.2,
 		HGT_enrichment < 0 ~ HGT_enrichment - 0.2))
 
-HGTwithVer_COG_N20	<- HGTwithVer_COG %>%
-	subset(!HGTtotalCount < 20) %>%
+HGTwithVer_COG_N50	<- HGTwithVer_COG %>%
+	subset(!HGTtotalCount < 50) %>%
 	droplevels()
 
 # ------------------------------------------------------------------------------------- #
 
-HGT_COGenrichment_colorUse_barplot	<- ggplot(data = HGTwithVer_COG_N20, aes(x = COGcat, y = HGT_enrichment)) +
+HGT_COGenrichment_colorUse_barplot	<- ggplot(data = HGTwithVer_COG_N50, aes(x = COGcat, y = HGT_enrichment)) +
 	scale_x_discrete(position = "top") +
 	scale_y_continuous(
 		name = "COG Enrichment in HGT genes",
 		limits = c(-2.5, 2),
 		breaks = seq(-2, 2, by = 1)) +
 	geom_bar(aes(fill = HGT_enrichment), stat = "identity", color = axisCol) +
-	scale_fill_gradientn(colours = c(dataTypeCols$Ver, "white", dataTypeCols$HGT), values = scales::rescale(c(min(HGTwithVer_COG_N20$HGT_enrichment), -0.5, 0, 0.5, max(HGTwithVer_COG_N20$HGT_enrichment)))) +
+	scale_fill_gradientn(colours = c(dataTypeCols$Ver, "white", dataTypeCols$HGT), values = scales::rescale(c(min(HGTwithVer_COG_N50$HGT_enrichment), -0.5, 0, 0.5, max(HGTwithVer_COG_N50$HGT_enrichment)))) +
 	# geom_label(aes(x = COGcat, y = (HGT_enrichment - 0) / 2,  label = HGTtotalCount), fill = "white") +
 	geom_text(aes(x = COGcat, y = maxMin, label = COGcat), size = 6) +
 	lightTheme + 

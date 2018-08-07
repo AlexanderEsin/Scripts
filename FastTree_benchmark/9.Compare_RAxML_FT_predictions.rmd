@@ -40,6 +40,7 @@ library(knitr)
 library(dplyr)
 library(stringr)
 library(ggplot2)
+library(wesanderson)
 
 reprocessEventTips	<- function(event_list) {
 	tips_ordered	<- apply(event_list, 1, function(row) {
@@ -164,7 +165,7 @@ SameElements <- function(a, b) return(identical(sort(a), sort(b)))
 
 ### Read in data
 ```{r penalty_read_in_dta, warning = FALSE, message = FALSE, cache = TRUE}
-penalty <- 5
+penalty <- 4
 
 ## Read in events
 RAX_lHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/RAxML_outputs/Refined_events/Events", paste0("T", penalty, "_full_lHGT_events.tsv")), sep = "\t", header = T, stringsAsFactors = F)
@@ -173,11 +174,11 @@ RAX_sHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/RA
 FT_lHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/FastTree_outputs/Refined_events/Events", paste0("T", penalty, "_full_lHGT_events.tsv")), sep = "\t", header = T, stringsAsFactors = F)
 FT_sHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/FastTree_outputs/Refined_events/Events", paste0("T", penalty, "_full_sHGT_events.tsv")), sep = "\t", header = T, stringsAsFactors = F)
 
-RAX_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/Ver_const_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
-FT_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/Ver_const_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+RAX_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/Ver_const_t3_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+FT_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/Ver_const_t3_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
 
-RAX_const_HGT	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/HGT_full_tbl_t3_t4_t5.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
-FT_const_HGT	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/HGT_full_tbl_t3_t4_t5.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+RAX_const_HGT	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/HGT_full_tbl_t3_t4.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
+FT_const_HGT	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/HGT_full_tbl_t3_t4.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
 
 RAX_const_Vert	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/Ver_full_tbl_t3_t4_t5_t6.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
 FT_const_Vert	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/Ver_full_tbl_t3_t4_t5_t6.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
@@ -565,7 +566,7 @@ sHGT_event_ident_table	<- bind_rows(list(sHGT_rax_event_ident_df, sHGT_ft_event_
 ```{r sHGT_split_events_plot, warning = FALSE, message = FALSE, cache = TRUE, dev = 'png'}
 ## Colours!
 not_found_color	<- wes_palette("Moonrise1")[3]
-found_colors	<- rev(wes_palette("Cavalcanti"))[c(1,2,4,5)]
+found_colors	<- rev(wes_palette("Cavalcanti1"))[c(1,2,4,5)]
 
 sHGT_events_split.p		<-	ggplot(sHGT_event_ident_table, aes(x = Method, y = Fraction, fill = Type)) +
 							geom_bar(stat = "identity") +
@@ -834,7 +835,7 @@ vert_stats_df		<- data.frame(Method = method_types, Number.Of.Groups = c(num_RAX
 
 vert_stats.p	<-	ggplot(vert_stats_df, aes(x = Method, y = Number.Of.Groups, fill = Method)) +
 					geom_bar(stat = "identity") +
-					scale_fill_manual(values = wes_palette("Darjeeling")) +
+					scale_fill_manual(values = wes_palette("Darjeeling1")) +
 					scale_y_continuous(limits = c(0, 300), breaks = seq(0, 300, 50)) +
 					ggtitle("Vertical: RAxML, FastTree, and Shared") +
 					labs(y = "Number of Gene Families") +
@@ -916,7 +917,7 @@ RAxML_vert_fate_df	<-	data.frame(
 ```{r RAxML_vert_missing_fates.p, warning = FALSE, message = FALSE, cache = TRUE, dev = 'png'}
 RAX_missing_fates.p	<-	ggplot(RAxML_vert_fate_df, aes(x = Fate, y = Number, fill = Type)) +
 						geom_bar(stat = "identity") +
-						scale_fill_manual(values = wes_palette("Darjeeling")) +
+						scale_fill_manual(values = wes_palette("Darjeeling1")) +
 						scale_y_continuous(limits = c(0, 50), breaks = seq(0, 50, 5)) +
 						ggtitle("Fate of Missing RAxML Vertical Gene Families") +
 						labs(y = "Number of Gene Families") +
@@ -965,7 +966,7 @@ extra_FT_vert_df		<- data.frame(Fate = c("All FT Vert Extra", "From sHGT", "From
 
 extra_FT_fates.p	<-	ggplot(extra_FT_vert_df, aes(x = Fate, y = Number, fill = Fate)) +
 						geom_bar(stat = "identity") +
-						scale_fill_manual(values = rev(wes_palette("FantasticFox"))) +
+						scale_fill_manual(values = rev(wes_palette("FantasticFox1"))) +
 						scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5)) +
 						ggtitle("Fate of Extra FastTree Vertical Gene Families") +
 						labs(y = "Number of Gene Families") +

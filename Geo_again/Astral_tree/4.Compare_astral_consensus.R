@@ -128,7 +128,7 @@ rebind_anogeo		<- multi2di(rebind_anogeo, random = FALSE)
 
 rebind_prune_keys	<- drop.tip(rebind_anogeo, c("BIND1", "BIND2"))
 rebind_prune_keys$tip.label	<- StringTaxidNumeric(rebind_prune_keys$tip.label)
-write.tree(rebind_prune_keys, file = file.path(output_dir, "Astral_speciesTree_corrected.txt"))
+# write.tree(rebind_prune_keys, file = file.path(output_dir, "Astral_speciesTree_corrected.txt"))
 
 ## After writing out - put the file through FigTree to make the tree ultrametric
 ## Below is optional code to read that tree in and check it's ultrametric
@@ -136,7 +136,15 @@ write.tree(rebind_prune_keys, file = file.path(output_dir, "Astral_speciesTree_c
 # ultra_correct_tree	<- read.tree(file = file.path(output_dir, "Astral_speciesTree_correct_ultra.txt"))
 # is.ultrametric(ultra_correct_tree)
 
+# Visually very few disagreements
+x <- cophylo(bacillac_only, consensus_trees$`-50`$RAxML$bacillac, rotate = FALSE)
 
+quartz(h = 40, w = 10)
+plot.cophylo(x, size = 2)
+quartz.save(file = file.path("/Users/aesin/Desktop/testCophylo.pdf"), type = "pdf", dpi = 300)
+
+# Will need to thoroughly check whuch groups are included in the Astral bacillaceae MRCA and are not bacillaceae
+# The 21 extra tips appear to all be Bacillales (need to double check with lit)
 
 
 

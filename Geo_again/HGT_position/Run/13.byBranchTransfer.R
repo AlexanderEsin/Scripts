@@ -354,7 +354,7 @@ maxVal	<- round_any(max(perBranchZone_forStats$Proportion), 0.1, ceiling)
 
 # Plot pairwise correlations
 perBranchZone_plot <- ggpairs(data = perBranchZone_forPairwise, columns = 2:ncol(perBranchZone_forPairwise),
-	
+
 	upper = list(continuous = function(data, mapping, ...) {
 		cor_fun(data = data, mapping = mapping, method = "pearson", ndp = 2, sz = 6, color = axisCol)
 	}),

@@ -1,10 +1,5 @@
 #!/usr/local/bin/tclsh
 
-## In this script we label each protein ID in each proteome with
-## a unique suffix corresponding to the genome taxid and start position
-
-## In addition, we remove any protein entries with a "missing protein ID"
-
 source ~/Documents/Scripts/General_utils.tcl
 
 set direct		/users/aesin/Desktop/Geo_again

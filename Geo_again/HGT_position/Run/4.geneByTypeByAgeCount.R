@@ -23,6 +23,8 @@ HGTdata	<- perTypeData$lHGT$'4'$allPosData %>% select(-c(CircStart, CircEnd)) %>
 Verdata	<- perTypeData$Ver$'3'$allPosData %>% select(-c(CircStart, CircEnd)) %>% mutate(type = "Ver")
 Alldata	<- perTypeData$All$allPosData %>%  select(-c(CircStart, CircEnd)) %>% mutate(type = "All")
 
+HGTdata %>% filter(!protID %in% Alldata$protID)
+
 # Add the age - seperated data together
 HGT_byAge	<- HGTdata %>%
 	mutate(type = case_when(
@@ -59,3 +61,28 @@ quartz(width = 12, height = 8)
 print(countGenesByType_barplot)
 quartz.save(file = file.path(figureOutput_path, "geneNumberStats.pdf"), type = "pdf", dpi = 300)
 invisible(dev.off())
+
+# ------------------------------------------------------------------------------------- #
+
+HGTdata	<- perTypeData$lHGT$'4'$allPosData %>% select(-c(CircStart, CircEnd)) %>% mutate(Set = "HGT")
+Verdata	<- perTypeData$Ver$'3'$allPosData %>% select(-c(CircStart, CircEnd)) %>% mutate(Set = "Ver")
+Alldata	<- perTypeData$All$allPosData %>%  select(-c(CircStart, CircEnd)) %>% mutate(Set = "All")
+
+# Add the age - seperated data together
+HGT_byAge	<- HGTdata %>%
+	mutate(HGT_age = case_when(
+		Subgroup == TRUE ~ "Recent",
+		TRUE ~ "Old")) %>%
+	mutate(Subgroup = NULL)
+
+# Combine vertical and HGT genes
+combined_HGTVer	<- HGT_byAge %>% bind_rows(Verdata)
+
+# The "gray" zone is the "all" data excluding all vertical and HGT genes
+combined_all	<- Alldata %>% 
+	subset(!protID %in% combined_HGTVer$protID) %>%
+	mutate(Set = "Grey Zone") %>%
+	bind_rows(combined_HGTVer, .) %>%
+	mutate(COGcat = str_replace(COGcat, "-", "\\u2207"))
+
+write.table(combined_all, file = file.path(master_path, "..", "AG_manuscript", "Tables", "Sup_tbl_2.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)

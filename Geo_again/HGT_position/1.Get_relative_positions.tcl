@@ -98,6 +98,7 @@ close $out
 ## Penalty and HGT-type lists
 set penalty_list	[list 3 4 5 6]
 set hgtType_list	[list "lHGT" "sHGT" "Ver" "All"]
+# set hgtType_list	[list "All"]
 set allDone_flag	FALSE
 
 foreach hgtType $hgtType_list {
@@ -124,7 +125,7 @@ foreach hgtType $hgtType_list {
 				puts "All dataset is already complete!"
 				continue
 			}
-			set inputEvents_data	[allProt_db eval {SELECT DISTINCT OrthGroup FROM t1 where OrthGroup != "{}"}]
+			set inputEvents_data	[allProt_db eval {SELECT protID FROM t1 where is_ag == 1 AND plasmid == "F"}]
 		}
 
 
@@ -149,8 +150,10 @@ foreach hgtType $hgtType_list {
 				# Open the key file to translate tipID to protID
 				set key_file	$tipKey_dir/$orthGroup/$orthGroup\_KEY_tips.txt
 				set key_data	[lrange [split [string trim [openfile $key_file]] \n] 1 end]; # Remove header as well
+			} elseif {$hgtType eq "Ver"} {
+				set tipIDs		[allProt_db eval {SELECT protID FROM t1 where OrthGroup == $event AND is_ag == 1}]
 			} else {
-				set tipIDs		[allProt_db eval {SELECT protID FROM t1 where OrthGroup = $event AND is_ag = 1}]
+				set tipIDs		$event
 			}
 				
 			set totalTipIDs		[expr $totalTipIDs + [llength $tipIDs]]
@@ -215,7 +218,7 @@ foreach hgtType $hgtType_list {
 			incr counter
 		}
 
-		puts "\nProcessed a total of [expr $totalTipIDs - 1] protein IDs\n"
+		puts "\nProcessed a total of $totalTipIDs protein IDs\n"
 
 		## Define and make output directory
 		set output_dir			$posit_dir/$hgtType\_input

@@ -116,7 +116,7 @@ byTypebySpeciesGC_data	<- mclapply(dataTypes_withAge, function(dataType) {
 		penalty		<- NA
 	} else if (identical(dataType, "Ver")) {
 		penalty		<- "3"
-		geneCutOff	<- 1
+		geneCutOff	<- minGeneNum
 	} else {
 		penalty		<- "4"
 		if (identical(dataType, "Old") || identical(dataType, "Recent")) {
@@ -240,7 +240,7 @@ GC_content_allGenome_comparison <- ggplot(data = combined_all, aes(x = Type, y =
 	) +
 	geom_boxplot(position = dodge, width = 0.1, outlier.color = NA, show.legend = FALSE) +
 	scale_fill_manual(values = c(dataTypeCols$HGT, dataTypeCols$Other, dataTypeCols$Ver, dataTypeCols$Recent, dataTypeCols$Old)) +
-	stat_compare_means(comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni", color = axisCol, size = 0.8, label = "p.signif") +
+	stat_compare_means(comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni", color = axisCol, size = 0.8, label = "p.label") +
 	lightTheme +
 	theme(
 		panel.grid.minor.y = element_blank(),
@@ -470,9 +470,6 @@ quartz(width = 16, height = 16)
 print(GC_VervsOld_plot)
 quartz.save(file = file.path(GC_SpeciesFig_path, "GC_VervsOldbySpecies.pdf"), type = "pdf", dpi = 300)
 invisible(dev.off())
-
-
-
 
 
 
@@ -753,7 +750,7 @@ meanBySpecies <- GC_VerVsNew %>%
 geneCounter_df	<- meanBySpecies %>% group_by(Class) %>% summarise(count = n(), meanPos = as.numeric(summary(GC_norm)[5]))
 
 statComparisons		<- list(levels(meanBySpecies$Class)[1:2], levels(meanBySpecies$Class)[2:3], levels(meanBySpecies$Class)[3:4])
-recentHGT_VerContext_boxplot4	<- ggplot(data = meanBySpecies, aes(x = Class, y = GC_norm, fill = geneType)) +
+recentHGT_VerContext_boxplot	<- ggplot(data = meanBySpecies, aes(x = Class, y = GC_norm, fill = geneType)) +
 	scale_x_discrete(name = "Gene Class") +
 	scale_y_continuous(name = "Normalised GC value") +
 	geom_boxplot(color = axisCol, size = 0.7) +
@@ -799,6 +796,7 @@ invisible(dev.off())
 # With older transfers - is there a general pattern of amelioration towards the vertical-gene GC context of it's environment?
 
 GC_VerVsOldNew		<- bind_rows(list(byTypeSpeciesGCNorm$Ver, byTypeSpeciesGCNorm$Old, byTypeSpeciesGCNorm$Recent))
+# GC_VerVsOldNew		<- GC_VerVsOldNew %>% filter(Species %in% subgroupData$subgroupBinom_list)
 
 # Choose correlation method
 corrMethod	<- "pearson"
@@ -830,6 +828,9 @@ verVsHGT_normGC_cor_list	<- lapply(c("Recent", "Old"), function(hgtType) {
 
 	bySpecies_compare_df			<- bind_rows(bySpecies_compare)
 	bySpecies_compare_df$comparison	<- hgtType
+
+	## // Optional: remove outlier // ##
+	# bySpecies_compare_df %<>% filter(Ver_GC >= -0.1)
 
 	# Calculate correlation
 	calcCorr	<- rcorr(x = bySpecies_compare_df$Ver_GC, y = bySpecies_compare_df$lHGT_GC, type = corrMethod)
@@ -883,38 +884,29 @@ dbDisconnect(conn)
 
 # ------------------------------------------------------------------------------------- #
 
-# verCrossSpecies	<- lapply(1:binNumber, function(genomeBin) {
+# Total HGT genes in the 17 GI-ready genomes
+allHGT_genes	<- byType_withGI_data$lHGT$`4`
 
-# 	perBinGCNorm	<- subset(byTypeSpeciesGCNorm$Ver, BinIndex == genomeBin, select = GC_norm, drop = TRUE)
-# 	av_GCNorm		<- mean(perBinGCNorm, na.rm = TRUE)
-# 	out_df			<- data.frame(BinIndex = genomeBin, avGC = av_GCNorm, stringsAsFactors = FALSE)
-# 	return(out_df)
-# })
+HGT_withGC_df	<- allHGT_genes %>%
+	left_join(byTypeSpeciesGCNorm$lHGT, by = "locusTag")
 
-# verCrossSpecies_df		<- bind_rows(verCrossSpecies)
-
-# verCrossSpecies_circ	<-  verCrossSpecies_df
-# verCrossSpecies_circ$BinIndex	<- circular(x = (verCrossSpecies_circ$BinIndex / binNumber) * (2 * pi), zero = pi / 2, rotation = "clock", modulo = "2pi")
-
-# lHGTDensity <- perTypeData$lHGT$'4'$circDensity
-# allDensity	<- perTypeData$All$circDensity
-# verDensity	<- perTypeData$Ver$'3'$circDensity
-
-# numGenes	<- length(lHGTDensity$data)
-
-# GC_color	<- wes_palette("BottleRocket2")[1]
+HGT_byGI_stats <- HGT_withGC_df %>%
+	group_by(In_GI) %>%
+	summarise(n = n())
 
 
-# lines.circular(verCrossSpecies_circ$BinIndex, verCrossSpecies_df$avGC * 70, col = GC_color, plot.info = mainPlot, shrink = 10)
-# lines.circular(verCrossSpecies_circ$BinIndex, rep(0, 200), col = alpha(GC_color, 0.5), plot.info = mainPlot, shrink = 10)
+compare_GI_non_GI_HGT_GCcont_boxplot	<- ggplot(data = HGT_withGC_df, aes(x = In_GI, y = GC_norm, fill = In_GI)) +
+	geom_boxplot() +
+	scale_fill_manual(values = c(dataTypeCols$HGT, "red")) +
+	stat_compare_means() +
+	lightTheme
 
 
-
-
-
-
-
-
+quartz(h = 10, w = 10)
+print(compare_GI_non_GI_HGT_GCcont_boxplot)
+outputFileName	<- file.path(GC_SpeciesFig_path, "..", "GI_non_GI_HGT_GCcont_boxplot.pdf")
+quartz.save(file = file.path(GC_SpeciesFig_path, "..", "GI_non_GI_HGT_GCcont_boxplot.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
 
 
 

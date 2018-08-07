@@ -16,7 +16,7 @@ sqlite3 all_prot_db $protDB_path
 set full_groups_files	[glob $famGrp_dir/*fasta]
 puts stdout "Processing [llength $full_groups_files] group files...\n"
 
-# For each group fasta file, extract just the Geobacillus sequence. We will run the COG detection on the Geobacillus proteins only
+# For each group fasta file, extract just the GPA sequence. We will run the COG detection on the GPA proteins only
 set counter			1
 set plasmid_counter	0
 

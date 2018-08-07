@@ -33,7 +33,7 @@ sqlite3 db1 $prot_db_file
 
 ## First we get a list of the unique taxids for each species
 ## in our group of taxa. We take a list of the proteomes used
-## to assemble our dataset, and conver the acc_ass to taxids
+## to assemble our dataset, and convert the acc_ass to taxids
 set acc_ass_file	$consens_dir/$group_name\_acc_ass_list.txt
 set acc_ass_list	[split [string trim [openfile $acc_ass_file]] \n]
 set acc_ass_transl	[split [string trim [openfile $taxid_compare]] \n]

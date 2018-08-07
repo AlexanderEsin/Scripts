@@ -59,19 +59,28 @@ genomeOverview_plotList	<- lapply(AG_taxids, function(speciesTaxid) {
 	# Process the tRNA data
 	spec_tRNA_data	<- crossSpecies_tRNA_data %>% filter(taxid == speciesTaxid)
 
+	# Expand the density data to avoid edge effects
+	spec_combined_ext	<- spec_combined %>%
+		subset(relGeneStart < 0.1 | relGeneStart > 0.9) %>%
+		mutate(relGeneStart = case_when(
+			relGeneStart < 0.1 ~ relGeneStart + 1,
+			TRUE ~ relGeneStart - 1)
+		) %>%
+		bind_rows(spec_combined)
+
 	# Find the maximum density so we can scale the plot properly downstream
-	densityFind		<- ggplot(data = spec_combined, aes(x = relGeneStart, color = type)) + stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/5)
+	densityFind		<- ggplot(data = spec_combined_ext, aes(x = relGeneStart, color = type)) + stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/6)
 	densityBuild	<- ggplot_build(densityFind)
 	maxDensity		<- max(densityBuild$data[[1]][which(densityBuild$data[[1]]$scaled == 1), "y"])
 	density_scale	<- maxDensity / 0.49
 
 	# Plot
-	speciesOverview_plot	<- ggplot(data = spec_combined, aes(x = relGeneStart, y = ..density.. / density_scale, color = type)) +
+	speciesOverview_plot	<- ggplot(data = spec_combined_ext, aes(x = relGeneStart, y = ..density.. / density_scale, color = type)) +
 		# X axis
 		scale_x_continuous(
 			expand = expand_scale(mult = c(0.01, 0.01)),
 			name = "Normalized genome position",
-			limits = c(0, 1),
+			# limits = c(0, 1),
 			breaks = seq(0, 1, by = 0.5),
 			labels = c("Origin", "Terminus", "Origin"),
 			minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
@@ -98,7 +107,7 @@ genomeOverview_plotList	<- lapply(AG_taxids, function(speciesTaxid) {
 			geom = "line",
 			position = "identity",
 			n = 2^12,
-			adjust = 1/5,
+			adjust = 1/6,
 			size = 1) +
 		# Line colours
 		scale_color_manual(
@@ -145,6 +154,7 @@ genomeOverview_plotList	<- lapply(AG_taxids, function(speciesTaxid) {
 			fill = zoneBoundaryList$fullRange$zoneCol_alpha,
 			alpha = 0.15,
 			inherit.aes = FALSE) +
+		coord_cartesian(xlim = c(0, 1), expand = FALSE) +
 		# Title and themes
 		ggtitle(paste0(binomial, " overview")) +
 		lightTheme +

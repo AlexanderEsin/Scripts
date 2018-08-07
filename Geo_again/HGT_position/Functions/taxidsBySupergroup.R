@@ -7,7 +7,7 @@ taxidsBySupergroup	<- function(supergroup, speciesGroupings = NULL, nodes_dt = N
 
 	# Check all necessary data is provided
 	if (is.null(speciesGroupings)) stop("Provide subgroupings data by species: output in Genome_lists/Species_groupings.tsv")
-	if (is.null(nodes_data) || is.null(names_data)) stop("Provide both nodes and names taxdmp data")
+	if (is.null(nodes_dt) || is.null(names_dt)) stop("Provide both nodes and names taxdmp data")
 
 	# What are we working on
 	message(paste0("Identifying taxids belonging to ", supergroup, "..."))

@@ -264,7 +264,7 @@ toOriDensity_withZones_plot	<- ggplot(data = normalPos_df, aes(x = distToOri, co
 
 # For Figures
 normal_df_ext	<- normalPos_df %>%
-	subset(distToOri < 0.1 | distToOri > 0.9) %>%
+	subset(distToOri < 0.1 | distToOri > 0.4) %>%
 	mutate(distToOri = case_when(
 		distToOri < 0.1 ~ distToOri + 0.5,
 		TRUE ~ distToOri - 0.5)
@@ -306,12 +306,9 @@ oriToTerZoneDensity_plot <- ggplot(data = normal_df_ext, aes(x = distToOri, colo
 		panel.grid.minor.x = element_blank(),
 		axis.ticks = element_blank())
 
-SMBE_figPath	<- "/Users/aesin/Desktop/SMBE_2018/Figures"
-if (!dir.exists(SMBE_figPath)) dir.create(SMBE_figPath)
-
 quartz(width = 20, height = 12)
 print(oriToTerZoneDensity_plot)
-quartz.save(file = file.path(SMBE_figPath, "oriToTerZoneDensity_plot.pdf"), type = "pdf", dpi = 300)
+quartz.save(file = file.path(figureOutput_path, "oriToTerZoneDensity_plot.pdf"), type = "pdf", dpi = 300)
 invisible(dev.off())
 
 

@@ -163,7 +163,7 @@ allHGT_genes	<- byType_withGI_data$lHGT$`4`
 allVer_genes	<- byType_withGI_data$Ver$`3`
 
 # Number of all genes within
-allGI_genes		<- byType_withGI_data$HGT %>% subset(In_GI == TRUE)
+allGI_genes		<- byType_withGI_data$All %>% subset(In_GI == TRUE)
 
 # Overlap between GIs within HGT zones and GIs outside of GI zones
 vennTemp	<- venn.diagram(
@@ -172,11 +172,11 @@ vennTemp	<- venn.diagram(
 	fill = c(dataTypeCols$HGT, "darkblue"),
 	alpha = c(0.5, 0.5))
 
-quartz(h = 8, w = 8)
-grid.draw(vennTemp)
-outputFileName	<- file.path(GIanalysisFig_path, "HGT_vs_GI_vennOverlap.pdf")
-invisible(dev.copy2pdf(file = outputFileName))
-invisible(dev.off())
+# quartz(h = 8, w = 8)
+# grid.draw(vennTemp)
+# outputFileName	<- file.path(GIanalysisFig_path, "HGT_vs_GI_vennOverlap.pdf")
+# invisible(dev.copy2pdf(file = outputFileName))
+# invisible(dev.off())
 
 
 # ------------------------------------------------ #
@@ -229,18 +229,94 @@ allGenesByZone <- byType_withGI_data$All %>% mutate(zone = case_when(
 HGTzone_allGenes	<- allGenesByZone %>% subset(zone == "HGT")
 Otherzone_allGenes	<- allGenesByZone %>% subset(zone == "Other")
 
+GIs_withinZones_df	<- allGenesByZone %>%
+	filter(In_GI == TRUE) %>%
+	group_by(zone) %>%
+	summarise(numberOfGenes = n())
 
-vennTemp	<- venn.diagram(
-	list(HGT_zones = HGTzone_allGenes$protID, GI_genes = allGI_genes$protID, Other_zones = Otherzone_allGenes$protID),
-	filename = NULL,
-	fill = c(dataTypeCols$HGT, "blue", dataTypeCols$Other),
-	alpha = c(0.5, 0.5, 0.5))
+HGT_GIgenes_df	<- allHGT_genes %>%
+	group_by(In_GI) %>%
+	summarise(numberOfGenes = n())
 
-quartz(h = 8, w = 8)
-grid.draw(vennTemp)
-outputFileName	<- file.path(GIanalysisFig_path, "HGTzone_OtherZone_vs_GI_vennOverlap.pdf")
+
+
+HGT_recentOld_df	<- allHGT_genes %>%
+	group_by(Subgroup) %>%
+	summarise(numberOfGenes = n())
+
+GI_recentOld_df	<- allHGT_genes %>%
+	filter(In_GI == TRUE) %>%
+	group_by(Subgroup) %>%
+	summarise(numberOfGenes = n())
+
+
+
+GI_genes_byZone_barplot	<- ggplot(data = GIs_withinZones_df, aes(x = "GI genes by zone", y = numberOfGenes, label = as.character(100 * (numberOfGenes / sum(GIs_withinZones_df$numberOfGenes))))) +
+	geom_bar(aes(fill = zone), stat = "identity", position = "fill") +
+	geom_label(aes(group = zone), position = position_fill(vjust = 0.5), fill = "white", show.legend = FALSE) +
+	scale_fill_manual(values = c(dataTypeCols$HGT, dataTypeCols$Other, dataTypeCols$Ver)) +
+	lightTheme
+
+GI_genes_in_HGT_barplot	<- ggplot(data = HGT_GIgenes_df, aes(x = "GI_genes in HGT", y = numberOfGenes, label = as.character(100 * (numberOfGenes / sum(HGT_GIgenes_df$numberOfGenes))))) +
+	geom_bar(aes(fill = In_GI), stat = "identity", position = "fill") +
+	geom_label(aes(group = In_GI), position = position_fill(vjust = 0.5), fill = "white", show.legend = FALSE) +
+	scale_fill_manual(values = c(dataTypeCols$HGT, "red")) +
+	lightTheme
+
+HGT_genes_recentOld_barplot	<- ggplot(data = HGT_recentOld_df, aes(x = "GI genes by zone", y = numberOfGenes, label = as.character(100 * (numberOfGenes / sum(HGT_recentOld_df$numberOfGenes))))) +
+	geom_bar(aes(fill = Subgroup), stat = "identity", position = "fill") +
+	geom_label(aes(group = Subgroup), position = position_fill(vjust = 0.5), fill = "white", show.legend = FALSE) +
+	scale_fill_manual(values = c(dataTypeCols$Old, dataTypeCols$Recent)) +
+	lightTheme
+
+GI_genes_recentOld_barplot	<- ggplot(data = GI_recentOld_df, aes(x = "GI genes by zone", y = numberOfGenes, label = as.character(100 * (numberOfGenes / sum(GI_recentOld_df$numberOfGenes))))) +
+	geom_bar(aes(fill = Subgroup), stat = "identity", position = "fill") +
+	geom_label(aes(group = Subgroup), position = position_fill(vjust = 0.5), fill = "white", show.legend = FALSE) +
+	scale_fill_manual(values = c(dataTypeCols$Old, dataTypeCols$Recent)) +
+	lightTheme
+
+
+quartz(h = 10, w = 5)
+print(GI_genes_byZone_barplot)
+outputFileName	<- file.path(GIanalysisFig_path, "GI_genes_byZone_barplot.pdf")
 invisible(dev.copy2pdf(file = outputFileName))
 invisible(dev.off())
+
+
+quartz(h = 10, w = 5)
+print(GI_genes_in_HGT_barplot)
+outputFileName	<- file.path(GIanalysisFig_path, "GI_genes_in_HGT_barplot.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+quartz(h = 10, w = 5)
+print(HGT_genes_recentOld_barplot)
+outputFileName	<- file.path(GIanalysisFig_path, "HGT_genes_recentOld_barplot.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+quartz(h = 10, w = 5)
+print(GI_genes_recentOld_barplot)
+outputFileName	<- file.path(GIanalysisFig_path, "GI_genes_recentOld_barplot.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+
+
+# vennTemp	<- venn.diagram(
+# 	list(HGT_zones = HGTzone_allGenes$protID, GI_genes = allGI_genes$protID, Other_zones = Otherzone_allGenes$protID),
+# 	filename = NULL,
+# 	fill = c(dataTypeCols$HGT, "blue", dataTypeCols$Other),
+# 	alpha = c(0.5, 0.5, 0.5))
+
+# quartz(h = 8, w = 8)
+# grid.draw(vennTemp)
+# outputFileName	<- file.path(GIanalysisFig_path, "HGTzone_OtherZone_vs_GI_vennOverlap.pdf")
+# invisible(dev.copy2pdf(file = outputFileName))
+# invisible(dev.off())
 
 
 # ------------------------------------------------------------------------------------- #

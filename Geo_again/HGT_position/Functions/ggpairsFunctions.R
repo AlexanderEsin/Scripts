@@ -6,10 +6,10 @@ p_load("ggplot2", "GGally")
 # GGpairs function to plot correlation subplots
 cor_fun <- function(data, mapping, method = "pearson", ndp = 2, sz = 5, stars = TRUE, color = "red", ...) {
 
-	data <- na.omit(data[,c(as.character(mapping$x)[2], as.character(mapping$y)[2])])
+	data <- na.omit(data[,c(as.character(mapping$x[[2]]), as.character(mapping$y[[2]]))])
 
-	x <- data[, as.character(mapping$x)[2]]
-	y <- data[, as.character(mapping$y)[2]]
+	x <- data[, as.character(mapping$x[[2]])]
+	y <- data[, as.character(mapping$y[[2]])]
 
 	corr	<- cor.test(x, y, method = method)
 	est		<- corr$estimate
