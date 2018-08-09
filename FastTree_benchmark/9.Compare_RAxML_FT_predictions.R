@@ -697,6 +697,49 @@ print(extra_FT_fates.p)
 
 
 
+# -------------------------------------------- #
+RAX_to_FT_df <- data.frame(
+	x = c("RAxML lHGT Events", "Recovered in FT", "Grey Zone in FT", "Vertical in FT"),
+	number.of.events = c(250, 207, 41, 2)
+)
+
+RAX_to_FT_df %<>% mutate(x = factor(x, levels= x))
+
+plotFateRaxml_events <- ggplot(data = RAX_to_FT_df, aes(x = x, y = number.of.events, fill = x, label = as.character(number.of.events))) + 
+	geom_bar(stat = "identity") +
+	geom_text(position = position_fill(vjust = 25)) +
+	theme_classic()
+	
+
+# -------------------------------------------- #
+
+RAX_to_FT_Ver_df <- data.frame(
+	x = c("RAxML Vert Families", "Recovered in FT", "Grey Zone in FT", "lHGT in FT"),
+	number.of.events = c(250, 202, 44, 4)
+)
+
+RAX_to_FT_Ver_df %<>% mutate(x = factor(x, levels= x))
+
+plotFateRaxmlVer_events <- ggplot(data = RAX_to_FT_Ver_df, aes(x = x, y = number.of.events, fill = x, label = as.character(number.of.events))) + 
+	geom_bar(stat = "identity") +
+	geom_text(position = position_fill(vjust = 25)) +
+	theme_classic()
+
+# -------------------------------------------- #
+
+quartz(width = 12, height = 8)
+print(plotFateRaxml_events)
+quartz.save(file = file.path("/Users/aesin/Desktop/AG_manuscript/plotFateRaxmlHGT_events.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
+
+
+quartz(width = 12, height = 8)
+print(plotFateRaxmlVer_events)
+quartz.save(file = file.path("/Users/aesin/Desktop/AG_manuscript/plotFateRaxmVer_events.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
+
+
+
 
 
 
