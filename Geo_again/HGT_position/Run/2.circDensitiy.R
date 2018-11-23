@@ -10,7 +10,7 @@ p_load("tidyverse", "wesanderson", "gridExtra")
 # Read in data
 message("\nReading in data...", appendLF = FALSE)
 
-perTypeData				<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
+# perTypeData				<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
 
 message("\rReading in data... done\n")
 
@@ -29,7 +29,7 @@ quartz.options(canvas = "white", bg = "white")
 # ------------------------------------------------------------------------------------- #
 
 
-if (!is.null(outlierTaxid)) {
+# if (!is.null(outlierTaxid)) {
 	# Pick bandwith
 	snglPlot_bw	<- 3000
 
@@ -68,7 +68,7 @@ if (!is.null(outlierTaxid)) {
 	outputFileName	<- file.path(circDensityFig_path, "singlePenalty_HGTDensity_bw3000_plot.pdf")
 	invisible(dev.copy2pdf(file = outputFileName))
 	invisible(dev.off())
-}
+# }
 
 
 

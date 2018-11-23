@@ -9,7 +9,7 @@ in_tree_dir		<- file.path(direct, "Final_trees")
 out_tree_dir	<- file.path(direct, "Final_trees_relab")
 no_dup_tree_dir	<- file.path(direct, "Final_trees_noDup")
 
-database_path	<- "/Users/aesin/Desktop/Geo_again/All_prot_db"
+database_path	<- "/Users/aesin/Desktop/Geo_again/All_prot_db_new"
 dir.create(out_tree_dir, showWarnings = FALSE)
 dir.create(no_dup_tree_dir, showWarnings = FALSE)
 
@@ -57,7 +57,7 @@ for (input_tree in input_tree_list) {
 	tree_basename	<- basename(input_tree)
 	group_number	<- str_sub(tree_basename, start = 1, end = -13)
 	new_file_name	<- paste0(group_number, "_FT_relab_tree.txt")
-	write.tree(tree_relab, file = file.path(out_tree_dir, new_file_name))
+	# write.tree(tree_relab, file = file.path(out_tree_dir, new_file_name))
 
 	## Add a list of taxids represented in trees
 	unique_taxids	<- unique(taxid_list)
@@ -70,7 +70,7 @@ for (input_tree in input_tree_list) {
 	## Check whether all the taxids are unique in tree (i.e. no paralogs at all)
 	num_unique_taxids	<- length(unique(taxid_list))
 	if (length(taxid_list) == num_unique_taxids && length(tree_tips) >= 50) {
-		write.tree(tree_relab, file = file.path(no_dup_tree_dir, new_file_name))
+		# write.tree(tree_relab, file = file.path(no_dup_tree_dir, new_file_name))
 
 		all_taxids_represented	<- c(all_taxids_represented, unique_taxids)
 		all_taxids_represented	<- unique(all_taxids_represented)
@@ -87,4 +87,4 @@ message(paste0("These correspond to: ", paste(missing_taxid_data$acc_ass, collap
 message(paste0("These correspond to: ", paste(missing_taxid_data$binomial, collapse = " | ")))
 
 
-dbDisconnect(conn)
+#dbDisconnect(conn)

@@ -22,6 +22,7 @@ oriC_data 	<-
 		pattern = "\\.\\.",
 		simplify = T
 	)
+
 oriC_df		<- data.frame(
 	dORI_AC = oricBactDat$DoriC.AC,
 	organism = oricBactDat$Organsim,
@@ -50,6 +51,7 @@ dnaA_data 			<-
 		pattern = "\\.\\.",
 		simplify = T
 	)
+
 dnaA_df				<- data.frame(
 	dORI_AC = dnaA_multifilter$DoriC.AC,
 	dnaA_start = as.numeric(dnaA_data[, 1]),
@@ -59,17 +61,12 @@ dnaA_df				<- data.frame(
 
 
 combined_df			<- left_join(dnaA_df, oriC_df, by = "dORI_AC")
-combined_df$dnaRel	<-
-	combined_df$dnaA_start / combined_df$genomeLength
-combined_df$oriRel	<-
-	combined_df$oriC_start / combined_df$genomeLength
-ori_dnaA_dist		<-
-	signif(abs(combined_df$dnaRel - combined_df$oriRel), digits = 3)
-combined_df$dist	<-
-	ifelse(ori_dnaA_dist > 0.5, 1 - ori_dnaA_dist, ori_dnaA_dist)
+combined_df$dnaRel	<-	combined_df$dnaA_start / combined_df$genomeLength
+combined_df$oriRel	<-	combined_df$oriC_start / combined_df$genomeLength
+ori_dnaA_dist		<-	signif(abs(combined_df$dnaRel - combined_df$oriRel), digits = 3)
+combined_df$dist	<-	ifelse(ori_dnaA_dist > 0.5, 1 - ori_dnaA_dist, ori_dnaA_dist)
 
-AG_positions		<-
-	combined_df[grep(x = combined_df$organism, pattern = "Geobacillus|Anoxybacillus"), ]
+AG_positions		<-	combined_df[grep(x = combined_df$organism, pattern = "Geobacillus|Anoxybacillus"), ]
 
 
 ggplot(data = combined_df, aes(x = dist, y = ..scaled..)) + stat_density(geom = "line") + theme_classic()

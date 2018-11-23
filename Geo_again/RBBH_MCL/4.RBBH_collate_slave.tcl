@@ -5,7 +5,7 @@ source /home/ade110/Scripts/General_utils.tcl
 set eval_cutoff	[lindex $argv 0]
 set eval_num	[string range $eval_cutoff 2 end]
 
-set direct			/scratch/ade110/Geo_again/RBBH
+set directory		/home/ade110/Work/Bacillus/RBBH
 set RBBH_dir		$direct/RBBH_$eval_num
 
 ## The inparalog directory should exist from 3.Find_true_paralogs.tcl

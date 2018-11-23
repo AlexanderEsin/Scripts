@@ -1,10 +1,9 @@
-library(dplyr)
-library(stringr)
-
 ## 12/11/2017
 ## Filter out all the "complete genomes" and "chromosomes" from the Bacterial Refseq db: ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/
 ## Downloaded assembly_summary_refseq.txt from above url: wget ftp://ftp.ncbi.nlm.nih.gov/genomes/refseq/bacteria/assembly_summary.txt; mv assembly_summary.txt assembly_summary_refseq_131117.txt
 ## Manually remove the hashtag infront of columns names (line 2)
+
+library(tidyverse)
 
 ## Set up directories
 genome_dir		<- "/users/aesin/Desktop/Geo_again/Genomes"
@@ -76,19 +75,19 @@ if (!file.exists(file.path(genome_list_dir, "All_complete_genomes.tsv"))) {
 	## Write out the lists of genomes (one containing all the
 	## genomes downloaded, the other only the AG genomes). Also
 	genome_list_dir	<- file.path(genome_dir, "Genome_lists")
-	dir.create(genome_list_dir)
-	write.table(all_complete_ass_bact, file = file.path(genome_list_dir, "All_complete_genomes.tsv"), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
-	write.table(AG_in_dataset, file = file.path(genome_list_dir, "AG_complete_genomes.tsv"), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+	if (!dir.exists(genome_list_dir)) dir.create(genome_list_dir)
+	# write.table(all_complete_ass_bact, file = file.path(genome_list_dir, "All_complete_genomes.tsv"), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
+	# write.table(AG_in_dataset, file = file.path(genome_list_dir, "AG_complete_genomes.tsv"), sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
 
 	## Write out a column of just acc_ass for the AG genomes.
 	acc_ass_names	<- lapply(AG_in_dataset$assembly_accession, function(accession) {
 		name	<- paste(c(accession, AG_in_dataset$asm_name[which(AG_in_dataset$assembly_accession == accession)]), collapse = "_")
 		return(name)
 	})
-	write.table(unlist(acc_ass_names), file = file.path(genome_list_dir, "AG_acc_ass_names.txt"), sep = "\n", row.names = FALSE, col.names = FALSE, quote = FALSE)
+	# write.table(unlist(acc_ass_names), file = file.path(genome_list_dir, "AG_acc_ass_names.txt"), sep = "\n", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 } else {
-	all_complete_ass_bact	<- read.table(file.path(genome_list_dir, "All_complete_genomes.tsv"), sep = "\t", as.is = TRUE, header = TRUE, fill = TRUE, quote = "", stringsAsFactors = FALSE, comment.char = "")
+	# all_complete_ass_bact	<- read.table(file.path(genome_list_dir, "All_complete_genomes.tsv"), sep = "\t", as.is = TRUE, header = TRUE, fill = TRUE, quote = "", stringsAsFactors = FALSE, comment.char = "")
 }
 
 
@@ -114,7 +113,7 @@ acc_ass_tax <- lapply(1:nrow(all_complete_ass_bact), function(row_index) {
 
 ## Write out a table of taxids and acc_ass IDs
 acc_ass_dled_df	<- bind_rows(acc_ass_tax)
-write.table(acc_ass_dled_df, file = file.path(genome_list_dir, "Acc_ass_taxid_table.tsv"), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+# write.table(acc_ass_dled_df, file = file.path(genome_list_dir, "Acc_ass_taxid_table.tsv"), sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 
 

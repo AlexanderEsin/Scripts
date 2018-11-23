@@ -9,7 +9,7 @@ set evalue_list		[list "-10" "-50" "-100" "-150"]
 
 set direct 			/Users/aesin/Desktop/Geo_again
 
-set all_db_file		$direct/All_prot_db
+set all_db_file		$direct/All_prot_db_new
 set geo_taxid_file	$direct/Genomes/Genome_lists/AG_taxids.txt
 
 set group_dir		$direct/Family_groups
@@ -288,7 +288,7 @@ set base_group_tot	[llength $base_group_list]
 
 set base_fams_done		{}
 set done_counter		1
-set family_group_table	[list [join [list "Base group" "Base protID num" "Evalue sampled" "At evalue group" "At evalue protID num"] \t]]
+set family_group_table	[list [join [list "Base group" "Base protID num" "Evalue sampled" "At evalue group" "At evalue protID num" "Base AG number" "Cluster AG number"] \t]]
 
 foreach eval $rev_eval_list {
 	
@@ -342,7 +342,7 @@ foreach eval $rev_eval_list {
 
 					## Append global lists
 					lappend base_fams_done		$base_group_num
-					lappend family_group_table	[join [list $base_group_num $base_prot_num $test_evalue $cluster $base_prot_num] \t]
+					lappend family_group_table	[join [list $base_group_num $base_prot_num $test_evalue $cluster $base_prot_num $min_AG_required $min_AG_required] \t]
 
 					puts stdout	"DONE: $done_counter /// $base_group_tot\t[join [list $base_group_num $base_prot_num $test_evalue $cluster $base_prot_num $min_AG_required] \t]"
 					incr done_counter
@@ -385,12 +385,12 @@ foreach eval $rev_eval_list {
 				}
 
 				## Write out the final group fasta
-				set out		[open $out_fasta_dir/$base_group_num\.fasta w]
-				puts $out	[join $group_fasta \n]
-				close $out
+				# set out		[open $out_fasta_dir/$base_group_num\.fasta w]
+				# puts $out	[join $group_fasta \n]
+				# close $out
 
 				lappend base_fams_done		$base_group_num
-				lappend family_group_table	[join [list $base_group_num $base_prot_num $test_evalue $cluster $clust_prot_num] \t]
+				lappend family_group_table	[join [list $base_group_num $base_prot_num $test_evalue $cluster $clust_prot_num $min_AG_required $clust_AG_cont] \t]
 				puts stdout	"DONE: $done_counter /// $base_group_tot\t[join [list $base_group_num $base_prot_num $test_evalue $cluster $clust_prot_num $clust_AG_cont] \t]"
 				incr done_counter
 				break

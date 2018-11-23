@@ -203,7 +203,7 @@ ggplot(bSubOnly_pos_df, aes(x = 1, xend = 2, y = bsubToOriStart, yend = bsubToOr
 	theme_classic()
 
 # Compared across replichores / All present / Some present / All absent genes
-sigF_regulon_crossAG_comparison_plot	<- ggplot(subset(sigF_inAG_plot_df), aes(x = xmin, xend = xmax, y = relGeneStart, yend = relGeneStart)) +
+sigF_regulon_crossAG_comparison_plot	<- ggplot(sigF_inAG_plot_df, aes(x = xmin, xend = xmax, y = relGeneStart, yend = relGeneStart)) +
 	scale_x_continuous(name = "SigmaF regulon gene", limits = c(0, numGenes), breaks = seq(0.5, numGenes, by = 1), labels = unique(sigF_inAG_plot_df$geneName), sec.axis = dup_axis(name = NULL)) +
 	scale_y_continuous(name = "Relative Genomic Position", limits = c(-0.05, 1.05), breaks = seq(0, 1, by = 0.5), labels = c("Origin", "Terminus", "Origin"), expand = c(0, 0)) +
 	# Boundary lines
@@ -230,6 +230,58 @@ sigF_regulon_crossAG_comparison_plot	<- ggplot(subset(sigF_inAG_plot_df), aes(x 
 		panel.grid.major.y = element_line(size = 0.05),
 		axis.text = element_text(size = 11),
 		axis.title = element_text(size = 14))
+
+
+
+
+geneName_1to1 	<- sigF_inAG_plot_df %>% group_by(geneName) %>% summarise(n = length(unique(binomial)), nAll = n()) %>% filter(n == 23, nAll == 23) %>% pull(geneName)
+sigF_all_1to1	<- sigF_inAG_plot_df %>% filter(geneName %in% geneName_1to1) %>% mutate(geneName = factor(geneName, levels = unique(geneName)))
+
+temp_list <- lapply(1:length(unique(sigF_all_1to1$geneName)), function(index) {
+	gene <- unique(sigF_all_1to1$geneName)[index]
+
+	data <- sigF_all_1to1 %>% filter(geneName == gene)
+	data$xmin <- index - 0.9
+	data$xmax <- index
+
+	return(data)
+})
+
+temp_df 	<- bind_rows(temp_list)
+bsub_only	<-  lapply(unique(temp_df$geneName), function(gene) {
+	perGene_data	<- subset(temp_df, geneName == gene)
+	singleEntry		<- perGene_data[1,]
+	return(singleEntry)
+})
+bsub_only_df	<- bind_rows(bsub_only)
+
+
+bSub_GPA_sigF_orth_plot <- ggplot(temp_df, aes(x = xmin, xend = xmax, y = relGeneStart, yend = relGeneStart)) +
+	scale_x_continuous(name = "SigmaF regulon gene", limits = c(0, 31), breaks = seq(0.5, 31, by = 1), labels = unique(sigF_all_1to1$geneName), sec.axis = dup_axis(name = NULL)) +
+	scale_y_continuous(name = "Relative Genomic Position", limits = c(-0.01, 1.01), breaks = seq(0, 1, by = 0.5), labels = c("Origin", "Terminus", "Origin"), expand = c(0, 0)) +
+	# Boundary lines
+	geom_hline(yintercept = zoneBoundaryList$fullRange$boundary, color = alpha(zoneBoundaryList$boundCol, 0.5), size = 0.5, linetype = "dashed") +
+	# Zone colouring
+	geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = -Inf, xmax = Inf, ymin = zoneMin, ymax = zoneMax), fill = zoneBoundaryList$fullRange$zoneCol_alpha, inherit.aes = FALSE) +
+	# Gene positions
+	geom_segment(size = 0.8, color = "black", alpha = 0.6) +
+	# Bsub gene
+	geom_point(data = bsub_only_df, aes(x = xmin + 0.4, y = bsubRelStart), color = "red") +
+	coord_flip() +
+	scale_color_manual(values = wes_palette("Darjeeling1")) +
+	theme_classic() +
+	theme(
+		panel.grid.major.y = element_line(size = 0.05),
+		axis.text = element_text(size = 11),
+		axis.title = element_text(size = 14))
+
+quartz(width = 12, height = 12)
+print(bSub_GPA_sigF_orth_plot)
+quartz.save(file = file.path(sporFigureOut_path, "bSub_GPA_sigF_orthologs.pdf"), type = "pdf", dpi = 300)
+dev.off()
+
+
+
 
 
 # ------------------------------------------------------------------------------------- #

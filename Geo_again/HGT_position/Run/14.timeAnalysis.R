@@ -4,7 +4,7 @@
 invisible(sapply(HGTPos.all, source, .GlobalEnv))
 
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("ape", "phylobase", "phangorn", "geiger", "stringr", "wesanderson", "tidyverse", "Hmisc", "broom")
+p_load("tidyverse", "ape", "phylobase", "wesanderson", "Hmisc", "broom")
 
 # ------------------------------------------------------------------------------------- #
 # Read in data
@@ -165,7 +165,7 @@ allEdgeFinal_dfs	<- lapply(allEdgeFinal_dfs, function(df) {
 for (penalty in penalty_list) {
 
 	# Define and read in the consistent lHGT file
-	lHGT_name_file	<- paste0("T", penalty, "_full_lHGT_events.tsv")
+	lHGT_name_file	<- paste0("T", penalty, "_full_sHGT_events.tsv")
 	lHGT_data_df	<- read.table(file = file.path(refinedHGTs_path, lHGT_name_file), header = TRUE, sep = "\t")
 
 	# Define column to which HGTs are assigned
@@ -225,7 +225,7 @@ for (subGroup in uniqueSubGroup_char) {
 
 	taxidsInSubGroup	<- as.vector(subspecOnly_data$Taxid[which(subspecOnly_data$Group == subGroup)])
 	taxidsToMowTips		<- taxidMowExtend_df$Extension[which(taxidMowExtend_df$Taxid %in% taxidsInSubGroup)]
-	allSubGroupNodes	<- as.vector(descendants(AG_conTime_as4, MRCA(AG_conTime_as4, taxidsToMowTips), "all"))
+	allSubGroupNodes	<- as.vector(descendants(AG_conTime_as4, phylobase::MRCA(AG_conTime_as4, taxidsToMowTips), "all"))
 
 	for (node in allSubGroupNodes) {
 		allEdgeFinal_dfs$time$Subgroup[which(allEdgeFinal_dfs$time$E2 == node)]		<- 1
@@ -242,14 +242,14 @@ allEdgeFinal_dfs	<- lapply(allEdgeFinal_dfs, function(df) {
 # ------------------------------------------------ #
 
 # Plot a phylogram colored according to the OLD / RECENT colors with a scale bar
-quartz(width = 20, height = 10)
+# quartz(width = 20, height = 10)
 
 OldRecent_pal	<- colorRampPalette(c(dataTypeCols$Old, dataTypeCols$Recent))
 plotBranchbyTrait_AE(AG_conTimeBin_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", palette = OldRecent_pal, title = "Subgroup branches")
 add.scale.bar()
 
-quartz.save(file = file.path(timeOutput_path, "AG_25Genome_phyloTree_oldRecent.pdf"), type = "pdf", dpi = 300)
-invisible(dev.off())
+# quartz.save(file = file.path(timeOutput_path, "AG_25Genome_phyloTree_oldRecent.pdf"), type = "pdf", dpi = 300)
+# invisible(dev.off())
 
 
 
@@ -296,6 +296,15 @@ allEdgeFinal_dfs$time	<- data.frame(
 	stringsAsFactors = FALSE
 )
 
+allEdgeFinal_dfs$clado	<- data.frame(
+	allEdgeFinal_dfs$clado,
+	Mean = allEdgeFinal_fract_dfs$time$Mean,
+	BranchLen = AG_mowClado_tree$edge.length,
+	Index = rownames(allEdgeFinal_dfs$clado),
+	SubGroupLogic = as.logical(allEdgeFinal_dfs$clado$Subgroup),
+	stringsAsFactors = FALSE
+)
+
 
 branchVsHGT_plot	<- ggplot(data = allEdgeFinal_dfs$time, mapping = aes(x = BranchLen, y = T4, label = Index, color = SubGroupLogic, group = SubGroupLogic)) +
 	geom_point(size = 4) +
@@ -304,7 +313,7 @@ branchVsHGT_plot	<- ggplot(data = allEdgeFinal_dfs$time, mapping = aes(x = Branc
 		limits = c(0, 0.2)) + 
 	scale_y_continuous(
 		name = "Number of HGT events per branch",
-		limits = c(0, 160)) +
+		limits = c(0, 250)) +
 	annotate("label", x = 0.15, y = 120, label = paste("Total HGT events = ", sum(allEdgeFinal_dfs$time$T4))) +
 	# geom_smooth(method = 'lm', formula = y~x, se = FALSE) +
 	scale_color_manual(values = c(dataTypeCols$Old, dataTypeCols$Recent)) +
@@ -312,29 +321,73 @@ branchVsHGT_plot	<- ggplot(data = allEdgeFinal_dfs$time, mapping = aes(x = Branc
 	theme(
 		axis.ticks = element_blank()
 	)
-
-
 branchVsHGT_branchLabel_plot	<- branchVsHGT_plot + geom_text(aes(label = Index), hjust = 0, vjust = -1)
 
 
-quartz(width = 15, height = 10)
+branchVsHGTRecentOnly_plot	<- ggplot(data = filter(allEdgeFinal_dfs$time, SubGroupLogic == TRUE), mapping = aes(x = BranchLen, y = T4, label = Index, color = SubGroupLogic, group = SubGroupLogic)) +
+	geom_point(size = 4) +
+	scale_x_continuous(
+		name = "Branch length",
+		limits = c(0, 0.01)) + 
+	scale_y_continuous(
+		name = "Number of HGT events per branch",
+		limits = c(0, 160)) +
+	annotate("label", x = 0.005, y = 120, label = paste("Total HGT events = ", sum(filter(allEdgeFinal_dfs$time, SubGroupLogic == TRUE) %>% pull(T4)))) +
+	# geom_smooth(method = 'lm', formula = y~x, se = FALSE) +
+	scale_color_manual(values = c(dataTypeCols$Recent)) +
+	lightTheme +
+	theme(
+		axis.ticks = element_blank()
+	)
+# branchVsHGTRecentOnly_label_plot	<- branchVsHGTRecentOnly_plot + geom_text(aes(label = Index), hjust = 0, vjust = -1)
+# quartz(width = 12, height = 8)
+print(branchVsHGTRecentOnly_plot)
+# quartz.save(file = "/Users/aesin/Desktop/Thesis/CH3/Figs/Figure_3Gf.pdf", type = "pdf", dpi = 300)
+# invisible(dev.off())
+
+
+branchVsHGTClado_plot	<- ggplot(data = allEdgeFinal_dfs$clado, mapping = aes(x = BranchLen, y = T4, label = Index, color = SubGroupLogic, group = SubGroupLogic)) +
+	geom_point(size = 4) +
+	scale_x_continuous(
+		name = "Branch length",
+		limits = c(0, 10),
+		breaks = seq(0, 10, by = 2)) + 
+	scale_y_continuous(
+		name = "Number of HGT events per branch",
+		limits = c(0, 160)) +
+	annotate("label", x = 4, y = 120, label = paste("Total HGT events = ", sum(allEdgeFinal_dfs$clado$T4))) +
+	# geom_smooth(method = 'lm', formula = y~x, se = FALSE) +
+	scale_color_manual(values = c(dataTypeCols$Old, dataTypeCols$Recent)) +
+	lightTheme +
+	theme(
+		axis.ticks = element_blank()
+	)
+# branchVsHGTClado_plot	<- branchVsHGTClado_plot + geom_text(aes(label = Index), hjust = 0, vjust = -1)
+# quartz(width = 12, height = 8)
+print(branchVsHGTClado_plot)
+# quartz.save(file = "/Users/aesin/Desktop/Thesis/CH3/Figs/Figure_3Gb.pdf", type = "pdf", dpi = 300)
+# invisible(dev.off())
+
+
+
+# quartz(width = 15, height = 10)
 print(branchVsHGT_plot)
-quartz.save(file = file.path(timeOutput_path, "AG_branchVsHGT_scatter.pdf"), type = "pdf", dpi = 300)
-invisible(dev.off())
+# quartz.save(file = file.path(timeOutput_path, "AG_branchVsHGT_scatter.pdf"), type = "pdf", dpi = 300)
+# invisible(dev.off())
 
-quartz(width = 15, height = 10)
+# quartz(width = 15, height = 10)
 print(branchVsHGT_branchLabel_plot)
-quartz.save(file = file.path(timeOutput_path, "AG_branchVsHGT_branchLabel_scatter.pdf"), type = "pdf", dpi = 300)
-invisible(dev.off())
+# quartz.save(file = file.path(timeOutput_path, "AG_branchVsHGT_branchLabel_scatter.pdf"), type = "pdf", dpi = 300)
+# invisible(dev.off())
 
 
-quartz(width = 20, height = 10)
+# quartz(width = 20, height = 10)
 plotBranchbyTrait_AE(AG_mowCladoBin_tree, allEdgeFinal_dfs$time$Subgroup, method = "edges", palette = OldRecent_pal, title = "Subgroup branches")
 for (i in as.vector(allEdgeFinal_dfs$time$Index)) {
 	edgelabels(i, as.numeric(i), adj = c(0.5, -0.25), bg = "white", frame = "none", cex = 0.8)
 }
-quartz.save(file = file.path(timeOutput_path, "AG_25Genome_cladoTree_oldRecent_branchLabel.pdf"), type = "pdf", dpi = 300)
-invisible(dev.off())
+# quartz.save(file = file.path(timeOutput_path, "AG_25Genome_cladoTree_oldRecent_branchLabel.pdf"), type = "pdf", dpi = 300)
+# invisible(dev.off())
 
 
 # ------------------------------------------------ #
@@ -348,6 +401,117 @@ perPenaltyCor_list	<- lapply(c(penalty_list, "Mean"), function(penalty) {
 		penColName	<- penalty
 	}
 	time_df			<- allEdgeFinal_dfs$time
+
+	# Overall pearson + rsquared
+	all_cor			<- tidy(rcorr(time_df$BranchLen, time_df[[penColName]]))
+	all_corVal		<- all_cor$estimate
+	all_pVal		<- all_cor$p.value
+	linear_mod		<- summary(lm(time_df$BranchLen ~ time_df[[penColName]]))
+	all_rSqr_val	<- linear_mod$r.squared
+	all_rSqr_pval	<- tidy(linear_mod)$p.value[2]
+
+	# Pearson + rsquared (without two obvious outliers)
+	outlierIndex	<- as.character(c(1, 8))
+	timeNoOut_df	<- time_df[-which(time_df$Index %in% outlierIndex),]
+
+	noOut_cor		<- tidy(rcorr(timeNoOut_df$BranchLen, timeNoOut_df[[penColName]]))
+	noOut_corVal	<- noOut_cor$estimate
+	noOut_pVal		<- noOut_cor$p.value
+	linear_mod		<- summary(lm(timeNoOut_df$BranchLen ~ timeNoOut_df[[penColName]]))
+	noOut_rSqr_val	<- linear_mod$r.squared
+	noOut_rSqr_pval	<- tidy(linear_mod)$p.value[2]
+
+	# Correlation when subgroup removed
+	grpTime_df	<- time_df[which(time_df$SubGroupLogic == FALSE),]
+
+	grp_cor		<- tidy(rcorr(grpTime_df$BranchLen, grpTime_df[[penColName]]))
+	grp_corVal	<- grp_cor$estimate
+	grp_pVal	<- grp_cor$p.value
+	linear_mod		<- summary(lm(grpTime_df$BranchLen ~ grpTime_df[[penColName]]))
+	grp_rSqr_val	<- linear_mod$r.squared
+	grp_rSqr_pval	<- tidy(linear_mod)$p.value[2]
+
+	# Correlation when subgroup removed
+	sgrpTime_df	<- time_df[which(time_df$SubGroupLogic == TRUE),]
+
+	sgrp_cor		<- tidy(rcorr(sgrpTime_df$BranchLen, sgrpTime_df[[penColName]]))
+	sgrp_corVal	<- sgrp_cor$estimate
+	sgrp_pVal	<- sgrp_cor$p.value
+	linear_mod		<- summary(lm(sgrpTime_df$BranchLen ~ sgrpTime_df[[penColName]]))
+	sgrp_rSqr_val	<- linear_mod$r.squared
+	sgrp_rSqr_pval	<- tidy(linear_mod)$p.value[2]
+
+	# Pearson + rsquared (without two obvious outliers)
+	grpTimeNoOut_df	<- grpTime_df[-which(grpTime_df$Index %in% outlierIndex),]
+
+	grpNoOut_Pcor	<- tidy(rcorr(grpTimeNoOut_df$BranchLen, grpTimeNoOut_df[[penColName]]))
+	grpNoOut_corVal	<- grpNoOut_Pcor$estimate
+	grpNoOut_pVal	<- grpNoOut_Pcor$p.value
+	linear_mod		<- summary(lm(grpTimeNoOut_df$BranchLen ~ grpTimeNoOut_df[[penColName]]))
+	grpNoOut_rSqr_val	<- linear_mod$r.squared
+	grpNoOut_rSqr_pval	<- tidy(linear_mod)$p.value[2]
+
+
+	outputPearson	<- data.frame(
+		Penalty = penalty,
+		Test = "Pearson",
+		all = all_corVal,
+		all_pval = all_pVal,
+		noOut = noOut_corVal,
+		noOut_pval = noOut_pVal,
+		group = grp_corVal,
+		group_pval = grp_pVal,
+		sgroup = sgrp_corVal,
+		sgroup_pval = sgrp_pVal,
+		groupNoOut = grpNoOut_corVal,
+		groupNoOut_pval = grpNoOut_pVal,
+		stringsAsFactors = FALSE)
+
+	outputRsqrd		<- data.frame(
+		Penalty = penalty,
+		Test = "Rsquared",
+		all = all_rSqr_val,
+		all_pval = all_rSqr_pval,
+		noOut = noOut_rSqr_val,
+		noOut_pval = noOut_rSqr_pval,
+		group = grp_rSqr_val,
+		group_pval = grp_rSqr_pval,
+		sgroup = sgrp_rSqr_val,
+		sgroup_pval = sgrp_rSqr_pval,
+		groupNoOut = grpNoOut_rSqr_val,
+		groupNoOut_pval = grpNoOut_rSqr_pval,
+		stringsAsFactors = FALSE)
+
+	return(bind_rows(list(outputPearson, outputRsqrd)))
+})
+
+perPenaltyCor_df	<- bind_rows(perPenaltyCor_list)
+perPenaltyCor_df	<- perPenaltyCor_df %>% mutate_if(is.numeric, funs(signif(., digits = 3)))
+
+
+perPenaltyCor_melt	<- melt(perPenaltyCor_df, id.vars = c("Penalty", "Test"), variable.name = "Subset", value.name = "StatisticValue")
+perPenaltyCor_melt$Penalty	<- factor(perPenaltyCor_melt$Penalty, levels = unique(perPenaltyCor_melt$Penalty))
+# Filter out the pvalues for plotting
+perPenaltyCor_melt 	<- perPenaltyCor_melt %>% filter(!str_detect(Subset, "pval"))
+
+perPenaltyCor_plot	<- ggplot(data = perPenaltyCor_melt, mapping = aes(x = Penalty, y = StatisticValue, color = Subset, group = Subset)) +
+	geom_point(size = 3) +
+	geom_line(size = 2) +
+	scale_y_continuous(limits = c(0, 1)) +
+	facet_wrap(~Test) +
+	scale_color_manual(values = rev(wes_palette("BottleRocket2")[1:4])) +
+	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "black"), panel.grid.major = element_line(colour = "grey80"))
+plot(perPenaltyCor_plot)
+
+
+perPenaltyCorClado_list	<- lapply(c(penalty_list, "Mean"), function(penalty) {
+	
+	if (!identical(penalty, "Mean")) {
+		penColName	<- paste0("T", penalty)
+	} else {
+		penColName	<- penalty
+	}
+	time_df			<- allEdgeFinal_dfs$clado
 
 	# Overall pearson + rsquared
 	all_cor			<- tidy(rcorr(time_df$BranchLen, time_df[[penColName]]))
@@ -418,26 +582,23 @@ perPenaltyCor_list	<- lapply(c(penalty_list, "Mean"), function(penalty) {
 	return(bind_rows(list(outputPearson, outputRsqrd)))
 })
 
-perPenaltyCor_df	<- bind_rows(perPenaltyCor_list)
-perPenaltyCor_df	<- perPenaltyCor_df %>% mutate_if(is.numeric, funs(signif(., digits = 3)))
+perPenaltyCorClado_df	<- bind_rows(perPenaltyCorClado_list)
+perPenaltyCorClado_df	<- perPenaltyCorClado_df %>% mutate_if(is.numeric, funs(signif(., digits = 3)))
 
 
-perPenaltyCor_melt	<- melt(perPenaltyCor_df, id.vars = c("Penalty", "Test"), variable.name = "Subset", value.name = "StatisticValue")
-perPenaltyCor_melt$Penalty	<- factor(perPenaltyCor_melt$Penalty, levels = unique(perPenaltyCor_melt$Penalty))
+perPenaltyCorClado_melt	<- melt(perPenaltyCorClado_df, id.vars = c("Penalty", "Test"), variable.name = "Subset", value.name = "StatisticValue")
+perPenaltyCorClado_melt$Penalty	<- factor(perPenaltyCorClado_melt$Penalty, levels = unique(perPenaltyCorClado_melt$Penalty))
 # Filter out the pvalues for plotting
-perPenaltyCor_melt 	<- perPenaltyCor_melt %>% filter(!str_detect(Subset, "pval"))
+perPenaltyCorClado_melt 	<- perPenaltyCorClado_melt %>% filter(!str_detect(Subset, "pval"))
 
-perPenaltyCor_plot	<- ggplot(data = perPenaltyCor_melt, mapping = aes(x = Penalty, y = StatisticValue, color = Subset, group = Subset)) +
+perPenaltyCorClado_plot	<- ggplot(data = perPenaltyCorClado_melt, mapping = aes(x = Penalty, y = StatisticValue, color = Subset, group = Subset)) +
 	geom_point(size = 3) +
 	geom_line(size = 2) +
-	scale_y_continuous(limits = c(0, 1)) +
+	scale_y_continuous(limits = c(-1, 1)) +
 	facet_wrap(~Test) +
 	scale_color_manual(values = rev(wes_palette("BottleRocket2")[1:4])) +
 	theme(panel.background = element_blank(), plot.title = element_text(hjust = 0.5), axis.line = element_line(colour = "black"), panel.grid.major = element_line(colour = "grey80"))
-plot(perPenaltyCor_plot)
-
-
-
+plot(perPenaltyCorClado_plot)
 
 
 

@@ -313,13 +313,69 @@ invisible(dev.off())
 
 
 
+# ------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------- #
+
+full_df_ext	<- normalPos_df %>%
+	subset(relGeneStart < 0.1 | relGeneStart > 0.9) %>%
+	mutate(relGeneStart = case_when(
+		relGeneStart < 0.1 ~ relGeneStart + 1,
+		TRUE ~ relGeneStart - 1)
+	) %>%
+	bind_rows(normalPos_df)
+
+
+
+oriToTOriZoneDensity_plot <- ggplot(data = full_df_ext, aes(x = relGeneStart, color = type)) +
+	scale_x_continuous(
+		expand = expand_scale(mult = c(0.025, 0.025)),
+		name = "Normalized genome position",
+		# limits = c(0, 1),
+		breaks = seq(0, 1, by = 0.5),
+		labels = c("Origin", "Terminus", "Origin"),
+		minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
+		sec.axis = dup_axis(
+			name = NULL,
+			breaks = rowMeans(zoneBoundaryList$fullRange[c("zoneMin", "zoneMax")]),
+			labels = zoneBoundaryList$fullRange$zoneName)
+	) +	
+	scale_y_continuous(name = "Gene Enrichment") +
+	# Plot density lines
+	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/10, size = 1) +
+	# Boundary lines
+	geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = boundCol, linetype = "dashed") +
+	# Zone colouring
+	geom_rect(
+		data = zoneBoundaryList$fullRange,
+		aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf),
+		fill = zoneBoundaryList$fullRange$zoneCol_alpha,
+		inherit.aes = FALSE) +
+	# Coloring, title, themes etc..
+	scale_color_manual(values = all_HGT_Ver_cols) +
+	ggtitle("Exploratory zone boundary analysis") +
+	coord_cartesian(xlim = c(0, 1), expand = FALSE) +
+	lightTheme +
+	theme(
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank())
+
+quartz(width = 20, height = 12)
+print(oriToTOriZoneDensity_plot)
+quartz.save(file = file.path(figureOutput_path, "oriToOriZoneDensity_plot.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
+
+
+
+
+
+
 
 
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
 # tRNA data analysis
 
-# List of the no-plasmid AG genbanj files + extract the acc_ass
+# List of the no-plasmid AG genbank files + extract the acc_ass
 AG_noPlasmid_path	<- file.path(genome_path, "AG_genome_noPlasmid_gbffs")
 AG_noPlasmid_gbk_df	<- data.frame(gbkFileName = dir(path = AG_noPlasmid_path, pattern = "*.gbk$"), stringsAsFactors = FALSE)
 AG_noPlasmid_gbk_df$acc_ass	<- str_replace(AG_noPlasmid_gbk_df$gbkFileName, pattern="_genomic.gbk", replacement = "")
@@ -448,36 +504,42 @@ crossSpecies_tRNA_data	<- bind_rows(tRNA_entries)
 # ------------------------------------------------------------------------------------- #
 
 # Expand the tRNA data an extra 25% to avoid boundary effects @ Origin
-firstQ	<- subset(crossSpecies_tRNA_data, relStart > 0 & relStart < 0.25)
-firstQ$relStart	<- firstQ$relStart + 1
-crossSpecies_tRNA_ext	<- bind_rows(crossSpecies_tRNA_data, firstQ)
+crossSpecies_tRNA_ext	<- crossSpecies_tRNA_data %>%
+	subset(relStart < 0.1 | relEnd > 0.9) %>%
+	mutate(relStart = case_when(
+		relStart < 0.1 ~ relStart + 1,
+		TRUE ~ relStart - 1)
+	) %>%
+	bind_rows(crossSpecies_tRNA_data)
+
+
 
 # Plot the tRNA density over zones
 tRNA_withZones_plot	<- ggplot(data = crossSpecies_tRNA_ext, aes(x = relStart, y = ..scaled..)) +
 	scale_x_continuous(
 		expand = expand_scale(mult = c(0.025, 0.025)),
 		name = "Normalized genome position",
-		limits = c(0, 1.25),
-		breaks = seq(0, 1.25, by = 0.5),
+		breaks = seq(0, 1, by = 0.5),
 		labels = c("Origin", "Terminus", "Origin"),
-		minor_breaks = seq(0, 1.25, by = ((1 / 360) * 30)),
+		minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
 		sec.axis = dup_axis(
 			name = NULL,
-			breaks = rowMeans(zoneBoundRange_df[c("zoneMin", "zoneMax")]),
-			labels = zoneBoundRange_df$zoneName)
+			breaks = rowMeans(zoneBoundaryList$fullRange[c("zoneMin", "zoneMax")]),
+			labels = zoneBoundaryList$fullRange$zoneName)
 	) +
 	scale_y_continuous(name = "tRNA Density") +
 	# Plot density lines
 	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/15, size = 1) +
 	# Boundary lines
-	geom_vline(xintercept = zoneBoundRange_df$boundary, color = boundCol, linetype = "dashed") +
+	geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = boundCol, linetype = "dashed") +
 	# Boundary padding
-	geom_rect(data = zoneBoundRange_df, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
+	geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = boundaryMin, xmax = boundaryMax, ymin = -Inf, ymax = Inf), fill = alpha(boundCol, 0.4), inherit.aes = FALSE) +
 	# Zone colouring
-	geom_rect(data = zoneBoundRange_df, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneBoundRange_df$zoneCol_alpha, inherit.aes = FALSE) +
+	geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = zoneMin_pad, xmax = zoneMax_pad, ymin = -Inf, ymax = Inf), fill = zoneBoundaryList$fullRange$zoneCol_alpha, inherit.aes = FALSE) +
 	ggtitle("tRNA position on boundary analysis") +
 	scale_color_manual(values = all_HGT_Ver_cols) +
 	theme_classic() +
+	coord_cartesian(xlim = c(0, 1), expand = FALSE) +
 	theme(
 		panel.grid.major.x = element_line(size = 0.5),
 		panel.grid.minor.x = element_blank(),
@@ -509,28 +571,28 @@ message("\rSaving objects... done")
 
 # # ------------------------------------------------ #
 
-# # How much of the genome are the boundary zones?
-# transZoneTotal_length	<- sum(zoneBoundary_df$boundaryMax - zoneBoundary_df$boundaryMin, na.rm = TRUE)
+# How much of the genome are the boundary zones?
+transZoneTotal_length	<- sum(zoneBoundaryList$fullRange$boundaryMax - zoneBoundaryList$fullRange$boundaryMin, na.rm = TRUE)
 
-# HTgenesInTransZones_list	<- lapply(1:nrow(zoneBoundary_df), function(boundaryIndex) {
+HTgenesInTransZones_list	<- lapply(1:nrow(zoneBoundaryList$fullRange), function(boundaryIndex) {
 
-# 	boundaryRow	<- zoneBoundary_df[boundaryIndex,]
-# 	boundaryVal	<- boundaryRow$boundary
+	boundaryRow	<- zoneBoundaryList$fullRange[boundaryIndex,]
+	boundaryVal	<- boundaryRow$boundary
 
-# 	transZoneMin	<- boundaryRow$boundaryMin
-# 	transZoneMax	<- boundaryRow$boundaryMax
+	transZoneMin	<- boundaryRow$boundaryMin
+	transZoneMax	<- boundaryRow$boundaryMax
 
-# 	if (is.na(boundaryVal)) return(NA)
+	if (is.na(boundaryVal)) return(NA)
 
-# 	HGTgenesInTransZone <- subset(perTypeData$lHGT$'4'$allPosData, relGeneStart >= transZoneMin & relGeneEnd >= transZoneMin & relGeneStart <= transZoneMax & relGeneEnd <= transZoneMax & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
+	HGTgenesInTransZone <- subset(perTypeData$lHGT$'4'$allPosData, relGeneStart >= transZoneMin & relGeneEnd >= transZoneMin & relGeneStart <= transZoneMax & relGeneEnd <= transZoneMax & !taxid %in% outlierTaxid, select = -c(CircStart, CircEnd))
 
-# 	HGTgenesInTransZone$transZoneID	<- boundaryRow$boundIndex
+	HGTgenesInTransZone$transZoneID	<- boundaryRow$boundIndex
 
-# 	return(HGTgenesInTransZone)
-# })
+	return(HGTgenesInTransZone)
+})
 
-# HTgenesInTransZones_list	<- HTgenesInTransZones_list[!is.na(HTgenesInTransZones_list)]
-# HTgenesInTransZones_df	<- bind_rows(HTgenesInTransZones_list)
+HTgenesInTransZones_list	<- HTgenesInTransZones_list[!is.na(HTgenesInTransZones_list)]
+HTgenesInTransZones_df	<- bind_rows(HTgenesInTransZones_list)
 
 
 

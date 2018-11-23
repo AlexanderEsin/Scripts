@@ -137,7 +137,7 @@ rebind_prune_keys$tip.label	<- StringTaxidNumeric(rebind_prune_keys$tip.label)
 # is.ultrametric(ultra_correct_tree)
 
 # Visually very few disagreements
-x <- cophylo(bacillac_only, consensus_trees$`-50`$RAxML$bacillac, rotate = FALSE)
+x <- cophylo(consensus_trees$`-10`$RAxML$bacillac, consensus_trees$`-50`$RAxML$bacillac, rotate = FALSE)
 
 quartz(h = 40, w = 10)
 plot.cophylo(x, size = 2)

@@ -94,9 +94,9 @@ if (file.exists(file.path(positionData_path, "soloHGTEvent_data.rds"))) {
 
 	# Entries where there is only a single HGT event per orthGroup
 	soloEventGroups_list	<- byCOG_geneSpreadSummary_df[which(!byCOG_geneSpreadSummary_df$orthGroup %in% multiEventGroups_list),]
-	soloEventData_df		<- byCOG_geneSpreadAll_df[which(byCOG_geneSpreadAll_df$orthGroup %in% soloEventGroups_list$orthGroup),]
+	soloEventData_df2		<- byCOG_geneSpreadAll_df
 
-	saveRDS(soloEventData_df, file = file.path(positionData_path, "soloHGTEvent_data.rds"))
+	# saveRDS(soloEventData_df, file = file.path(positionData_path, "soloHGTEvent_data.rds"))
 
 }
 
@@ -349,7 +349,7 @@ if (!bacillacInclude) {
 	superGroup_list$Thermoactinomycetaceae <- NULL
 }
 
-
+sporeCols	<- c(wes_palette("Chevalier1")[1:2], wes_palette("FantasticFox1")[5])
 
 # -------------------------------------- #
 if (length(superGroup_list[["Bacillaceae"]]) != 0) {
@@ -406,7 +406,7 @@ nadirDist		<- allData_only[which(allData_only$scaled == min(allData_only$scaled)
 
 # -------------------------------------- #
 # Select all the M genes in the potential forespore region
-firstThird_genes	<- GPA_cogM_byType %>% filter(distToOri < nadirDist & type == "All")
+firstThird_genes	<- GPA_cogM_byType %>% filter(distToOri < nadirDist & type == "HGT")
 
 firstThird_orthologs <- processOrthologPosition_2(
 	COGname = "M",
@@ -526,7 +526,7 @@ invisible(dev.off())
 
 # -------------------------------------- #
 # Other two thirds
-twoThird_genes	<- GPA_cogM_byType %>% filter(distToOri > nadirDist & type == "All")
+twoThird_genes	<- GPA_cogM_byType %>% filter(distToOri > nadirDist & type == "HGT")
 
 
 twoThird_orthologs <- processOrthologPosition_2(

@@ -154,7 +154,7 @@ SameElements <- function(a, b) return(identical(sort(a), sort(b)))
 
 # 1. Read in data
 ```{r penalty_read_in_dta, warning = FALSE, message = FALSE, cache = TRUE}
-penalty <- 5
+penalty <- 4
 
 ## Read in events
 RAX_lHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/RAxML_outputs/Refined_events/Events", paste0("T", penalty, "_full_lHGT_events.tsv")), sep = "\t", header = T, stringsAsFactors = F)
@@ -163,8 +163,8 @@ RAX_sHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/RA
 FT_lHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/FastTree_outputs/Refined_events/Events", paste0("T", penalty, "_full_lHGT_events.tsv")), sep = "\t", header = T, stringsAsFactors = F)
 FT_sHGT_events <- read.table(file = file.path("/Users/aesin/Desktop/FastTree/FastTree_outputs/Refined_events/Events", paste0("T", penalty, "_full_sHGT_events.tsv")), sep = "\t", header = T, stringsAsFactors = F)
 
-RAX_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/Ver_const_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
-FT_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/Ver_const_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+RAX_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/Ver_const_t3_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
+FT_vert_groups	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/Ver_const_t3_t4_t5_t6.tsv", sep = "\n", header = FALSE, stringsAsFactors = FALSE)$V1
 
 RAX_const_HGT	<- read.table(file = "/Users/aesin/Desktop/FastTree/RAxML_outputs/Constant_events/HGT_full_tbl_t3_t4_t5.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)
 FT_const_HGT	<- read.table(file = "/Users/aesin/Desktop/FastTree/FastTree_outputs/Constant_events/HGT_full_tbl_t3_t4_t5.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE)

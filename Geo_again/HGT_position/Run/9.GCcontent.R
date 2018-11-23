@@ -258,10 +258,115 @@ invisible(dev.off())
 
 
 
+################
+
+
+byPenaltyGC_cont <- mclapply(penalty_list, function(penalty) {
+	geneCutOff	<- 1
+
+
+	# Iterate over species, each genome divided into N equally sized bins
+	bySpeciesGC_list	<- lapply(binomial_list, function(species) {
 
 
 
+		# For each bin, isolate genes in that bin and calculate their GC content
+		byBinGC_list	<- lapply(seq(1:binNumber), function(genome_bin) {
 
+			# Define bin position
+			bin_start		<- (genome_bin - 1) / binNumber
+			bin_end			<- genome_bin / binNumber
+
+			# Isolate the data we need for this dataType
+			subsetData		<- perTypeData$lHGT[[penalty]]$allPosData %>% filter(Subgroup == TRUE)
+
+
+			# Further subset by position
+			subsetByPos			<- subset(subsetData, binomial == species & relGeneStart >= bin_start & relGeneStart <= bin_end)
+			subsetByPos			<- subsetByPos[order(subsetByPos$relGeneStart),]
+
+			# If the number of genes of this dataType in this Bin is 0 - return
+			if (length(subsetByPos$protID) < geneCutOff) {
+				return(data.frame(BinIndex = bin_end, GC_content = NA, stringsAsFactors = FALSE))
+			}
+
+			# Get the corresponding nucleotide sequences from the Sqlite database
+			nuclSeq_tbl		<- dbSendQuery(conn, 'SELECT NuclSeq FROM t1 WHERE protID = :protIDs AND locus = :locTags AND binomial = :species')
+			dbBind(nuclSeq_tbl, param = list(protIDs = subsetByPos$protID, locTags = subsetByPos$locusTag, species = rep(species, nrow(subsetByPos))))
+			nuclSeq_df		<- dbFetch(nuclSeq_tbl)
+			dbClearResult(nuclSeq_tbl)
+
+			# Convert to DNAStringSet
+			nuclSeq_stringSet	<- DNAStringSet(x = nuclSeq_df$NuclSeq)
+
+			# For lHGT genes - calculate overall GC content
+			GeneGC_cont		<- rowSums(subset(alphabetFrequency(nuclSeq_stringSet, as.prob = TRUE), select = 2:3, drop = FALSE))
+			
+			out_df			<- data.frame(BinIndex = bin_end, GC_content = GeneGC_cont, locusTag = subsetByPos$locusTag, stringsAsFactors = FALSE)
+
+			return(out_df)
+		})
+
+		# Combine the per-Bin data
+		byBinGC_df			<- bind_rows(byBinGC_list)
+		byBinGC_df$Species	<- species
+
+		# Check for the "All" gene groups that every gin makes it into the bin (and not more than once into any bins)
+		# if (nrow(byBinGC_df[!is.na(byBinGC_df$binLocTags),]) != nrow(subset(perTypeData$All$allPosData, binomial == species))) message(species)
+
+		return(byBinGC_df)
+	})
+	# Combine the per-Species data
+	bySpeciesGC_df		<- bind_rows(bySpeciesGC_list)
+	bySpeciesGC_df$Penalty	<- penalty
+
+	return(bySpeciesGC_df)
+
+}, mc.cores = 20)
+
+names(byPenaltyGC_cont) <- penalty_list
+
+
+byPenaltySpeciesGCNorm		<- lapply(byPenaltyGC_cont, function(GC_byType) {
+
+	bySpeciesNorm_list	<- lapply(binomial_list, function(speciesName) {
+		speciesMeanGC	<- mean(subset(byTypebySpeciesGC_data$All, Species == speciesName)$GC_content, na.rm = TRUE)
+		bySpecies_data	<- subset(GC_byType, Species == speciesName)
+		bySpecies_data$GC_norm	<- bySpecies_data$GC_content - speciesMeanGC
+		return(bySpecies_data)
+	})
+	bySpeciesNorm_df	<- bind_rows(bySpeciesNorm_list)
+})
+
+
+x <- lapply(1:length(byPenaltySpeciesGCNorm), function(index) {
+	penalty <- names(byPenaltySpeciesGCNorm)[index]
+	table <- byPenaltySpeciesGCNorm[[index]]
+	out_df <- table %>% mutate(Penalty = penalty)
+	return(out_df)
+})
+
+y <- bind_rows(x)
+
+z <- y %>% subset(!is.na(locusTag))
+
+
+dodge	<- position_dodge(width = 1)
+statComparisons		<- list(c("3", "4"), c("4", "5"), c("5", "6"))
+
+plot <- ggplot(data = z, aes(x = Penalty, y = GC_norm)) +
+	geom_violin(fill = dataTypeCols$HGT) +
+	geom_boxplot(position = dodge, width = 0.1, outlier.color = NA, fill = "transparent", show.legend = FALSE) +
+	geom_hline(yintercept = 0, col = "red", linetype = "dashed") + 
+	stat_compare_means(comparisons = statComparisons, method = "wilcox.test", p.adjust = "bonferroni", color = axisCol, size = 0.8, label = "p.label") +
+	lightTheme
+
+
+
+quartz(width = 12, height = 8)
+print(plot)
+quartz.save(file = "/Users/aesin/Desktop/Thesis/CH3/Figs/Figure_3Db.pdf", type = "pdf", dpi = 300)
+invisible(dev.off())
 
 
 
@@ -567,7 +672,16 @@ invisible(dev.off())
 GC_VerVsHGT				<- bind_rows(list(byTypeSpeciesGCNorm$Ver, byTypeSpeciesGCNorm$lHGT))
 
 # Add the first quarter of the genome onto the end to smooth over the origin
-GC_VerVsHGT_ext		<- rbind(GC_VerVsHGT, cbind(GC_VerVsHGT[which(GC_VerVsHGT$BinIndex > 0 & GC_VerVsHGT$BinIndex <= 0.25), 1, drop = FALSE] + 1, GC_VerVsHGT[which(GC_VerVsHGT$BinIndex > 0 & GC_VerVsHGT$BinIndex <= 0.25), -1]))
+# GC_VerVsHGT_ext		<- rbind(GC_VerVsHGT, cbind(GC_VerVsHGT[which(GC_VerVsHGT$BinIndex > 0 & GC_VerVsHGT$BinIndex <= 0.25), 1, drop = FALSE] + 1, GC_VerVsHGT[which(GC_VerVsHGT$BinIndex > 0 & GC_VerVsHGT$BinIndex <= 0.25), -1]))
+
+GC_VerVsHGT_ext	<- GC_VerVsHGT %>%
+	subset(BinIndex < 0.1 | BinIndex > 0.9) %>%
+	mutate(BinIndex = case_when(
+		BinIndex < 0.1 ~ BinIndex + 1,
+		TRUE ~ BinIndex - 1)
+	) %>%
+	bind_rows(GC_VerVsHGT)
+
 
 
 # Factor variables + color
@@ -577,19 +691,19 @@ GC_VerVsHGT_ext$Species	<- factor(GC_VerVsHGT_ext$Species, levels = rev(tipOrder
 # Plot with normalised per-Bin GC values. Have to use GAM smoothhing method (loess memory fail), k=20 looks most like loess.
 GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT_ext, aes(x = BinIndex, y = GC_norm, color = Type), fill = Type) +
 	scale_x_continuous(
-		expand = expand_scale(mult = c(0.025, 0.025)),
+		# expand = expand_scale(mult = c(0.025, 0.025)),
 		name = "Normalized genome position",
-		limits = c(0, 1.25),
-		breaks = seq(0, 1.25, by = 0.5),
+		# limits = c(0, 1.25),
+		breaks = seq(0, 1, by = 0.5),
 		labels = c("Origin", "Terminus", "Origin"),
-		minor_breaks = seq(0, 1.25, by = ((1 / 360) * 30)),
+		minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
 		sec.axis = dup_axis(
 			name = NULL,
-			breaks = rowMeans(zoneBoundaryList$expandedRange[c("zoneMin", "zoneMax")]),
-			labels = zoneBoundaryList$expandedRange$zoneName)) +
+			breaks = rowMeans(zoneBoundaryList$fullRange[c("zoneMin", "zoneMax")]),
+			labels = zoneBoundaryList$fullRange$zoneName)) +
 	scale_y_continuous(name = "Normalised GC content") +
-	geom_vline(xintercept = zoneBoundaryList$expandedRange$boundary, color = zoneBoundaryList$boundCol, linetype = "dashed") +	
-	geom_rect(data = zoneBoundaryList$expandedRange, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = zoneBoundaryList$expandedRange$zoneCol_alpha, inherit.aes = FALSE) +
+	geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = zoneBoundaryList$boundCol, linetype = "dashed") +	
+	geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = zoneBoundaryList$fullRange$zoneCol_alpha, inherit.aes = FALSE) +
 	geom_smooth(
 		data = subset(GC_VerVsHGT_ext, Type == "Ver"),
 		aes(group = Species),
@@ -613,6 +727,7 @@ GCbyBin_VerHGT_norm_plot	<- ggplot(GC_VerVsHGT_ext, aes(x = BinIndex, y = GC_nor
 	scale_fill_manual(values = alpha(c(dataTypeCols$HGT, dataTypeCols$Ver), 0.7), guide = FALSE) +
 	lightTheme +
 	ggtitle("Normalized GC content of Vertical and HGT genes across 23 AG genomes") +
+	coord_cartesian(xlim = c(0, 1), expand = FALSE) +
 	theme(
 		legend.justification = c(1, 1),
 		legend.position = c(0.95, 0.95),
