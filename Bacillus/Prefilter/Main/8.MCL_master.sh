@@ -1,7 +1,8 @@
 #!/bin/bash
 #PBS -l walltime=72:00:00
 #PBS -l select=1:ncpus=20:mem=240gb
-#PBS -l place=group=board
+
+# PBS -l place=pack:excl:group=board
 
 module load mcl/14.137
 
