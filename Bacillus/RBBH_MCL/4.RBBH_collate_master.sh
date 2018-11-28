@@ -4,7 +4,7 @@
 
 module load anaconda3/personal
 
-evalue=1e-10
+evalue=1e-150
 echo $evalue
 
 /home/ade110/Scripts/Bacillus/RBBH_MCL/4.RBBH_collate_slave.tcl $evalue

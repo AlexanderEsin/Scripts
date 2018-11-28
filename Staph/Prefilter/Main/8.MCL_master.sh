@@ -1,17 +1,18 @@
 #!/bin/bash
 #PBS -l walltime=72:00:00
 #PBS -l select=1:ncpus=20:mem=240gb
-#PBS -l place=group=board
+
+# PBS -l place=pack:excl:group=board
 
 module load mcl/14.137
 
 ival=2.0
-evalue=-150
+evalue=-50
 
 echo "I-value == $ival"
 echo "E-value == $evalue"
 
-direct="/home/ade110/Work/Bacillus/RBBH"
+direct="/home/ade110/Work/Staph/Prefilter/Staphylococcus/RBBH"
 
 master_RBBH_dir="$direct/Master_RBBH"
 mcl_output_dir="$direct/MCL_groups"

@@ -5,10 +5,10 @@ source /home/ade110/Scripts/General_utils.tcl
 set eval_cutoff	[lindex $argv 0]
 set eval_num	[string range $eval_cutoff 2 end]
 
-set direct			/home/ade110/Work/Bacillus/RBBH
+set direct			/home/ade110/Work/Staph/Prefilter/Staphylococcus/RBBH
 set RBBH_dir		$direct/RBBH_$eval_num
 
-## The inparalog directory should exist from 2.Find_true_paralogs.tcl
+## The inparalog directory should exist from Find_true_paralogs.tcl
 set para_RBBH_dir	$direct/InParalogs_RBBH
 
 ## Define ortholog and master RBBH dirs: then make them
@@ -24,7 +24,7 @@ if {[file exists $orth_RBBH_dir/Orthologs_RBBH_$eval_num\.txt] == 1} {
 
 ## Get a list of all the RBBH files
 cd $RBBH_dir
-set RBBH_file_list	[glob *.txt]
+set RBBH_file_list [glob *.txt]
 set num_RBBH_files	[llength $RBBH_file_list]
 
 ## Prepare a log file to track progress
@@ -41,12 +41,13 @@ foreach RBBH_file $RBBH_file_list {
 	puts $out		$no_header
 	close $out
 
-	puts $logchan	"Added $counter / $num_RBBH_files RBBH files to Orthologs_RBBH"
+	puts -nonewline $logchan	"Added $counter / $num_RBBH_files RBBH files to Orthologs_RBBH\r"
+	flush $logchan
 	incr counter
 }
 
 
-puts $logchan	"Adding Ortholog and InParalog RBBHs into Master ..."
+puts $logchan	"\nAdding Ortholog and InParalog RBBHs into Master ..."
 ## Add the ortholog and inParalog RBBHs into master
 if {[file exists $para_RBBH_dir/InParalogs_RBBH_$eval_num\.txt] == 1} {
 

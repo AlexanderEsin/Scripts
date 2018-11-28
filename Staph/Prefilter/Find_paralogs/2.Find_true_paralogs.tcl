@@ -3,12 +3,12 @@
 source ~/Documents/Scripts/General_utils.tcl
 package require sqlite3
 
-set evalue		"1e-150"
+set evalue		"1e-50"
 set eval_trunc	[string range $evalue 2 end]
 
 
 ## Set relevant directories and sqlite DB name
-set direct			/Users/aesin/Desktop/Bacillus
+set direct			/Users/aesin/Desktop/Staph/Prefilter/Staphylococcus
 set para_comp_dir	$direct/RBBH/Paralog_comparison
 set para_poss_dir	$direct/Find_InParalogs
 set para_RBBH_dir	$direct/RBBH/InParalogs_RBBH
