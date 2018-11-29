@@ -52,6 +52,7 @@ if (!file.exists(grp_db_path)) file_copy(all_db_path, grp_db_path)
 # CREATE INDEX protID_index on t1 (protID);
 # CREATE INDEX taxid_index on t1 (taxid);
 # CREATE INDEX locTag_index on t1 (locus);
+# VACUUM;
 # .exit
 
 # ----------------------------------------------------- #

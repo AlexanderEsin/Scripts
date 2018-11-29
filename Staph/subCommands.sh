@@ -4,3 +4,6 @@ qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/Prefilter/Main/5.RBBH_calculat
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/Prefilter/Main/6.RBBH_collate_master.sh
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/Prefilter/Main/7.Adjust_RBBH_master.sh
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/Prefilter/Main/8.MCL_master.sh
+
+
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/BLAST/2.Blast_master.sh

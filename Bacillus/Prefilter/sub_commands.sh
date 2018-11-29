@@ -10,6 +10,10 @@ qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/Prefilter/Main/8.MCL_master
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/BLAST/2.Blast_master.sh
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/RBBH_MCL/3.RBBH_calculate_master.sh
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/RBBH_MCL/4.RBBH_collate_master.sh
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/RBBH_MCL/5.0.Adjust_RBBH_master.sh
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/RBBH_MCL/5.1.MCL_master.sh
+
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/Align_tree/9.Group_alignment_master.sh
 
 
 
