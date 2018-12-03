@@ -86,10 +86,10 @@ write_tsv(staph_25, path = file.path(grp_list_dir, "First_round_select.tsv"))
 # ----------------------------------------------------- #
 ## Now make a list of all the genomes within this group that will need to be removed to not interfere with inference
 toRemove	<- clusters %>% filter(!Taxid %in% staph_25$Taxid)
-write_tsv(toRemove, path = file.path(grp_list_dir, "grpToRemove.tsv"))
+write_tsv(toRemove, path = file.path(grp_list_dir, "coreToRemove.tsv"))
 
 toKeep		<- staph_25 %>% mutate(Genome = str_replace_all(Genome, pattern = " ", replacement = "_"))
-write_tsv(toKeep, path = file.path(grp_list_dir, "grpToKeep.tsv"))
+write_tsv(toKeep, path = file.path(grp_list_dir, "coreToKeep.tsv"))
 
 # ----------------------------------------------------- #
 # Update new taxid and acc_ass tables for the new dataset
@@ -97,8 +97,8 @@ write_tsv(toKeep, path = file.path(grp_list_dir, "grpToKeep.tsv"))
 adj_taxid_binomd_tbl	<- taxid_binomd_tbl %>% filter(!Taxid %in% toRemove$Taxid)
 adj_acc_ass_taxid_tbl	<- acc_ass_taxid_tbl %>% filter(Taxid %in% adj_taxid_binomd_tbl$Taxid)
 
-write_tsv(adj_taxid_binomd_tbl, path = file.path(grp_list_dir, "grp_TaxidBinomial_table.tsv"))
-write_tsv(adj_acc_ass_taxid_tbl, path = file.path(grp_list_dir, "grp_AccAssTaxid_table.tsv"))
+write_tsv(adj_taxid_binomd_tbl, path = file.path(grp_list_dir, "core_TaxidBinomial_table.tsv"))
+write_tsv(adj_acc_ass_taxid_tbl, path = file.path(grp_list_dir, "core_AccAssTaxid_table.tsv"))
 
 
 

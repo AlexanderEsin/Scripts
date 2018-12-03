@@ -14,10 +14,6 @@ qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/RBBH_MCL/5.0.Adjust_RBBH_ma
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/RBBH_MCL/5.1.MCL_master.sh
 
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/Align_tree/9.Group_alignment_master.sh
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/Align_tree/10.Group_fastTree_master.sh
 
-
-
-
-qsub -e ~/err -o ~/out /home/ade110/Scripts/Misc/treesForTW.sh
-qsub -e ~/err -o ~/out /home/ade110/Scripts/Misc/treesDoublets.sh
 qsub -e ~/err -o ~/out /home/ade110/Scripts/ax4_unpack.sh

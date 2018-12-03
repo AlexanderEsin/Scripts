@@ -1,7 +1,7 @@
 #!/bin/sh
 #PBS -l walltime=20:00:00
 #PBS -l select=1:ncpus=1:mem=4gb
-#PBS -J 1-1673
+#PBS -J 1-1670
 
 module load anaconda3/personal
 module load blast+/2.2.30

@@ -7,3 +7,6 @@ qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/Prefilter/Main/8.MCL_master.sh
 
 
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/BLAST/2.Blast_master.sh
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/RBBH_MCL/3.RBBH_calculate_master.sh
+
+qsub -e ~/err -o ~/out /home/ade110/Scripts/ax4_unpack.sh

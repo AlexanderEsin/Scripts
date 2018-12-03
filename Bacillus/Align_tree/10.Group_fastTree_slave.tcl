@@ -1,12 +1,12 @@
-#!/usr/bin/tclsh
-
 source /home/ade110/Scripts/General_utils.tcl
 
 set job_number		[lindex $argv 0]
 set index_number	[expr $job_number - 1]
 
+puts $job_number
+
 ## Directories
-set direct 			/scratch2/ade110/Geo_again
+set direct 			/home/ade110/Work/Bacillus
 set align_fin_dir	$direct/Group_alignment/Final_aligned
 set tree_bin_dir	$direct/Group_fastTree/Bin
 set tree_fin_dir	$direct/Group_fastTree/Final_trees

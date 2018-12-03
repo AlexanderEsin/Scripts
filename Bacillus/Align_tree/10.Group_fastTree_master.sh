@@ -1,11 +1,8 @@
 #!/bin/sh
-#PBS -l walltime=72:00:00
-#PBS -l select=1:ncpus=2:mem=20gb
-#PBS -J 1-2
+#PBS -l walltime=24:00:00
+#PBS -l select=1:ncpus=1:mem=5gb
+#PBS -J 1-7303
 
-#6724
-module load fasttree
+module load anaconda3/personal
 
-chmod +x /home/ade110/Scripts/Geo_again/Align_tree/9.Group_fastTree_slave.tcl
-
-/home/ade110/Scripts/Geo_again/Align_tree/9.Group_fastTree_slave.tcl $PBS_ARRAY_INDEX
+tclsh8.6 /home/ade110/Scripts/Bacillus/Align_tree/10.Group_fastTree_slave.tcl $PBS_ARRAY_INDEX
