@@ -3,7 +3,7 @@
 source ~/Documents/Scripts/General_utils.tcl
 package require sqlite3
 
-set evalue		"1e-10"
+set evalue		"1e-150"
 set eval_trunc	[string range $evalue 2 end]
 
 

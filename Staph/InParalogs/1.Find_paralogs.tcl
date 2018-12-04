@@ -3,7 +3,7 @@
 source ~/Documents/Scripts/General_utils.tcl
 set script_path	[file dirname [file normalize [info script]]]
 
-set direct /Users/aesin/Desktop/Bacillus
+set direct /Users/aesin/Desktop/Staph
 
 ## Working directories to find in-paralogs
 set inpara_path	$direct/Find_InParalogs

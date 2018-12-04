@@ -6,12 +6,11 @@
 module load mcl/14.137
 
 ival=2.0
-evalue=-150
 
 echo "I-value == $ival"
 echo "E-value == $evalue"
 
-direct="/home/ade110/Work/Bacillus/RBBH"
+direct="/home/ade110/Work/Staph/RBBH"
 
 master_RBBH_dir="$direct/Master_RBBH"
 mcl_output_dir="$direct/MCL_groups"

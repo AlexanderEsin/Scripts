@@ -6,7 +6,7 @@ set eval_cutoff	[lindex $argv 0]
 set eval_num	[string range $eval_cutoff 2 end]
 
 ## Directories and file paths
-set direct			/home/ade110/Work/Bacillus/RBBH
+set direct			/home/ade110/Work/Staph/RBBH
 set master_dir		$direct/Master_RBBH
 set master_file		$master_dir/Master_RBBH_$eval_num\.txt
 set new_master		$master_dir/Master_RBBH_adj_$eval_num\.txt
