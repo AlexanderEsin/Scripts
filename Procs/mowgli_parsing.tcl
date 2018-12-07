@@ -291,6 +291,7 @@ proc TestAllChildren {start_event ag2agTrans_list events_list} {
 }
 
 proc ReduceTransferBranch {top_event ag2agTrans_list events_list dir_log out_dir} {
+	set orig_event $top_event
 	while 1 {
 		set parsed_event	[ParseEvent $top_event]
 		set genet_child		[dict get $parsed_event genet_child]
@@ -328,8 +329,9 @@ proc ReduceTransferBranch {top_event ag2agTrans_list events_list dir_log out_dir
 			# multiputs stdout $dir_log "One child of TransIn-derived event:\n\t$top_event\nhas been lost. Continuing down to: $next_event"
 			set top_event $next_event
 		} else {
-			error "There should be some children left. Code 5555"
-			exit
+			return $orig_event
+			puts $dir_log "Is this a case like Bacillis:Output_3:4582??. Returning the top event even though this is very wrong. Code 5555"
+			break
 		}
 	}	
 }

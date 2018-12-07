@@ -17,6 +17,8 @@ qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/Align_tree/9.Group_alignmen
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/Align_tree/10.Group_fastTree_master.sh
 
 qsub -e ~/err -o ~/out -v PENALTY='3' /home/ade110/Scripts/Bacillus/Mowgli/2.Run_mowgli_master.sh
+qsub -e ~/err -o ~/out -v PENALTY='4' /home/ade110/Scripts/Bacillus/Mowgli/2.Run_mowgli_master.sh
+qsub -e ~/err -o ~/out -v PENALTY='4' /home/ade110/Scripts/Bacillus/Mowgli/2.Run_mowgli_master_short.sh
 
 
 

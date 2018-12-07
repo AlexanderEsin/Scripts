@@ -1,67 +1,75 @@
 #!/usr/local/bin/Rscript
 ## Extract the node labels given to anoxy_geobacilli in the species tree ##
 
+require(pacman, warn.conflicts = FALSE, quietly = TRUE)
+p_load(tidyverse, fs, ape, phangorn, parallel, geiger, tools)
+ 
+extractCoreNodes	<- function(specTree, coreTaxids) {
 
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load("parallel", "ape", "phangorn", "geiger", "stringr", "tools")
+	taxidRelab		<- str_subset(specTree$tip.label, paste(paste0("^", coreTaxids, "_"), collapse = "|"))
 
+	coreMRCA		<- getMRCA(specTree, taxidRelab)
+	corePrune_tree	<- extract.clade(specTree, coreMRCA)
 
-extractAGnodes	<- function(specTree, AGtaxids) {
-	anoxy_geo_tips	<- grep(paste(paste0(AGtaxids, "_"), collapse = "|"), specTree$tip.label, value = TRUE) 
+	intNodes		<- corePrune_tree$node.label
+	tipNodes		<- str_extract(taxidRelab, "[0-9]+$")
 
-	anoxy_geo_prune <- drop.tip(specTree, setdiff(specTree$tip.label, anoxy_geo_tips))
-	anoxy_geo_nodes <- anoxy_geo_prune$node.label
+	allCoreNodes	<- tibble(coreNode = c(intNodes, tipNodes))
 
-	tip_nodes		<- str_extract(anoxy_geo_tips, "[0-9]+$")
-	anoxy_geo_nodes	<- c(anoxy_geo_nodes, tip_nodes)
-
-	return(anoxy_geo_nodes)
+	return(allCoreNodes)
 }
 
 
 ################################
 
-mowOut_path <- paste0("/Users/aesin/Desktop/Geo_again/Mowgli/Mowgli_output")
-output_dirs	<- dir(mowOut_path, pattern = "Output*", full.names = TRUE)
-AGtaxids	<- as.character(read.table(file = "/Users/aesin/Desktop/Geo_again/Genomes/Genome_lists/AG_taxids.txt", sep = "\n")$V1)
+master		<- "/Users/aesin/Desktop/Bacillus"
+mowOut_path <- file.path(master, "Mowgli", "Mowgli_output")
+mow_dirList	<- dir(mowOut_path, pattern = "Output*", full.names = TRUE)
+
+coreKeep_file	<- file.path(master, "Core_genomes", "Genome_lists", "coreToKeep.tsv")
+coreKeep_tbl	<- read_tsv(coreKeep_file)
 
 
 ################################
 ## For each penalty, go to the mowgli output dir and within each reconciliation create a list of the anoxy_geo nodes that are necessary downstream ##
 
-numCores	<- detectCores() - 2
+coreNodes_extracted	<- lapply(mow_dirList, function(outDir) {
 
-AGnodes_extracted	<- lapply(output_dirs, function(output_dir) {
+	penalty			<- str_extract(basename(outDir), "(?<=_)[0-9]+")
+	message(paste0("Extracting Core nodes from species tree at penalty: ", penalty, " ..."), appendLF = FALSE)
 
-	penalty			<- str_sub(str_extract(basename(output_dir), "_[0-9]"), 2, -1)
-	message(paste0("Extracting AG nodes from species tree at penalty: ", penalty, " ..."), appendLF = FALSE)
-
-	groupDirs		<- dir(output_dir, full.names = TRUE)
+	groupDirs		<- dir(outDir, full.names = TRUE)
+	firstDirTree_f	<- file.path(groupDirs[1], "outputSpeciesTree.mpr")
 	
-	firstDirTree	<- read.tree(file.path(groupDirs[1], "outputSpeciesTree.mpr"))
-	firstDirNodes	<- extractAGnodes(firstDirTree, AGtaxids)
-	firstDir_md5	<- md5sum(file.path(groupDirs[1], "outputSpeciesTree.mpr"))
+	firstDirTree	<- read.tree(firstDirTree_f)
+	firstDirNodes	<- extractCoreNodes(firstDirTree, coreKeep_tbl$Taxid)
+	firstDir_md5	<- md5sum(firstDirTree_f)
 
-	clust		<- makeCluster(numCores, type = "FORK")
+	invisible(mclapply(groupDirs, function(groupDir) {
 
-	dirDone		<- parLapply(clust, groupDirs, function(dir) {
+		message(groupDir)
 
-		dir_md5		<- md5sum(file.path(dir, "outputSpeciesTree.mpr"))
+		dirTree_f	<- file.path(groupDir, "outputSpeciesTree.mpr")
+		dir_md5		<- md5sum(dirTree_f)
 
 		if (firstDir_md5 == dir_md5) {
-			write.table(firstDirNodes, sep = "\n", file = file.path(dir, "Anoxy_geo_nodes.tsv"), quote = FALSE, col.names = FALSE, row.names = FALSE)
-			return("Done")
+			write_tsv(firstDirNodes, path = file.path(groupDir, "coreNodes.tsv"), col_names = FALSE)
+			return(1)
 		}
-		dirTree		<- read.tree(file.path(dir, "outputSpeciesTree.mpr"))
-		dirNodes	<- extractAGnodes(dirTree, AGtaxids)
 
-		write.table(dirNodes, sep = "\n", file = file.path(dir, "Anoxy_geo_nodes.tsv"), quote = FALSE, col.names = FALSE, row.names = FALSE)
-		return("Done")
-	})
+		if (identical(file.size(dirTree_f), 0)) {
+			dir_delete(groupDir)
+			return(0)
+		}
 
-	message(paste0("\rExtracting AG nodes from species tree at penalty: ", penalty, " ... done"))
+		dirTree		<- read.tree(dirTree_f)
+		dirNodes	<- extractCoreNodes(dirTree, coreKeep_tbl$Taxid)
 
-	stopCluster(clust)
+		write_tsv(dirNodes, path = file.path(groupDir, "coreNodes.tsv"), col_names = FALSE)
+		return(1)
+	}, mc.cores = 10))
+
+	message(paste0("\rExtracting Core nodes from species tree at penalty: ", penalty, " ... done"))
 	return("Done")
 })
 

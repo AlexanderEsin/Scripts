@@ -3,6 +3,8 @@ source /home/ade110/Scripts/General_utils.tcl
 
 ## Set penalty cost
 set transfer_cost 	[lindex $argv 0]
+#set transfer_cost 	3
+
 
 ## Set species tree location and names of directories
 set direct			/home/ade110/Work/Bacillus
@@ -10,8 +12,7 @@ set mowgli_dir		$direct/Mowgli
 set species_tree	$direct/Astral_speciesTree/Astral_speciesTree_ultraChecked.txt
 
 set input_dir		$mowgli_dir/GeneTree_input/
-set input_list		[lsort -dictionary [glob -type d $input_dir/*]]
-set input_list		[lreverse $input_list]
+set input_list		[lreverse [lsort -dictionary [glob -type d $input_dir/*]]]
 set success_dir		$mowgli_dir/Mowgli_output/Output_$transfer_cost
 
 ## Make output directories
@@ -32,13 +33,15 @@ puts stdout			"Testing tree: $tree_number"
 set output_dir		$success_dir/$tree_number
 file mkdir 			$output_dir
 
-# Make a log file
-set log	[open $output_dir/reconciled.log w]
-
 # If .ok file exists, reconciliation already succeeded
 if {[file exists $output_dir/reconciled.ok] == 1} {
+	puts stdout "\t>>> Already reconciled!"
+	flush stdout
 	exit
 }
+
+puts stdout "\t>>> Attempting to reconcile..."
+set log	[open $output_dir/reconciled.log w]
 
 # Model 1 (-M 1 is default)
 # m (number of MPRs computed - default = "1")
@@ -56,6 +59,7 @@ if {[file size $output_dir/Fullreconciliation.mpr] == 0} {
 	close $ok
 }
 
+flush stdout
 close $log
 
 

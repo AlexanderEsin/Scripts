@@ -7,7 +7,7 @@ source ~/Documents/Scripts/General_utils.tcl
 source ~/Documents/Scripts/Procs/mowgli_parsing.tcl
 
 ## Paths
-set direct		/Users/aesin/Desktop/Geo_again/Mowgli/Mowgli_output
+set direct		/Users/aesin/Desktop/Bacillus/Mowgli/Mowgli_output
 set out_dir		$direct/Raw_predictions
 file mkdir		$out_dir/Logs
 
@@ -34,7 +34,7 @@ foreach reconciliation $reconciliations {
 	set dir_log [open $penalty_log_dir/$reconciliation\.log w]
 
 	# List of species tree nodes that are part of Anoxybacillus / Geobacillus branches
-	set anoxy_geo_nodes [split [string trim [openfile $mowgli_output_dir/$reconciliation/Anoxy_geo_nodes.tsv]] \n]
+	set anoxy_geo_nodes [split [string trim [openfile $mowgli_output_dir/$reconciliation/coreNodes.tsv]] \n]
 	
 	multiputs $dir_log stdout "###########################################\nTree tested: $reconciliation"
 
@@ -165,9 +165,6 @@ foreach reconciliation $reconciliations {
 			set receiver_edge			[dict get $parsed_receiver edge]
 
 			if {$transfer_type eq "OutAG"} {
-				proc ProcessTranForWrite {transfer_event} {
-
-				}
 				lappend OutAG_done	"$reconciliation\t$transfer_counter\tOutAG\t$donor_edge\t$receiver_edge\t$receiver_genet_parent\t$receiver_genet_child\tNA\t\|\|\t$parent_event"
 				incr transfer_counter
 			} else {
