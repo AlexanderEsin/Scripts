@@ -85,7 +85,7 @@ set master_counter	0
 set rev_eval_list	[lreverse $evalue_list]
 set starting_eval	[lindex $rev_eval_list 0]
 
-set core_taxid_tbl		[split [string trim [openfile $core_taxid_file]] \n]
+set core_taxid_tbl		[lrange [split [string trim [openfile $core_taxid_file]] \n] 1 end]
 set core_taxids		{}
 foreach row $core_taxid_tbl {
 	set taxid	[lindex [split $row \t] 2]

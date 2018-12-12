@@ -21,4 +21,6 @@ qsub -e ~/err -o ~/out -v evalue='-50' /home/ade110/Scripts/Staph/RBBH_MCL/5.1.M
 qsub -e ~/err -o ~/out -v evalue='-100' /home/ade110/Scripts/Staph/RBBH_MCL/5.1.MCL_master.sh
 qsub -e ~/err -o ~/out -v evalue='-150' /home/ade110/Scripts/Staph/RBBH_MCL/5.1.MCL_master.sh
 
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/Align_tree/9.Group_alignment_master.sh
+
 qsub -e ~/err -o ~/out /home/ade110/Scripts/ax4_unpack.sh

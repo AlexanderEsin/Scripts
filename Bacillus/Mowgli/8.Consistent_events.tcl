@@ -10,11 +10,11 @@ source ~/Documents/Scripts/Procs/ConsistentHGT_procs.tcl
 #########################
 
 # Paths and output folders
-set mowgli_dir /Users/aesin/Desktop/Geo_again/Mowgli/Mowgli_output
+set mowgli_dir /Users/aesin/Desktop/Bacillus/Mowgli/Mowgli_output
 
 # List of penalties for which to perform long-distance transfer refinement
 set long_HGT_penalty_l	[list 3 4 5 6]
-set AG_incl_set			"AG2AG_incl"
+set AG_incl_set			"Core_incl"
 
 ## 2. I/O folder assignment ##
 ##############################

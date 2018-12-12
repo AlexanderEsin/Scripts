@@ -29,18 +29,18 @@ set tree_number		[string range $file_name 0 [string first \_ $file_name]-1]
 
 ####################################
 ## Prepare output and run Mowgli ##
-puts stdout			"Testing tree: $tree_number"
 set output_dir		$success_dir/$tree_number
 file mkdir 			$output_dir
 
 # If .ok file exists, reconciliation already succeeded
 if {[file exists $output_dir/reconciled.ok] == 1} {
-	puts stdout "\t>>> Already reconciled!"
-	flush stdout
+	# puts stdout "Testing tree: $tree_number\n\t>>> Already reconciled!"
+	# flush stdout
 	exit
 }
 
-puts stdout "\t>>> Attempting to reconcile..."
+puts stdout "Testing tree: $tree_number\n\t>>> Attempting to reconcile..."
+flush stdout
 set log	[open $output_dir/reconciled.log w]
 
 # Model 1 (-M 1 is default)

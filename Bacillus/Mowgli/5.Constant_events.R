@@ -2,8 +2,8 @@
 
 ## Compare the results values at different transfer penalty costs and extract those groups which are positive for HGT signal into Anoxy/Geo at all the penalties ##
 
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load("plyr", "dplyr", "reshape2", "lazyeval", "stringr", "gtools")
+require(pacman, warn.conflicts = FALSE, quietly = TRUE)
+p_load("plyr", "dplyr", "reshape2", "lazyeval", "stringr", "gtools")
 
 ReadInRawTrans	<- function(penalty, in_path) {
 	# Find the file
@@ -15,11 +15,12 @@ ReadInRawTrans	<- function(penalty, in_path) {
 	return(trans_data)
 }
 
-penalty_l <- list(3, 4, 5, 6)
+penalty_l <- list(3)
+#penalty_l <- list(3, 4, 5, 6)
 
 #######
 ## Get and order the results files by dictionary order (package = gtools) ##
-direct		<- "/Users/aesin/Desktop/Geo_again/Mowgli/Mowgli_output"
+direct		<- "/Users/aesin/Desktop/Bacillus/Mowgli/Mowgli_output"
 in_path		<- file.path(direct, "Raw_predictions")
 out_path	<- file.path(direct, "Constant_events")
 dir.create(out_path, recursive = TRUE, showWarnings = FALSE)

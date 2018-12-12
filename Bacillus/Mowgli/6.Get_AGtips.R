@@ -4,8 +4,8 @@
 
 ## 05/2017 - Completely reworked the script to use lapply. Importantly, in some rare cases HGTs into Anoxy/Geobacillus were nested within other transfers. This meant that for a certain gene family (e.g. 1872, T=5) the same tips were counted as part of more than one transfer ##
 
-if (!require("pacman")) install.packages("pacman")
-pacman::p_load("parallel", "ape", "gdata", "phylobase", "phangorn", "stringr", "gtools")
+require(pacman, warn.conflicts = FALSE, quietly = TRUE)
+p_load(tidyverse, fs, parallel, ape, gdata, phylobase, phangorn, stringr, gtools)
 
 GetTerminalTip	<- function(node, tree) {
 	 pattern = paste0("(", node, "_)+")
@@ -13,20 +13,21 @@ GetTerminalTip	<- function(node, tree) {
 	 return(terminal_tip)
 }
 
-
 penalty_list	<- c(3, 4, 5, 6)
-include_AG2AG	<- TRUE
-numCores		<- detectCores() - 2
+include_core	<- TRUE
 
-master_dir <- "/Users/aesin/Desktop/Geo_again/Mowgli/Mowgli_output/"
-if (include_AG2AG == TRUE) {
-	output_dir <- file.path(master_dir, "Per_penalty_tips", "AG2AG_incl")	
+master		<- "/Users/aesin/Desktop/Bacillus"
+mowOut_dir	<- file.path(master, "Mowgli/Mowgli_output")
+if (include_core == TRUE) {
+	output_dir <- file.path(mowOut_dir, "Per_penalty_tips", "Core_incl")	
 } else {
-	output_dir <- file.path(master_dir, "Per_penalty_tips", "AG2AG_excl")	
+	output_dir <- file.path(mowOut_dir, "Per_penalty_tips", "Core_excl")	
 }
-dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+dir_create(output_dir)
 
-AGtaxids	<- as.character(read.table(file = "/Users/aesin/Desktop/Geo_again/Genomes/Genome_lists/AG_taxids.txt", sep = "\n")$V1)
+
+coreKeep_file	<- file.path(master, "Core_genomes", "Genome_lists", "coreToKeep.tsv")
+coreKeep_tbl	<- read_tsv(coreKeep_file)
 
 ##
 
@@ -35,16 +36,14 @@ tip_number_tbl	<- data.frame(Penalty = numeric(), Number.Of.Tips = numeric())
 
 for (penalty in penalty_list) {
 
-	message(paste0("Identifying AG tips per group for penalty: ", penalty, "..."), appendLF = FALSE)
+	message(paste0("Identifying Core tips per group for penalty: ", penalty, "..."), appendLF = FALSE)
 
-	directories <- mixedsort(dir(file.path(master_dir, paste0("Output_", penalty))))
-
-	clust		<- makeCluster(numCores, type = "FORK")
+	directories <- mixedsort(dir(file.path(mowOut_dir, paste0("Output_", penalty))))
 	  
 	## WARNINGS ABOUT NODES NOT FOUND REFER TO INABILITY TO FIND NODES WHICH ARE IN FACT TIPS (SOLO TRANSFER TO ONE SPECIES) ##
-	per_group_HGT_tips	<- parLapply(clust, directories, function(directory) {
+	per_group_HGT_tips	<- mclapply(directories, function(directory) {
 		# message(paste0("Penalty: ", penalty, " == Directory: ", directory))
-		dir <- file.path(master_dir, paste0("Output_", penalty), directory)
+		dir <- file.path(mowOut_dir, paste0("Output_", penalty), directory)
 
 		# Read in transfer data from the Parsed_events.tsv file #
 		if (!file.exists(file.path(dir, "Parsed_events.tsv"))) {
@@ -57,7 +56,7 @@ for (penalty in penalty_list) {
 
 		OutAG_nodes		<- external_trans$GeneT.Child
 
-		# If there are no external transfers detected, then the fate of all AG species is either Vertical or Root
+		# If there are no external transfers detected, then the fate of all core species is either Vertical or Root
 		if (nrow(external_trans) == 0) {
 			# message("No external transfers == SKIP")
 			return()
@@ -118,7 +117,7 @@ for (penalty in penalty_list) {
 					# If the AG2AG node already lies within the OutAG clade...
 					if (length(grep(derived_receiver, child_nodes_raw, value = TRUE)) != 0) {
 						# If the derived AG2AG transfer nodes are already within the OutAG transfer nodes and we want them included, continue
-						if (include_AG2AG == TRUE) {
+						if (include_core == TRUE) {
 							next
 						# If we don't want to include tips that derive from secondary AG2AG transfers, remove them from the tree
 						} else {
@@ -128,7 +127,7 @@ for (penalty in penalty_list) {
 					# If the AG2AG node derived from an OutAG transfer does not lie within the OutAG gene tree clade...
 					} else {
 						# If we want them included..
-						if (include_AG2AG == TRUE) {
+						if (include_core == TRUE) {
 							extra_tips		<-  names(descendants(full_gt4, node = derived_receiver, type = "tips"))
 							if (length(extra_tips) == 0) {extra_tips	<- GetTerminalTip(derived_receiver, full_gt4)}
 							extra_tips_list	<- c(extra_tips_list, extra_tips)
@@ -147,7 +146,7 @@ for (penalty in penalty_list) {
 			}
 			all_tips	<- c(core_tips, extra_tips_list)
 
-			anoxygeo_tips	<- grep(pattern = paste(paste0(AGtaxids, "_"), collapse = "|"), all_tips, value = TRUE) 
+			anoxygeo_tips	<- grep(pattern = paste(paste0(coreKeep_tbl$Taxid, "_"), collapse = "|"), all_tips, value = TRUE) 
 			anoxygeo_tips_trim	<- str_replace(anoxygeo_tips, pattern = "(_[0-9]+$)", replacement = "")
 
 			## A hack: nesting can be extensive. E.g. check 1262 (19-set) @ T5. We have an OutAG -> AG2AG -> AG2AG
@@ -191,19 +190,19 @@ for (penalty in penalty_list) {
 		full_table	<- do.call(rbind.data.frame, corrected_tips_out)
 		trunc_table	<- full_table[,-ncol(full_table)]
 		return(trunc_table)
-	})
-
-	stopCluster(clust)
+	}, mc.cores = 10)
 
 	per_group_HGT_tips	<- per_group_HGT_tips[lapply(per_group_HGT_tips, length) > 0]
 	per_penalty_df		<- do.call(rbind.data.frame, per_group_HGT_tips)
+	# Filter out phantom transfers
+	per_penalty_df		<- per_penalty_df %>% filter(Tip_number != 0)
 
 	total_num_tips		<- sum(per_penalty_df$Tip_number)
 	tip_number_tbl[nrow(tip_number_tbl)+1,]	<- c(penalty, total_num_tips)
 
 	write.table(per_penalty_df, file = file.path(output_dir, paste0("Per_penalty_tips_t", penalty, ".tsv")), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
-	message(paste0("\rIdentifying AG tips per group for penalty: ", penalty, "... done"))
+	message(paste0("\rIdentifying core tips per group for penalty: ", penalty, "... done"))
 }
 
 write.table(tip_number_tbl, file = file.path(output_dir, "Stats.tsv"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)

@@ -1,9 +1,8 @@
 #!/bin/sh
 #PBS -l walltime=72:00:00
-#PBS -l select=1:ncpus=1:mem=120gb
-#PBS -J 1-7298
+#PBS -l select=1:ncpus=10:mem=50gb
+#PBS -J 1-2
 
-module load anaconda3/personal
 module load mowgli/v2.0A
 
 penalty=$PENALTY

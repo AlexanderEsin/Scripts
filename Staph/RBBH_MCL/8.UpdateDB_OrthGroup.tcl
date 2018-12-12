@@ -3,10 +3,10 @@
 source  /Users/aesin/Documents/Scripts/General_utils.tcl
 package require sqlite3
 
-set direct 			/Users/aesin/Desktop/Bacillus
+set direct 			/Users/aesin/Desktop/Staph
 
 ## Define and open all prot DB
-set all_db_file		$direct/ForBac_prot_db
+set all_db_file		$direct/ForStaph_prot_db
 sqlite3 all_prot_db $all_db_file
 
 ## Define the directory with final group fasta files

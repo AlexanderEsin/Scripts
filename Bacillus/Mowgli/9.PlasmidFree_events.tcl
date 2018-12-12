@@ -3,10 +3,10 @@ source ~/Documents/Scripts/General_utils.tcl
 package require sqlite3
 
 ## Paths and output folders
-set master_dir		/Users/aesin/Desktop/Geo_again
+set master_dir		/Users/aesin/Desktop/Bacillus
 
 # Find and open the DB
-set all_db_file		$master_dir/All_prot_db
+set all_db_file		$master_dir/ForBac_prot_db
 sqlite3 allProt_db	$all_db_file
 
 # Directory to find tipID <-> protID keys
@@ -24,11 +24,23 @@ set verClean_dir	$cleaned_dir/Ver_events
 file mkdir			$hgtClean_dir $verClean_dir
 
 ## Penalty and HGT-type lists
-set penalty_list	[list 3 4 5 6]
+# set penalty_list	[list 3 4 5 6]
+set penalty_list	[list 3]
 set hgtType_list	[list "lHGT" "sHGT" "Ver"]
 
 ## Open log file to record cleaning results
 set cleanLog_chan	[open $cleaned_dir/HGT_cleaningLog.log w]
+
+
+## Core taxids
+set core_taxid_file		$master_dir/Core_genomes/Genome_lists/coreToKeep.tsv
+set core_taxid_tbl		[lrange [split [string trim [openfile $core_taxid_file]] \n] 1 end]
+set core_taxids		{}
+foreach row $core_taxid_tbl {
+	set taxid	[lindex [split $row \t] 2]
+	lappend core_taxids $taxid
+}
+
 
 ## Iterate over both types of HGT and all penalties
 foreach hgtType $hgtType_list {
@@ -84,7 +96,14 @@ foreach hgtType $hgtType_list {
 				}
 
 			} else {
-				set isPlasmid_list [allProt_db eval {SELECT plasmid FROM t1 WHERE OrthGroup = $event AND is_ag = 1}]
+				set isPlasmid_list {}
+				foreach core_taxid $core_taxids {
+					set isPlasmid	[allProt_db eval {SELECT plasmid FROM t1 WHERE OrthGroup = $event AND taxid = $core_taxid}]
+					if {[string length $isPlasmid] != 0} {
+						set unique [lsort -unique $isPlasmid]
+						lappend isPlasmid_list $unique
+					}
+				}
 			}
 			
 

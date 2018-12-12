@@ -1,0 +1,220 @@
+# ---
+# title: HGT Density Plotting
+# date: 5 Oct 2017
+# output:
+#   html_document:
+# 	toc: true
+# 	toc_depth: 3
+# 	toc_float: true
+# 	number_sections: true
+# 	code_folding: hide
+# 	theme: cosmo
+# ---
+
+# ```{r global_options, include = FALSE}
+# knitr::opts_chunk$set(	fig.width	= 10, 
+# 						fig.height	= 7, 
+# 						fig.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Figures/", 
+# 						fig.align	= 'center', 
+# 						dpi			= 300, 
+# 						cache.path	= "/Users/aesin/Desktop/Geo_analysis/HGT_position/Density_position_analysis/Cache/", 
+# 						warning		= TRUE, 
+# 						message		= TRUE,
+# 						tidy		= TRUE)
+
+# ```
+
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load("RSQLite", "Biostrings", "ape", "phylobase", "circular", "polyclip", "RCircos", "stringr", "plyr", "dplyr", "reshape2", "gtable", "grid", "gridBase", "ggplot2", "ggdendro", "GGally", "ggpubr", "wesanderson", "ggrepel", "phytools", "zoo", "ggtree")
+
+
+
+
+
+### //// Functional analysis //// ####
+
+## Extract functional annotation (COG) data for each dataType (Class)
+perTypeCOGprop	<- lapply(dataTypes, function(dataType) {
+
+	if (identical(dataType, "All")) {
+		propCOGdata	<- getPropCOG(dataType = dataType)
+		propCOG_df	<- propCOGdata$propDF
+		cogNum		<- propCOGdata$totalCOGs
+		return(list(propCOGdf = propCOG_df, totalCOGs = cogNum))
+	}
+
+	perPenaltyCOGprop_list	<- lapply(penalty_list, function(penalty) {		
+		propCOGdata	<- getPropCOG(dataType = dataType, Penalty = penalty)
+		propCOG_df	<- propCOGdata$propDF
+		cogNum		<- propCOGdata$totalCOGs
+
+		return(list(propCOGdf = propCOG_df, totalCOGs = cogNum))
+	})
+	names(perPenaltyCOGprop_list)	<- penalty_list
+	return(perPenaltyCOGprop_list)
+})
+names(perTypeCOGprop)	<- dataTypes
+
+
+## Common plot variables
+penCol_palette	<- colorRampPalette(wes_palette("Zissou1"))(length(penalty_list))
+
+### /// Plot number of COGs at each HGT-type at each penalty /// ###
+
+## Extract number of COGs for each dataType for each Penalty
+perTypeNumCOGs_list	<- lapply(dataTypes, function(dataType) {
+
+	## Return N/A for penalty for plotting purposes
+	if (identical(dataType, "All")) {
+		numCOGs	<- perTypeCOGprop[[dataType]]$totalCOGs
+		penalty	<- "N/A"
+		return(data.frame(Class = dataType, Penalty = penalty, numCOGs = numCOGs, stringsAsFactors = FALSE))
+	}
+
+	## Otherwise iterate over penalty
+	perPenaltyNumCOGS_list	<- lapply(penalty_list, function(penalty) {
+		numCOGs	<- perTypeCOGprop[[dataType]][[penalty]]$totalCOGs
+		return(data.frame(Class = dataType, Penalty = penalty, numCOGs = numCOGs, stringsAsFactors = FALSE))
+	})
+	perPenaltyNumCOGS_df	<- bind_rows(perPenaltyNumCOGS_list)
+	return(perPenaltyNumCOGS_df)
+})
+
+## Combine into dataframe and factorise the dataType
+perTypeNumCOGs_df			<- bind_rows(perTypeNumCOGs_list)
+perTypeNumCOGs_df$Class		<- factor(perTypeNumCOGs_df$Class, levels = c("All", "Ver", "lHGT", "sHGT"))
+
+
+## // Plot WITH the "All" group for comparison // ##
+
+# Add a colour for "N/A" - the "All" group doesn't divide by penalty. N/A takes the last colour in the palette
+penPlusCol_palette	<- c(penCol_palette, wes_palette("Royal1")[1])
+
+# Y-axis maximum
+ymax	<-  round_any(max(perTypeNumCOGs_df$numCOGs), accuracy = 10000, f = ceiling)
+
+# Make the plot
+byPenaltyNumCOGs_plot	<- ggplot(data = perTypeNumCOGs_df, aes(x = Class, y = numCOGs, fill = Penalty)) +
+	geom_bar(stat = "identity", position = "dodge") +
+	scale_fill_manual(values = penPlusCol_palette) +
+	scale_y_continuous(name = "Number of COG assignments", breaks = seq(0, ymax, by = 20000), limits = c(0, ymax)) +
+	darkTheme
+
+# Centre the legend title
+byPenaltyNumCOGs_grob	<- centerLegendTitle(byPenaltyNumCOGs_plot)
+
+# Plot the grob
+grid.newpage()
+grid.draw(byPenaltyNumCOGs_grob)
+
+
+## // Plot WITHOUT the "All" group for comparison // ##
+
+# Trim away the "All" category
+perTypeNumCOGs_trim_df	<- perTypeNumCOGs_df[-which(perTypeNumCOGs_df$Class == "All"),]
+
+# Y-axis maximum
+ymax	<-  round_any(max(perTypeNumCOGs_trim_df$numCOGs), accuracy = 10000, f = ceiling)
+
+# Make the plot as above (different y-axis breaks here)
+byPenaltyNumCOGs_trim_plot	<- ggplot(data = perTypeNumCOGs_trim_df, aes(x = Class, y = numCOGs, fill = Penalty)) +
+	geom_bar(stat = "identity", position = "dodge") +
+	scale_fill_manual(values = penCol_palette) +
+	scale_y_continuous(name = "Number of COG assignments", breaks = seq(0, ymax, by = 10000), limits = c(0, ymax)) +
+	darkTheme
+
+# Centre the legend title
+byPenaltyNumCOGs_trim_grob	<- centerLegendTitle(byPenaltyNumCOGs_trim_plot)
+
+# Plot the grob
+grid.newpage()
+grid.draw(byPenaltyNumCOGs_trim_grob)
+
+
+### /// Show Vertical COG enrichment (vs All genes) and HGT COG enrichment (vs Vertical genes) /// ###
+
+## // Plot Vertical COG enrichment vs all COGs // ##
+
+ver_perPenaltyEnrich_list	<- lapply(penalty_list, calcPropEnrich, data = "Ver", background = "All")
+ver_COGenrich_df			<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), ver_perPenaltyEnrich_list)
+ver_COGenrich_melt			<- melt(ver_COGenrich_df, id.var = "COG", variable.name = "Penalty", value.name = "Enrichment")
+ver_COGenrich_melt$COG		<- factor(ver_COGenrich_melt$COG, levels = unique(ver_COGenrich_melt$COG[order(-ver_COGenrich_melt$Enrichment)]))
+
+ver_rangeBoxes_df	<- calcEnrichRangesForPlot(ver_COGenrich_df, ver_COGenrich_melt)
+
+# Set y-limits (use the round_any function from 'plyr')
+ymax	<- round_any(max(ver_COGenrich_melt$Enrichment), accuracy = 0.5, f = ceiling)
+ymin	<- round_any(min(ver_COGenrich_melt$Enrichment), accuracy = 0.5, f = floor)
+
+## Set up main plot
+ver_byPenaltyEnrich_plot	<- ggplot(data = ver_COGenrich_melt, aes(x = COG, y = Enrichment, group = Penalty, color = Penalty)) +
+	geom_point(size = 3) +
+	guides(colour = guide_legend(title.hjust = 0.5)) +
+	scale_color_manual(labels = penalty_list, values = penCol_palette, name = "Vertical\nPenalty") +
+	scale_y_continuous(breaks = seq(ymin, ymax, by = 1), minor_breaks = NULL, limits = c(ymin, ymax)) +
+	ggtitle("COG enrichment of Vertical genes against All genes") +
+	darkTheme
+
+## Add range boxes + replot points to be above the lines
+ver_byPenaltyEnrichBox_plot <- ver_byPenaltyEnrich_plot +
+	geom_rect(data = ver_rangeBoxes_df, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), color = "white", fill = "#333233", size = 0.3, inherit.aes = FALSE) +
+	geom_point(size = 3)
+
+## Centre the legend title
+ver_byPenaltyEnrichBox_grob	<- centerLegendTitle(ver_byPenaltyEnrichBox_plot)
+
+## Plot the grob
+grid.newpage()
+grid.draw(ver_byPenaltyEnrichBox_grob)
+
+
+## // Plot HGT COG enrichment vs the stringent (T3) vertical COG predictions // ##
+
+lHGT_perPenaltyEnrich_list	<- lapply(penalty_list, calcPropEnrich, data = "lHGT", background = "Ver")
+sHGT_perPenaltyEnrich_list	<- lapply(penalty_list, calcPropEnrich, data = "sHGT", background = "Ver")
+
+lHGT_COGenrich_df			<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), lHGT_perPenaltyEnrich_list)
+lHGT_COGenrich_melt			<- melt(lHGT_COGenrich_df, id.var = "COG", variable.name = "Penalty", value.name = "Enrichment")
+
+sHGT_COGenrich_df			<- Reduce(function(df1, df2) inner_join(df1, df2, by = "COG"), sHGT_perPenaltyEnrich_list)
+sHGT_COGenrich_melt			<- melt(sHGT_COGenrich_df, id.var = "COG", variable.name = "Penalty", value.name = "Enrichment")
+
+lHGT_COGenrich_melt$COG		<- factor(lHGT_COGenrich_melt$COG, levels = unique(lHGT_COGenrich_melt$COG[order(-lHGT_COGenrich_melt$Enrichment)]))
+sHGT_COGenrich_melt$COG		<- factor(lHGT_COGenrich_melt$COG, levels = levels(lHGT_COGenrich_melt$COG))
+
+
+lHGT_rangeBoxes_df	<- calcEnrichRangesForPlot(lHGT_COGenrich_df, lHGT_COGenrich_melt)
+sHGT_rangeBoxes_df	<- calcEnrichRangesForPlot(sHGT_COGenrich_df, sHGT_COGenrich_melt, box_width = 0.2)
+
+# Use the round_any function (plyr)
+ymax	<- round_any(max(rbind(lHGT_COGenrich_melt, sHGT_COGenrich_melt)$Enrichment), accuracy = 0.5, f = ceiling)
+ymin	<- round_any(min(rbind(lHGT_COGenrich_melt, sHGT_COGenrich_melt)$Enrichment), accuracy = 0.5, f = floor)
+
+## Set up main plot
+HGT_byPenaltyEnrich_plot	<- ggplot(data = lHGT_COGenrich_melt, aes(x = COG, y = Enrichment, group = Penalty, color = Penalty)) +
+	geom_point(size = 3) +
+	guides(colour = guide_legend(title.hjust = 0.5)) +
+	scale_color_manual(labels = penalty_list, values = penCol_palette, name = "HGT Penalty") +
+	scale_y_continuous(breaks = seq(ymin, ymax, by = 1), minor_breaks = NULL, limits = c(ymin, ymax)) +
+	ggtitle("COG enrichment of lHGT genes against Vertical genes") +
+	darkTheme
+
+## Add range boxes + replot points to be above the lines
+sHGTbox_col	<- wes_palette("GrandBudapest1")[2]
+HGT_byPenaltyEnrichBox_plot <- HGT_byPenaltyEnrich_plot +
+	# geom_rect(data = sHGT_rangeBoxes_df, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), color = sHGTbox_col, fill = "#333233", size = 0.3, inherit.aes = FALSE) +
+	geom_rect(data = lHGT_rangeBoxes_df, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), color = "white", fill = "#333233", size = 0.3, inherit.aes = FALSE) +
+	geom_point(size = 3)
+
+## Centre the legend title
+HGT_byPenaltyEnrichBox_grob	<- centerLegendTitle(HGT_byPenaltyEnrichBox_plot)
+
+## Plot the grob
+quartz(width = 14, height = 10)
+grid.newpage()
+grid.draw(HGT_byPenaltyEnrichBox_grob)
+
+
+
+# ------------------------------------------------------------------------------------- #

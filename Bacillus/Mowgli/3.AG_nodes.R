@@ -47,8 +47,6 @@ coreNodes_extracted	<- lapply(mow_dirList, function(outDir) {
 
 	invisible(mclapply(groupDirs, function(groupDir) {
 
-		message(groupDir)
-
 		dirTree_f	<- file.path(groupDir, "outputSpeciesTree.mpr")
 		dir_md5		<- md5sum(dirTree_f)
 

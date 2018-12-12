@@ -7,10 +7,10 @@ package require struct::set
 set ival			2.0
 set evalue_list		[list "-10" "-50" "-100" "-150"]
 
-set direct 			/Users/aesin/Desktop/Bacillus
+set direct 			/Users/aesin/Desktop/Staph
 
-set all_db_file		$direct/ForBac_prot_db
-set core_taxid_file	$direct/Bac_genomes/Genome_lists/coreToKeep.tsv
+set all_db_file		$direct/ForStaph_prot_db
+set core_taxid_file	$direct/Staph_genomes/Genome_lists/coreToKeep.tsv
 
 set group_dir		$direct/Family_groups
 set fmap_dir		$direct/Family_mapping

@@ -42,6 +42,7 @@ foreach reconciliation $reconciliations {
 	set events_list [ParseMappingFile $mowgli_output_dir/$reconciliation/Fullmapping.mpr]
 	if {[llength $events_list] == 0} {
 		multiputs $dir_log stdout "Fullmapping.mpr file is empty. Mowgli run is incomplete / corrupted -- skipping $reconciliation directory"
+		close $dir_log
 		continue
 	} else {
 		incr testedGroup

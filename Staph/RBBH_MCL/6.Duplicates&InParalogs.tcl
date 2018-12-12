@@ -14,9 +14,9 @@ set evalue		[lindex $argv 0]
 set trunc_eval		[string range $evalue 2 end]
 
 ## Define the directories and create new output folder
-set direct			/users/aesin/Desktop/Bacillus
-set genomes_dir		$direct/Bac_genomes
-set prot_db_file	$direct/ForBac_prot_db
+set direct			/users/aesin/Desktop/Staph
+set genomes_dir		$direct/Staph_genomes
+set prot_db_file	$direct/ForStaph_prot_db
 
 set mcl_group_dir	$direct/RBBH/MCL_groups
 set paralogs_dir	$direct/Find_InParalogs
