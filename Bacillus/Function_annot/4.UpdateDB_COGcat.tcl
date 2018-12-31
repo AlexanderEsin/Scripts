@@ -78,7 +78,7 @@ foreach annot_file $inputAnnot_files {
 	set orthGroupCOG	[join $uniqueCOG "|"]
 
 	# Add functional category to database
-	# all_prot_db eval	{UPDATE t1 SET COGcat = $orthGroupCOG WHERE OrthGroup = $orthGroup}
+	all_prot_db eval	{UPDATE t1 SET COGcat = $orthGroupCOG WHERE OrthGroup = $orthGroup}
 
 	incr total_counter
 }
@@ -86,7 +86,8 @@ foreach annot_file $inputAnnot_files {
 puts "\nAdding functional categories to database - done"
 puts "Groups with no assigned COG: $noCOG_counter / [llength $inputAnnot_files]"
 
-# all_prot_db close
+
+all_prot_db close
 
 
 

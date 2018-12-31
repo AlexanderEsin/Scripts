@@ -10,7 +10,6 @@ set lowHomo_seqs	$align_dir/lowHomology.fasta
 
 # Align the high homology sequences in the first round
 exec mafft-linsi $highHomo_seqs > $align_dir/highHomo_align.aln
-
 exec mafft --add $lowHomo_seqs --reorder $align_dir/highHomo_align.aln > $align_dir/fullSeqs.aln
 
 

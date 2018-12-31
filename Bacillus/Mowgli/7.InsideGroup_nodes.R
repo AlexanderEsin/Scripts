@@ -50,7 +50,7 @@ insidePrune_as4		<- phylo4(insidePrune_tree)
 insideNodeLab_tbl	<- tibble(insideNodes = as.numeric(nodeLabels(insidePrune_as4)))
 
 ## Make output directory
-output_dir			<- file.path(direct, "Mowgli", "Inside_group")
+output_dir			<- file.path(master, "Mowgli", "Inside_group")
 dir_create(output_dir)
 
 ## Write inside group nodes out

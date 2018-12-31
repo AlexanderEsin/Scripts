@@ -22,6 +22,8 @@ qsub -e ~/err -o ~/out -v PENALTY='4' /home/ade110/Scripts/Bacillus/Mowgli/2.Run
 qsub -e ~/err -o ~/out -v PENALTY='3' /home/ade110/Scripts/Bacillus/Mowgli/2.Run_mowgli_master_ax4.sh
 
 
+qsub -e ~/err -o ~/out /home/ade110/Scripts/Bacillus/Mowgli/0.countCompleteRecon.R
+
 
 
 qsub -e ~/err -o ~/out /home/ade110/Scripts/ax4_unpack.sh
@@ -29,5 +31,9 @@ qsub -e ~/err -o ~/out /home/ade110/Scripts/ax4_unpack.sh
 
 ###################################
 
+qsub -e ~/err -o ~/out  /mnt/storage/home/aesin/Scripts/kry_misc.sh
+
 
 qsub -e ~/err -o ~/out -v PENALTY='3' /mnt/storage/home/aesin/Scripts/Bacillus/Mowgli/2.Run_mowgli_master_krypton.sh
+
+qsub -e ~/err -o ~/out /mnt/storage/home/aesin/Scripts/Bacillus/Mowgli/0.countCompleteRecon_krypton

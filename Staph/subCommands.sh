@@ -24,3 +24,14 @@ qsub -e ~/err -o ~/out -v evalue='-150' /home/ade110/Scripts/Staph/RBBH_MCL/5.1.
 qsub -e ~/err -o ~/out /home/ade110/Scripts/Staph/Align_tree/9.Group_alignment_master.sh
 
 qsub -e ~/err -o ~/out /home/ade110/Scripts/ax4_unpack.sh
+
+###################################
+
+qsub -e ~/err -o ~/out /mnt/storage/home/aesin/Scripts/Staph/Align_tree/9.Group_alignment_master.sh
+qsub -e ~/err -o ~/out /mnt/storage/home/aesin/Scripts/Staph/Align_tree/10.Group_fastTree_master.sh
+
+qsub -e ~/err -o ~/out -v PENALTY='3' /mnt/storage/home/aesin/Scripts/Staph/Mowgli/2.Run_mowgli_master_krypton.sh
+qsub -e ~/err -o ~/out -v PENALTY='4' /mnt/storage/home/aesin/Scripts/Staph/Mowgli/2.Run_mowgli_master_krypton.sh
+
+
+qsub -e ~/err -o ~/out  /mnt/storage/home/aesin/Scripts/kry_misc.sh

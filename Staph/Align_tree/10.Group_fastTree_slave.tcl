@@ -1,10 +1,12 @@
-source /home/ade110/Scripts/General_utils.tcl
+# source /home/ade110/Scripts/General_utils.tcl
+source /mnt/storage/home/aesin/Scripts/General_utils.tcl
 
 set job_number		[lindex $argv 0]
 set index_number	[expr $job_number - 1]
 
 ## Directories
-set direct 			/home/ade110/Work/Bacillus
+# set direct 		/home/ade110/Work/Staph
+set direct 			/mnt/storage/rawdata/Warnecke_Rawdata/ADE/Work/Staph
 set align_fin_dir	$direct/Group_alignment/Final_aligned
 set tree_bin_dir	$direct/Group_fastTree/Bin
 set tree_fin_dir	$direct/Group_fastTree/Final_trees
@@ -40,7 +42,7 @@ set FT_log			[open $group_out_dir/$log_file a]
 
 # Run FastTree - gamma correction at end and use standard bootstraps (instead of default SH test). 
 # Use standard JTT model for AA
-catch {exec FastTree -gamma -boot 100 -out $group_out_dir/$group_num\_FT_tree.txt $group_align >&@$FT_log}
+catch {exec fasttree -gamma -boot 100 -out $group_out_dir/$group_num\_FT_tree.txt $group_align >&@$FT_log}
 
 # Close log channel
 close $FT_log

@@ -3,7 +3,7 @@ require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("circular", "dplyr", "grid", "ggplot2", "ggdendro")
 
 # Load master variables and HGT position functions
-invisible(sapply(HGTPos.all, source, .GlobalEnv))
+invisible(sapply(HGTPos.bac, source, .GlobalEnv))
 
 # ------------------------------------------------------------------------------------- #
 # Read in data
@@ -34,34 +34,39 @@ lHGT_byZone		<- perTypeCOG_data$lHGT$byZone
 Ver_byZone		<- perTypeCOG_data$Ver$byZone
 
 # NB subDivision_list is inheritted from masterVariables.R
+# byZone_dataType_A = lHGT_byZone;
+# 	byZone_dataType_B = Ver_byZone;
+# 	zones = zoneBoundaryList$fullRange;
+# 	clusterBy = "A"
+
 lHGTvsVer_COGcompare	<- byZoneCOGCompare(
 	byZone_dataType_A = lHGT_byZone,
 	byZone_dataType_B = Ver_byZone,
-	zones = zoneBoundaryList$halfGenomeRange,
+	zones = zoneBoundaryList$fullRange,
 	clusterBy = "A")
 
 # Re-plot but allow totally free clustering of all COGs
 lHGTvsVer_COGcompare_free	<- byZoneCOGCompare(
 	byZone_dataType_A = lHGT_byZone,
 	byZone_dataType_B = Ver_byZone,
-	zones = zoneBoundaryList$halfGenomeRange)
+	zones = zoneBoundaryList$fullRange)
 
 # ------------------------------------------------------------------------------------- #
 # Compare the COG distributions between the lHGT Old and Recent datasets
-Old_bySubdiv		<- perTypeCOG_data$Old$byZone
-Recent_bySubdiv		<- perTypeCOG_data$Recent$byZone
+# Old_bySubdiv		<- perTypeCOG_data$Old$byZone
+# Recent_bySubdiv		<- perTypeCOG_data$Recent$byZone
 
-OldvsRcent_COGcompare	<- byZoneCOGCompare(
-	byZone_dataType_A = Old_bySubdiv,
-	byZone_dataType_B = Recent_bySubdiv,
-	zones = zoneBoundaryList$halfGenomeRange,
-	clusterBy = "A")
+# OldvsRcent_COGcompare	<- byZoneCOGCompare(
+# 	byZone_dataType_A = Old_bySubdiv,
+# 	byZone_dataType_B = Recent_bySubdiv,
+# 	zones = zoneBoundaryList$halfGenomeRange,
+# 	clusterBy = "A")
 
-# Re-plot but allow totally free clustering of all COGs
-OldvsRcent_COGcompare_free	<- byZoneCOGCompare(
-	byZone_dataType_A = Old_bySubdiv,
-	byZone_dataType_B = Recent_bySubdiv,
-	zones = zoneBoundaryList$halfGenomeRange)
+# # Re-plot but allow totally free clustering of all COGs
+# OldvsRcent_COGcompare_free	<- byZoneCOGCompare(
+# 	byZone_dataType_A = Old_bySubdiv,
+# 	byZone_dataType_B = Recent_bySubdiv,
+# 	zones = zoneBoundaryList$halfGenomeRange)
 
 
 
@@ -101,33 +106,33 @@ invisible(dev.off())
 # ------------------------------------------------------------------------------------- #
 
 # Plot the lHGT Old vs Recent data - clustered by the Old distributions
-quartz(width = 18, height = 10)
-pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
+# quartz(width = 18, height = 10)
+# pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
-pushViewport(viewport(layout.pos.row = 1))
-print(OldvsRcent_COGcompare$ClusterDendro, newpage = FALSE)
-popViewport()
+# pushViewport(viewport(layout.pos.row = 1))
+# print(OldvsRcent_COGcompare$ClusterDendro, newpage = FALSE)
+# popViewport()
 
-pushViewport(viewport(layout.pos.row = 2))
-print(OldvsRcent_COGcompare$ComparisonBarplot, newpage = FALSE)
-popViewport()
-quartz.save(file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterByOld.pdf"), type = "pdf", dpi = 100)
-invisible(dev.off())
+# pushViewport(viewport(layout.pos.row = 2))
+# print(OldvsRcent_COGcompare$ComparisonBarplot, newpage = FALSE)
+# popViewport()
+# quartz.save(file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterByOld.pdf"), type = "pdf", dpi = 100)
+# invisible(dev.off())
 
 
-# Plot the lHGT Old vs Recent data - clustered freely
-quartz(width = 20, height = 10)
-pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
+# # Plot the lHGT Old vs Recent data - clustered freely
+# quartz(width = 20, height = 10)
+# pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, heights = c(0.5, 1.5))))
 
-pushViewport(viewport(layout.pos.row = 1))
-print(OldvsRcent_COGcompare_free$ClusterDendro, newpage = FALSE)
-popViewport()
+# pushViewport(viewport(layout.pos.row = 1))
+# print(OldvsRcent_COGcompare_free$ClusterDendro, newpage = FALSE)
+# popViewport()
 
-pushViewport(viewport(layout.pos.row = 2))
-print(OldvsRcent_COGcompare_free$ComparisonBarplot, newpage = FALSE)
-popViewport()
-quartz.save(file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterFree.pdf"), type = "pdf", dpi = 100)
-invisible(dev.off())
+# pushViewport(viewport(layout.pos.row = 2))
+# print(OldvsRcent_COGcompare_free$ComparisonBarplot, newpage = FALSE)
+# popViewport()
+# quartz.save(file = file.path(COGvSpaceFig_path, "OldvsRecent_clusterFree.pdf"), type = "pdf", dpi = 100)
+# invisible(dev.off())
 
 # Interestingly, in the old vs recent, we find that the distribution of 
 # metabolic genes (towards origin) - G, C, E (and "-") are not
@@ -160,7 +165,7 @@ lHGT_byZone_cutoff	<- perTypeCOG_data$lHGT$byZone %>%
 
 # ------------------------------------------------------------------------------------- #
 # Calculate the total size of the zones
-zoneBoundary_adj	<- zoneBoundaryList$halfGenomeRange %>%
+zoneBoundary_adj	<- zoneBoundaryList$fullRange %>%
 	mutate(zoneSize = (zoneMax - zoneMin) * 2) %>%
 	select(c(zoneName, zoneSize)) %>%
 	mutate(zoneName = factor(zoneName, levels = levels(lHGT_byZone_cutoff$zone)))
@@ -193,10 +198,38 @@ filterCOG_df	<- bind_rows(filterCOGs)
 
 filterCOG_df$COGcat	<- factor(filterCOG_df$COGcat, levels = clusterCompartments_dendro$labels$label)
 
-COGHeatDistribution_plot	<- ggplot(data = filterCOG_df, aes(x = distToOri, y = COGcat, group = COGcat)) +
+sigmoid = function(x) {
+   1 / (1 + exp(-x))
+}
+
+COGHeatDistribution_plot	<- ggplot(data = filterCOG_df, aes(x = relGeneStart, y = COGcat, group = COGcat)) +
 	facet_wrap(~COGcat, nrow = length(COGsAboveCutOff$COGcat), strip.position = "right", scales = "free_y") +
-	stat_density(aes(fill = 10^..scaled..), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	stat_density(aes(fill = 10^(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
 	scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
+	# scale_fill_gradientn(colours = c(dataTypeCols$HGT, "white")) +
+	geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = boundCol, linetype = "dashed") +
+	# Zone colouring
+	# geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = alpha(rep(zoneBoundaryList$fullRange$zoneCol_alpha, length(levels(filterCOG_df$COGcat))), 0.1), inherit.aes = FALSE) +
+	lightTheme +
+	theme(
+		panel.grid.major.x = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_blank(),
+		strip.text.y = element_blank()
+	)
+
+
+
+COG_G	<- filterCOG_df %>% filter(COGcat == "G")
+ggplot(data = COG_G, aes(x = relGeneStart)) +
+	# stat_density(aes(y = 1/(1+ exp(-1 * ..density..))), position = "identity", geom = "line", n = 2000, adjust = 1/10) +
+	stat_density(aes(y = tanh(..density..)), position = "identity", geom = "line", n = 2000, adjust = 1/10) +
+	scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
+	geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = boundCol, linetype = "dashed") +
+	# Zone colouring
+	# geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = alpha(rep(zoneBoundaryList$fullRange$zoneCol_alpha, length(levels(filterCOG_df$COGcat))), 0.1), inherit.aes = FALSE) +
 	lightTheme +
 	theme(
 		panel.grid.major.x = element_blank(),

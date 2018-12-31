@@ -69,18 +69,20 @@ phylumFix		<- bact_wPhylum %>%
 		!is.na(phylumName) ~ phylumName,
 		TRUE ~ familyName)) %>%
 	group_by(phylumFix) %>%
-	mutate(phylumCounter = paste0(phylumFix, "_", seq(1:length(phylumFix)))) %>%
+	mutate(phylumTip = paste0(phylumFix, "_", seq(1:length(phylumFix)))) %>%
 	ungroup()
 
 # Select subset for joining
-bact_wPhy_prune	<- phylumFix %>% select(rawTree_tips, phylumCounter)
+bact_wPhy_prune	<- phylumFix %>% select(rawTree_tips, phylumTip)
 
 newTipLabels	<- tipLabels %>%
 	left_join(bact_wPhy_prune, by = "rawTree_tips") %>%
 	left_join(nonBact_ID_tbl, by = c("rawTree_tips" = "newID")) %>%
 	mutate(newTreeTips = case_when(
-		is.na(phylumCounter) ~ newTipName,
-		!is.na(phylumCounter) ~ phylumCounter))
+		is.na(phylumTip) ~ newTipName,
+		!is.na(phylumTip) ~ phylumTip))
+
+write_tsv(phylumFix, path = file.path(tbl_dir, "byPhylum_subset_bactTable.tsv"))
 
 
 tipRelab_tree	<- rawRax_tree

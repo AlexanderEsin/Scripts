@@ -1,10 +1,12 @@
-source /home/ade110/Scripts/General_utils.tcl
+# source /home/ade110/Scripts/General_utils.tcl
+source /mnt/storage/home/aesin/Scripts/General_utils.tcl
 
 set job_number		[lindex $argv 0]
 set index_number	[expr $job_number - 1]
 
 ## Directories
-set direct 			/home/ade110/Work/Staph
+# set direct 			/home/ade110/Work/Staph
+set direct 			/mnt/storage/rawdata/Warnecke_Rawdata/ADE/Work/Staph
 set red_grp_dir		$direct/Family_mapping/Reduced_groups_fasta
 set align_bin_dir	$direct/Group_alignment/Bin
 set align_fin_dir	$direct/Group_alignment/Final_aligned

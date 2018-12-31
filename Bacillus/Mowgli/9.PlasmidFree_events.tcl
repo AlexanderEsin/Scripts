@@ -25,7 +25,7 @@ file mkdir			$hgtClean_dir $verClean_dir
 
 ## Penalty and HGT-type lists
 # set penalty_list	[list 3 4 5 6]
-set penalty_list	[list 3]
+set penalty_list	[list 3 4]
 set hgtType_list	[list "lHGT" "sHGT" "Ver"]
 
 ## Open log file to record cleaning results

@@ -15,7 +15,7 @@ ReadInRawTrans	<- function(penalty, in_path) {
 	return(trans_data)
 }
 
-penalty_l <- list(3)
+penalty_l <- list(3, 4)
 #penalty_l <- list(3, 4, 5, 6)
 
 #######

@@ -12,9 +12,9 @@ do
 	output_name=$(basename $input | sed 's/.fasta/.txt/g')
 	echo "Working on $output_name"
 
-	python2.7 /users/aesin/Desktop/emapper/emapper.py -i $input \
+	python2.7 /users/aesin/Desktop/EggNOG/emapper/emapper.py -i $input \
 	--output $master/$output_dir/$output_name \
-	-d /Users/aesin/Desktop/emapper/data/hmmdb_levels/bact_50/bact_50.hmm:localhost:51500 \
+	-d /Users/aesin/Desktop/EggNOG/emapper/data/hmmdb_levels/bact_50/bact_50.hmm:localhost:51500 \
 	--override
 
 	# wait 1000

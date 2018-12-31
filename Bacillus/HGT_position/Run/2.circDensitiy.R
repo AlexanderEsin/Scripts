@@ -1,16 +1,16 @@
 #!/usr/bin/env Rscript
 
 # Load master variables and HGT position functions
-invisible(sapply(HGTPos.all, source, .GlobalEnv))
+invisible(sapply(HGTPos.bac, source, .GlobalEnv))
 
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load("tidyverse", "wesanderson", "gridExtra")
+p_load(tidyverse, wesanderson, gridExtra)
 
 # ------------------------------------------------------------------------------------- #
 # Read in data
 message("\nReading in data...", appendLF = FALSE)
 
-# perTypeData				<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
+perTypeData				<- readRDS(file.path(positionData_path, "AG_perTypeData.rds"))
 
 message("\rReading in data... done\n")
 
@@ -188,55 +188,55 @@ message("\rPlotting lHGT vs sHGT gene density at single penatly... done")
 
 # ------------------------------------------------------------------------------------- #
 # Compare group vs subgroup lHGT density at a given penalty
-message("Plotting Old vs Recent lHGT gene density...", appendLF = FALSE)
+# message("Plotting Old vs Recent lHGT gene density...", appendLF = FALSE)
 
-penalty		<- "4"
-# Define the bandwidth for circular density estimation
-bandwidth 	<- 3000
+# penalty		<- "4"
+# # Define the bandwidth for circular density estimation
+# bandwidth 	<- 3000
 
-quartz(width = 21, height = 8)
-par(mfrow = c(1, 3))
-par(mar = c(0, 0, 0, 0))
-invisible(lapply(list("lHGT", "Group", "Subgroup"), function(type) {
+# quartz(width = 21, height = 8)
+# par(mfrow = c(1, 3))
+# par(mar = c(0, 0, 0, 0))
+# invisible(lapply(list("lHGT", "Group", "Subgroup"), function(type) {
 
-	# Determine the data set required (densities for Group / Subgroup have to be calculated)
-	dataShortcut	<- perTypeData$lHGT[[penalty]]$allPosData
-	if (identical(type, "Group")) {
-		typeCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
-	} else if (identical(type, "Subgroup")) {
-		typeCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
-	} else {
-		typeCircStart	<- dataShortcut$CircStart
-	}
+# 	# Determine the data set required (densities for Group / Subgroup have to be calculated)
+# 	dataShortcut	<- perTypeData$lHGT[[penalty]]$allPosData
+# 	if (identical(type, "Group")) {
+# 		typeCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == FALSE)]
+# 	} else if (identical(type, "Subgroup")) {
+# 		typeCircStart	<- dataShortcut$CircStart[which(dataShortcut$Subgroup == TRUE)]
+# 	} else {
+# 		typeCircStart	<- dataShortcut$CircStart
+# 	}
 
-	# Calculate circular density (on the start position)
-	HGTDensity	<- density.circular(typeCircStart, kernel = "vonmises", bw = bandwidth)
-	allDensity	<- perTypeData$All$circDensity
-	vertDensity	<- perTypeData$Ver$'3'$circDensity
+# 	# Calculate circular density (on the start position)
+# 	HGTDensity	<- density.circular(typeCircStart, kernel = "vonmises", bw = bandwidth)
+# 	allDensity	<- perTypeData$All$circDensity
+# 	vertDensity	<- perTypeData$Ver$'3'$circDensity
 
-	# Number of genes for each density plot
-	numGenes	<- length(HGTDensity$data)
+# 	# Number of genes for each density plot
+# 	numGenes	<- length(HGTDensity$data)
 
-	# Produce plot
-	position_plot	<- circularDensityPlot(
-		dataDensityA = HGTDensity,
-		dataDensityB = vertDensity,
-		bgDensity = allDensity,
-		shrink = 0.7,
-		tcl.offset = 0.8,
-		titleCex = 1.8,
-		titleName = paste0(type, " Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes),
-		densBLineColor = dataTypeCols$Ver)
-	replayPlot(position_plot)
-}))
+# 	# Produce plot
+# 	position_plot	<- circularDensityPlot(
+# 		dataDensityA = HGTDensity,
+# 		dataDensityB = vertDensity,
+# 		bgDensity = allDensity,
+# 		shrink = 0.7,
+# 		tcl.offset = 0.8,
+# 		titleCex = 1.8,
+# 		titleName = paste0(type, " Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes),
+# 		densBLineColor = dataTypeCols$Ver)
+# 	replayPlot(position_plot)
+# }))
 
-outputFileName	<- file.path(circDensityFig_path, "OldvRecent_lHGT.pdf")
-invisible(dev.copy2pdf(file = outputFileName))
-invisible(dev.off())
+# outputFileName	<- file.path(circDensityFig_path, "OldvRecent_lHGT.pdf")
+# invisible(dev.copy2pdf(file = outputFileName))
+# invisible(dev.off())
 
-message("\rPlotting Old vs Recent lHGT gene density... done")
+# message("\rPlotting Old vs Recent lHGT gene density... done")
 
-message(paste0("\nAll circular density plots written to: ", circDensityFig_path, "\n"))
+# message(paste0("\nAll circular density plots written to: ", circDensityFig_path, "\n"))
 
 # ------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------- #
@@ -374,45 +374,45 @@ if (is.null(outlierTaxid)) {
 
 
 
-# Just G kaustophilus vertical density
-quartz(width = 14, height = 14, canvas = "white", bg = "white")
-par(mfrow = c(1, 1))
-par(mar = c(0, 0, 0, 0))
+# # Just G kaustophilus vertical density
+# quartz(width = 14, height = 14, canvas = "white", bg = "white")
+# par(mfrow = c(1, 1))
+# par(mar = c(0, 0, 0, 0))
 
-invisible(lapply(binomial_list[1], function(species) {
+# invisible(lapply(binomial_list[1], function(species) {
 
-	# HGT and background circular data
-	VerSpec_circ	<- subset(perTypeData$Ver$'3'$allPosData, binomial == species, select = CircStart, drop = TRUE)
-	bgSpec_circ		<- subset(perTypeData$All$allPosData, binomial == species, select = CircStart, drop = TRUE)
+# 	# HGT and background circular data
+# 	VerSpec_circ	<- subset(perTypeData$Ver$'3'$allPosData, binomial == species, select = CircStart, drop = TRUE)
+# 	bgSpec_circ		<- subset(perTypeData$All$allPosData, binomial == species, select = CircStart, drop = TRUE)
 
-	# HGT and background density calculation. NB bandwidth is lower than for the combined plots!
-	VerSpec_dens	<- density.circular(VerSpec_circ, kernel = "vonmises", bw = 500)
-	bgSpec_dens		<- density.circular(bgSpec_circ, kernel = "vonmises", bw = 500)
+# 	# HGT and background density calculation. NB bandwidth is lower than for the combined plots!
+# 	VerSpec_dens	<- density.circular(VerSpec_circ, kernel = "vonmises", bw = 500)
+# 	bgSpec_dens		<- density.circular(bgSpec_circ, kernel = "vonmises", bw = 500)
 
-	# Number of genes for each density plot
-	numGenes		<- length(VerSpec_circ)
+# 	# Number of genes for each density plot
+# 	numGenes		<- length(VerSpec_circ)
 
-	# Produce plot
-	position_plot	<- circularDensityPlot(
-		dataDensityA = VerSpec_dens,
-		bgDensity = bgSpec_dens,
-		bg = NULL,
-		axisCol = wes_palette("Moonrise1")[4],
-		enrichUpColor = wes_palette("Darjeeling1")[3],
-		enrichDownColor = wes_palette("FantasticFox1")[3],
-		shrink = 0.7,
-		tcl.offset = 0.9,
-		titleCex = 1.5,
-		uin = 3.5,
-		axis.at = seq(0, 359, by = 30),
-		axis.labels = seq(0, 359, by = 30),
-		titleName = paste0(species, "\nGenes = ", numGenes))
-	replayPlot(position_plot)
-}))
+# 	# Produce plot
+# 	position_plot	<- circularDensityPlot(
+# 		dataDensityA = VerSpec_dens,
+# 		bgDensity = bgSpec_dens,
+# 		bg = NULL,
+# 		axisCol = wes_palette("Moonrise1")[4],
+# 		enrichUpColor = wes_palette("Darjeeling1")[3],
+# 		enrichDownColor = wes_palette("FantasticFox1")[3],
+# 		shrink = 0.7,
+# 		tcl.offset = 0.9,
+# 		titleCex = 1.5,
+# 		uin = 3.5,
+# 		axis.at = seq(0, 359, by = 30),
+# 		axis.labels = seq(0, 359, by = 30),
+# 		titleName = paste0(species, "\nGenes = ", numGenes))
+# 	replayPlot(position_plot)
+# }))
 
-outputFileName	<- file.path(circDensityFig_path, "gKaustophlis_verticalGenes")
-invisible(quartz.save(file = paste0(outputFileName, ".pdf"), type = "pdf", dpi = 100))
-invisible(dev.off())
+# outputFileName	<- file.path(circDensityFig_path, "gKaustophlis_verticalGenes")
+# invisible(quartz.save(file = paste0(outputFileName, ".pdf"), type = "pdf", dpi = 100))
+# invisible(dev.off())
 
 
 

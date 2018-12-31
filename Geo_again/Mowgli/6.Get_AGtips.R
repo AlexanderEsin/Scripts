@@ -38,11 +38,9 @@ for (penalty in penalty_list) {
 	message(paste0("Identifying AG tips per group for penalty: ", penalty, "..."), appendLF = FALSE)
 
 	directories <- mixedsort(dir(file.path(master_dir, paste0("Output_", penalty))))
-
-	clust		<- makeCluster(numCores, type = "FORK")
-	  
+ 
 	## WARNINGS ABOUT NODES NOT FOUND REFER TO INABILITY TO FIND NODES WHICH ARE IN FACT TIPS (SOLO TRANSFER TO ONE SPECIES) ##
-	per_group_HGT_tips	<- parLapply(clust, directories, function(directory) {
+	per_group_HGT_tips	<- mclapply(directories, function(directory) {
 		# message(paste0("Penalty: ", penalty, " == Directory: ", directory))
 		dir <- file.path(master_dir, paste0("Output_", penalty), directory)
 
@@ -191,9 +189,7 @@ for (penalty in penalty_list) {
 		full_table	<- do.call(rbind.data.frame, corrected_tips_out)
 		trunc_table	<- full_table[,-ncol(full_table)]
 		return(trunc_table)
-	})
-
-	stopCluster(clust)
+	}, mc.cores = 10)
 
 	per_group_HGT_tips	<- per_group_HGT_tips[lapply(per_group_HGT_tips, length) > 0]
 	per_penalty_df		<- do.call(rbind.data.frame, per_group_HGT_tips)

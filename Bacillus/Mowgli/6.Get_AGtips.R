@@ -5,15 +5,16 @@
 ## 05/2017 - Completely reworked the script to use lapply. Importantly, in some rare cases HGTs into Anoxy/Geobacillus were nested within other transfers. This meant that for a certain gene family (e.g. 1872, T=5) the same tips were counted as part of more than one transfer ##
 
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
-p_load(tidyverse, fs, parallel, ape, gdata, phylobase, phangorn, stringr, gtools)
+p_load(tidyverse, fs, parallel, ape, gdata, phylobase, phangorn, gtools)
 
 GetTerminalTip	<- function(node, tree) {
-	 pattern = paste0("(", node, "_)+")
-	 terminal_tip <- grep(pattern, as.character(tipLabels(tree)), value = TRUE)
-	 return(terminal_tip)
+	pattern	<- paste0("^(", node, "_)+")
+	terminal_tip	<- str_subset(as.character(tipLabels(tree)), pattern)
+	if (length(terminal_tip) > 1) stop("Should not have more than one terminal tip")
+	return(terminal_tip)
 }
 
-penalty_list	<- c(3, 4, 5, 6)
+penalty_list	<- c(3, 4)
 include_core	<- TRUE
 
 master		<- "/Users/aesin/Desktop/Bacillus"
@@ -146,7 +147,7 @@ for (penalty in penalty_list) {
 			}
 			all_tips	<- c(core_tips, extra_tips_list)
 
-			anoxygeo_tips	<- grep(pattern = paste(paste0(coreKeep_tbl$Taxid, "_"), collapse = "|"), all_tips, value = TRUE) 
+			anoxygeo_tips	<- grep(pattern = paste(paste0("^", coreKeep_tbl$Taxid, "_"), collapse = "|"), all_tips, value = TRUE) 
 			anoxygeo_tips_trim	<- str_replace(anoxygeo_tips, pattern = "(_[0-9]+$)", replacement = "")
 
 			## A hack: nesting can be extensive. E.g. check 1262 (19-set) @ T5. We have an OutAG -> AG2AG -> AG2AG
@@ -158,8 +159,9 @@ for (penalty in penalty_list) {
 			}
 
 			AGtips_char	<- paste0(" ", paste(anoxygeo_tips_trim_unique, collapse = " "), " ")
+			out_df		<- data.frame(Directory = directory, Donor_edge = OutAG$Donor.Edge, Receiver_edge = OutAG$Receiver.Edge, GeneT_child_node = genet_receiver, Tip_number = length(anoxygeo_tips_trim_unique), Species = AGtips_char, Nested_T = nested_transfers, stringsAsFactors = FALSE)
 
-			return(data.frame(Directory = directory, Donor_edge = OutAG$Donor.Edge, Receiver_edge = OutAG$Receiver.Edge, GeneT_child_node = genet_receiver, Tip_number = length(anoxygeo_tips_trim_unique), Species = AGtips_char, Nested_T = nested_transfers))
+			return(out_df)
 
 		})
 
@@ -195,6 +197,7 @@ for (penalty in penalty_list) {
 	per_group_HGT_tips	<- per_group_HGT_tips[lapply(per_group_HGT_tips, length) > 0]
 	per_penalty_df		<- do.call(rbind.data.frame, per_group_HGT_tips)
 	# Filter out phantom transfers
+	numPhantom			<- nrow(per_penalty_df %>% filter(Tip_number == 0))
 	per_penalty_df		<- per_penalty_df %>% filter(Tip_number != 0)
 
 	total_num_tips		<- sum(per_penalty_df$Tip_number)
@@ -203,6 +206,7 @@ for (penalty in penalty_list) {
 	write.table(per_penalty_df, file = file.path(output_dir, paste0("Per_penalty_tips_t", penalty, ".tsv")), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 
 	message(paste0("\rIdentifying core tips per group for penalty: ", penalty, "... done"))
+	message(paste0("Number of phantom transfers for penalty: ", penalty, " == ", numPhantom))
 }
 
 write.table(tip_number_tbl, file = file.path(output_dir, "Stats.tsv"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)

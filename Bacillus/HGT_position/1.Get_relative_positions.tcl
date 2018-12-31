@@ -94,9 +94,17 @@ set out [open $genome_dir/AG_dnaA_startEnd_positions.tsv w]
 puts $out [join [concat [list $oriPos_listHeader] $oriPos_list] \n]
 close $out
 
+## Core taxids
+set core_taxid_file		$master_dir/Core_genomes/Genome_lists/coreToKeep.tsv
+set core_taxid_tbl		[lrange [split [string trim [openfile $core_taxid_file]] \n] 1 end]
+set core_taxids		{}
+foreach row $core_taxid_tbl {
+	set taxid	[lindex [split $row \t] 2]
+	lappend core_taxids $taxid
+}
 
 ## Penalty and HGT-type lists
-set penalty_list	[list 3 4 5 6]
+set penalty_list	[list 3 4]
 set hgtType_list	[list "lHGT" "sHGT" "Ver" "All"]
 # set hgtType_list	[list "All"]
 set allDone_flag	FALSE
@@ -125,7 +133,12 @@ foreach hgtType $hgtType_list {
 				puts "All dataset is already complete!"
 				continue
 			}
-			set inputEvents_data	[allProt_db eval {SELECT protID FROM t1 where is_ag == 1 AND plasmid == "F"}]
+			
+			set inputEvents_data {}
+			foreach core_taxid $core_taxids {
+				set input_events	[allProt_db eval {SELECT protID FROM t1 WHERE taxid = $core_taxid AND plasmid = "F"}]
+				set inputEvents_data [concat $inputEvents_data $input_events]
+			}
 		}
 
 
@@ -151,7 +164,12 @@ foreach hgtType $hgtType_list {
 				set key_file	$tipKey_dir/$orthGroup/$orthGroup\_KEY_tips.txt
 				set key_data	[lrange [split [string trim [openfile $key_file]] \n] 1 end]; # Remove header as well
 			} elseif {$hgtType eq "Ver"} {
-				set tipIDs		[allProt_db eval {SELECT protID FROM t1 where OrthGroup == $event AND is_ag == 1}]
+				
+				set tipIDs {}
+				foreach core_taxid $core_taxids {
+					set tax_tipIDs	[allProt_db eval {SELECT protID FROM t1 WHERE OrthGroup = $event AND taxid = $core_taxid}]
+					set tipIDs [concat $tipIDs $tax_tipIDs]
+				}
 			} else {
 				set tipIDs		$event
 			}

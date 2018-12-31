@@ -3,7 +3,7 @@ require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("circular", "dplyr", "grid", "ggplot2", "ggdendro")
 
 # Load master variables and HGT position functions
-invisible(sapply(HGTPos.all, source, .GlobalEnv))
+invisible(sapply(HGTPos.geo, source, .GlobalEnv))
 
 # ------------------------------------------------------------------------------------- #
 # Read in data
@@ -195,8 +195,25 @@ filterCOG_df$COGcat	<- factor(filterCOG_df$COGcat, levels = clusterCompartments_
 
 COGHeatDistribution_plot	<- ggplot(data = filterCOG_df, aes(x = distToOri, y = COGcat, group = COGcat)) +
 	facet_wrap(~COGcat, nrow = length(COGsAboveCutOff$COGcat), strip.position = "right", scales = "free_y") +
-	stat_density(aes(fill = 10^..scaled..), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
-	scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
+	stat_density(aes(fill = sigmoid(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	scale_fill_gradientn(colours = c("white", "grey91", dataTypeCols$HGT)) +
+	# scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
+	lightTheme +
+	theme(
+		panel.grid.major.x = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_blank(),
+		strip.text.y = element_blank()
+	)
+
+COGHeatDistribution_plot	<- ggplot(data = filterCOG_df, aes(x = relGeneStart, y = COGcat, group = COGcat)) +
+	facet_wrap(~COGcat, nrow = length(COGsAboveCutOff$COGcat), strip.position = "right", scales = "free_y") +
+	stat_density(aes(fill = sigmoid(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	scale_fill_gradientn(colours = c("white", "grey91", dataTypeCols$HGT)) +
+	geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = boundCol, linetype = "dashed") +
+	# scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
 	lightTheme +
 	theme(
 		panel.grid.major.x = element_blank(),
