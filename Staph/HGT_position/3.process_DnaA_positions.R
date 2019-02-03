@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Load master variables and HGT position functions
-invisible(sapply(HGTPos.bac, source, .GlobalEnv))
+invisible(sapply(HGTPos.sta, source, .GlobalEnv))
 
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load(tidyverse, fs, RSQLite)

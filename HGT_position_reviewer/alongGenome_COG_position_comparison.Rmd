@@ -1,0 +1,291 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r functions}
+require(pacman, warn.conflicts = FALSE, quietly = TRUE)
+p_load("tidyverse", "fs", "magrittr", "circular", "dplyr", "grid", "ggplot2", "ggdendro")
+
+
+```
+
+
+```{r read data, warning=FALSE, fig.height=12, fig.width=15}
+# Read in data
+
+# AG_perTypeData.rds
+
+master_path <- "/Users/aesin/Desktop/"
+GPA_path <- path(master_path, "Geo_again", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+Bac_path <- path(master_path, "Bacillus", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+Sta_path <- path(master_path, "Staph", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+GPA_COG_path <- path(master_path, "Geo_again", "HGT_position", "DataObjects", "AG_perTypeCOGData.rds")
+
+GPA_zones_path <- path(master_path, "Geo_again", "HGT_position", "DataObjects", "AG_zoneBoundaries.rds")
+
+# Per-type COG data
+GPA_perType_data		<- readRDS(GPA_path)
+Bac_perType_data		<- readRDS(Bac_path)
+Sta_perType_data		<- readRDS(Sta_path)
+GPA_zone_data			<- readRDS(GPA_zones_path)
+GPA_perTypeCOG_data		<- readRDS(GPA_COG_path)
+
+
+# Output path
+out_path <- "/Users/aesin/Documents/Scripts/HGT_position_reviewer/Figures/COG_position_comp"
+dir_create(out_path)
+
+
+# 
+COG_minCutOff = 50
+
+GPA_lHGT_data	<- GPA_perType_data$lHGT$`4`$allPosData[-which(lapply(GPA_perType_data$lHGT$`4`$allPosData$COGcat, length) > 1),] %>% mutate(Type = "GPA")
+Bac_lHGT_data	<- Bac_perType_data$lHGT$`4`$allPosData[-which(lapply(Bac_perType_data$lHGT$`4`$allPosData$COGcat, length) > 1),] %>% mutate(Type = "Bac")
+Sta_lHGT_data	<- Sta_perType_data$lHGT$`4`$allPosData[-which(lapply(Sta_perType_data$lHGT$`4`$allPosData$COGcat, length) > 1),] %>% mutate(Type = "Sta")
+
+```
+
+
+
+```{r GPA COGs by zone for clustering}
+
+GPA_lHGT_byZone <- GPA_perTypeCOG_data$lHGT$byZone %>%
+	filter(COGcat %in% cogCounts$COGcat)
+
+# ------------------------------------------------------------------------------------- #
+# Calculate the total size of the zones
+zoneBoundary_adj	<- GPA_zone_data$halfGenomeRange %>%
+	mutate(zoneSize = (zoneMax - zoneMin) * 2) %>%
+	select(c(zoneName, zoneSize)) %>%
+	mutate(zoneName = factor(zoneName, levels = levels(GPA_lHGT_byZone$zone)))
+
+# Adj the "proportion" of HGTs in the zones by the zone size
+lHGT_byZone_adj		<- GPA_lHGT_byZone %>%
+	left_join(zoneBoundary_adj, by = c("zone" = "zoneName")) %>%
+	mutate(geneDensity = numObsv / zoneSize) %>%
+	group_by(COGcat) %>%
+	mutate(zoneExp = zoneSize * sum(geneDensity)) %>%
+	mutate(scaledProp = (geneDensity / sum(geneDensity)) - (zoneExp / sum(zoneExp)))
+
+
+# Cluster data
+densityRecast	<-  dcast(lHGT_byZone_adj, COGcat ~ zone, value.var = "Proportion")
+rownames(densityRecast)	<- densityRecast[,1]
+densityRecast	<- densityRecast[,-1]
+distMat <- dist(as.matrix(densityRecast))
+clusterCompartments_dendro	<- dendro_data(hclust(distMat, method = "ward.D2"))
+dendro_plot <- ggdendrogram(clusterCompartments_dendro, rotate = T)
+
+ggsave(plot = dendro_plot, filename = path(out_path, "COG_cluster.pdf"), device = "pdf", width = 6, height = 12)
+
+```
+
+
+```{r combine and filter HGT position data by COG}
+allType_lHGT_data <- GPA_lHGT_data %>% 
+	bind_rows(list(Bac_lHGT_data, Sta_lHGT_data)) %>%
+	mutate(COGcat = unlist(COGcat)) %>%
+	as_tibble()
+
+cogCounts <- allType_lHGT_data %>%
+	group_by(Type, COGcat) %>%
+	summarise(totGenes = n()) %>%
+	filter(totGenes >= COG_minCutOff) %>%
+	group_by(COGcat) %>%
+	summarise(n = n()) %>%
+	filter(n == 3) %>%
+	distinct(COGcat)
+	
+allType_lHGT_COGtrim <- allType_lHGT_data %>% 
+	filter(COGcat %in% cogCounts$COGcat) %>%
+	select(Type, COGcat, relGeneStart) %>%
+	unite(col = "Name", Type, COGcat, sep = "_", remove = FALSE) %>%
+	mutate(COGcat = factor(COGcat, levels = clusterCompartments_dendro$labels$label),
+		   Type = factor(Type, levels = c("GPA", "Bac", "Sta"))) %>% 
+	arrange(COGcat, Type)
+```
+
+
+```{r plot all,  fig.height=6, fig.width=10}
+## // Sets // ##
+
+gpaBac_comparison <- allType_lHGT_COGtrim %>%
+	filter(Type %in% c("GPA", "Bac"))
+
+gpaSta_comparison <- allType_lHGT_COGtrim %>%
+	filter(Type %in% c("GPA", "Sta"))
+
+
+gpaBac_cum_dens_p <- gpaBac_comparison %>%
+	ggplot() +
+	stat_density(aes(x = relGeneStart, linetype = "Aggregate"), geom = "line", adjust = 1/4, size = 1) +
+	geom_density(aes(x = relGeneStart, fill = Type), adjust = 1/4, alpha = 0.2, color = NA) +
+	scale_fill_manual(values = wes_palette("Rushmore1")[c(3,5)]) +
+	scale_linetype_manual(values = "dashed") +
+	labs(title = "GPA and Bacillus lHGT genes have similar underlying distributions") +
+	lightTheme +
+	theme(legend.position = "bottom")
+gpaBac_cum_dens_p
+
+
+
+gpaSta_cum_dens_p <- gpaSta_comparison %>%
+	ggplot() +
+	stat_density(aes(x = relGeneStart, linetype = "Aggregate"), geom = "line", adjust = 1/4, size = 1) +
+	geom_density(aes(x = relGeneStart, fill = Type), adjust = 1/4, alpha = 0.2, color = NA) +
+	scale_fill_manual(values = wes_palette("Rushmore1")[c(3,1)]) +
+	scale_linetype_manual(values = "dashed") +
+	labs(title = "GPA and Staph lHGT genes have different underlying distributions") +
+	lightTheme +
+	theme(legend.position = "bottom")
+gpaSta_cum_dens_p
+
+
+ggsave(plot = gpaBac_cum_dens_p, filename = path(out_path, "gpaBac_cumulDensity.pdf"), device = "pdf", width = 10, height = 6)
+ggsave(plot = gpaSta_cum_dens_p, filename = path(out_path, "gpaSta_cumulDensity.pdf"), device = "pdf", width = 10, height = 6)
+
+
+### // Bacillus /// ##
+
+gpaBac_plot_green <- gpaBac_comparison %>%
+	ggplot(aes(x = relGeneStart, y = Name, group = Name)) +
+	facet_wrap(~COGcat, nrow = gpaBac_comparison %>% distinct(COGcat) %>% nrow, strip.position = "right", scales = "free_y") +
+	stat_density(aes(fill = 10^(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
+	lightTheme +
+	labs(title = "GPA vs Bacillus") +
+	theme(
+		panel.grid.major.x = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_blank(),
+		strip.text.y = element_blank()
+	)
+
+gpaBac_plot_orange <- gpaBac_comparison %>%
+	ggplot(aes(x = relGeneStart, y = Name, group = Name)) +
+	facet_wrap(~COGcat, nrow = gpaBac_comparison %>% distinct(COGcat) %>% nrow, strip.position = "right", scales = "free_y") +
+	stat_density(aes(fill = 10^(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	scale_fill_gradientn(colours = c("white", wes_palette("Darjeeling1")[4])) +
+	lightTheme +
+	labs(title = "GPA vs Bacillus") +
+	theme(
+		panel.grid.major.x = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_blank(),
+		strip.text.y = element_blank()
+	)
+
+
+### // Staph /// ##
+
+
+gpaSta_plot_green <- gpaSta_comparison %>%
+	ggplot(aes(x = relGeneStart, y = Name, group = Name)) +
+	facet_wrap(~COGcat, nrow = gpaBac_comparison %>% distinct(COGcat) %>% nrow, strip.position = "right", scales = "free_y") +
+	stat_density(aes(fill = 10^(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
+	lightTheme +
+	labs(title = "Staph vs Bacillus") +
+	theme(
+		panel.grid.major.x = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_blank(),
+		strip.text.y = element_blank()
+	)
+
+gpaSta_plot_blue <- gpaSta_comparison %>%
+	ggplot(aes(x = relGeneStart, y = Name, group = Name)) +
+	facet_wrap(~COGcat, nrow = gpaBac_comparison %>% distinct(COGcat) %>% nrow, strip.position = "right", scales = "free_y") +
+	stat_density(aes(fill = 10^(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	scale_fill_gradientn(colours = c("white", wes_palette("FantasticFox1")[3])) +
+	lightTheme +
+	labs(title = "Staph vs Bacillus") +
+	theme(
+		panel.grid.major.x = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_blank(),
+		strip.text.y = element_blank()
+	)
+
+ggsave(plot = gpaBac_plot_green, filename = path(out_path, "gpaBac_COGposition_full_green.pdf"), device = "pdf", width = 15, height = 12)
+ggsave(plot = gpaBac_plot_orange, filename = path(out_path, "gpaBac_COGposition_full_orang.pdf"), device = "pdf", width = 15, height = 12)
+ggsave(plot = gpaSta_plot_green, filename = path(out_path, "gpaSta_COGposition_full_green.pdf"), device = "pdf", width = 15, height = 12)
+ggsave(plot = gpaSta_plot_blue, filename = path(out_path, "gpaSta_COGposition_full_blue.pdf"), device = "pdf", width = 15, height = 12)
+
+```
+
+```{r gpa v bac, fig.height=12, fig.width=15}
+
+gpaBac_plot 
+
+```
+
+```{r sta v bac, fig.height=12, fig.width=15}
+gpaSta_plot
+```
+
+
+
+```{r all three, fig.height=12, fig.width=15}
+
+# COGHeatDistribution_plot
+
+allThree <- ggplot(data = allType_lHGT_COGtrim, aes(x = relGeneStart, y = Name, group = Name)) +
+	facet_wrap(~COGcat, nrow = allType_lHGT_COGtrim %>% distinct(COGcat) %>% nrow, strip.position = "right", scales = "free_y") +
+	stat_density(aes(fill = 10^(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
+	scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
+	labs(title = "All three cross-comp") +
+	lightTheme +
+	theme(
+		panel.grid.major.x = element_blank(),
+		panel.grid.major.y = element_blank(),
+		panel.grid.minor.x = element_blank(),
+		axis.ticks = element_blank(),
+		strip.background = element_blank(),
+		strip.text.y = element_blank()
+	)
+	
+allThree
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

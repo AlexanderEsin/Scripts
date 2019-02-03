@@ -1,0 +1,125 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r read data, warning=FALSE, fig.height=12, fig.width=15}
+# Read in data
+
+require(pacman, warn.conflicts = FALSE, quietly = TRUE)
+p_load("tidyverse", "fs", "magrittr", "circular", "dplyr", "grid", "ggplot2", "ggdendro")
+
+# AG_perTypeData.rds
+
+master_path <- "/Users/aesin/Desktop/"
+GPA_path <- path(master_path, "Geo_again", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+Bac_path <- path(master_path, "Bacillus", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+Sta_path <- path(master_path, "Staph", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+
+# Per-type COG data
+GPA_perType_data		<- readRDS(GPA_path)
+Bac_perType_data		<- readRDS(Bac_path)
+Sta_perType_data		<- readRDS(Sta_path)
+
+# Output path
+out_path <- "/Users/aesin/Documents/Scripts/HGT_position_reviewer/Figures/CutOff_zoning_effect"
+dir_create(out_path)
+```
+
+
+```{r plot densities}
+
+GPA_pen_list <- as.character(c(3, 4, 5, 6))
+other_pen_list <- as.character(c(3, 4))
+
+quartz(width = 12, height = 12)
+par(mfrow = c(2, 2))
+par(mar = c(0, 0, 0, 0))
+invisible(lapply(GPA_pen_list, function(penalty) {
+	
+	# Density values needed
+	lHGTDensity	<- GPA_perType_data$lHGT[[penalty]]$circDensity
+	allDensity	<- GPA_perType_data$All$circDensity
+	vertDensity	<- GPA_perType_data$Ver$'3'$circDensity
+
+	# Number of genes for each density plot
+	numGenes	<- length(lHGTDensity$data)
+
+	# Produce plot
+	position_plot	<- circularDensityPlot(
+		dataDensityA = lHGTDensity,
+		dataDensityB = vertDensity,
+		bgDensity = allDensity,
+		shrink = 0.7,
+		tcl.offset = 0.8,
+		titleName = paste0("lHGT Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes),
+		densBLineColor = dataTypeCols$Ver)
+	replayPlot(position_plot)
+}))
+
+outputFileName	<- file.path(out_path, "GPA_lHGT_byPenalty.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+quartz(width = 12, height = 12)
+par(mfrow = c(1,2))
+par(mar = c(0, 0, 0, 0))
+invisible(lapply(other_pen_list, function(penalty) {
+	
+	# Density values needed
+	lHGTDensity	<- Bac_perType_data$lHGT[[penalty]]$circDensity
+	allDensity	<- Bac_perType_data$All$circDensity
+	vertDensity	<- Bac_perType_data$Ver$'3'$circDensity
+
+	# Number of genes for each density plot
+	numGenes	<- length(lHGTDensity$data)
+
+	# Produce plot
+	position_plot	<- circularDensityPlot(
+		dataDensityA = lHGTDensity,
+		dataDensityB = vertDensity,
+		bgDensity = allDensity,
+		shrink = 0.7,
+		tcl.offset = 0.8,
+		titleName = paste0("lHGT Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes),
+		densBLineColor = dataTypeCols$Ver)
+	replayPlot(position_plot)
+}))
+
+outputFileName	<- file.path(out_path, "Bac_lHGT_byPenalty.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+quartz(width = 12, height = 12)
+par(mfrow = c(1,2))
+par(mar = c(0, 0, 0, 0))
+invisible(lapply(other_pen_list, function(penalty) {
+	
+	# Density values needed
+	lHGTDensity	<- Sta_perType_data$lHGT[[penalty]]$circDensity
+	allDensity	<- Sta_perType_data$All$circDensity
+	vertDensity	<- Sta_perType_data$Ver$'3'$circDensity
+
+	# Number of genes for each density plot
+	numGenes	<- length(lHGTDensity$data)
+
+	# Produce plot
+	position_plot	<- circularDensityPlot(
+		dataDensityA = lHGTDensity,
+		dataDensityB = vertDensity,
+		bgDensity = allDensity,
+		shrink = 0.7,
+		tcl.offset = 0.8,
+		titleName = paste0("lHGT Enrichment at Penalty = ", penalty, "\nGenes = ", numGenes),
+		densBLineColor = dataTypeCols$Ver)
+	replayPlot(position_plot)
+}))
+
+outputFileName	<- file.path(out_path, "Sta_ lHGT_byPenalty.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
+
+
+
+```

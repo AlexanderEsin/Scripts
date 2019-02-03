@@ -207,7 +207,7 @@ COGHeatDistribution_plot	<- ggplot(data = filterCOG_df, aes(x = relGeneStart, y 
 	stat_density(aes(fill = 10^(..scaled..)), position = "identity", geom = "tile", n = 2000, adjust = 1/4) +
 	scale_fill_gradientn(colours = c("white", dataTypeCols$HGT)) +
 	# scale_fill_gradientn(colours = c(dataTypeCols$HGT, "white")) +
-	geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = boundCol, linetype = "dashed") +
+	# geom_vline(xintercept = zoneBoundaryList$fullRange$boundary, color = boundCol, linetype = "dashed") +
 	# Zone colouring
 	# geom_rect(data = zoneBoundaryList$fullRange, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = alpha(rep(zoneBoundaryList$fullRange$zoneCol_alpha, length(levels(filterCOG_df$COGcat))), 0.1), inherit.aes = FALSE) +
 	lightTheme +
@@ -219,6 +219,12 @@ COGHeatDistribution_plot	<- ggplot(data = filterCOG_df, aes(x = relGeneStart, y 
 		strip.background = element_blank(),
 		strip.text.y = element_blank()
 	)
+
+quartz(width = 14, height = 6)
+print(COGHeatDistribution_plot)
+outputFileName	<- file.path(COGvSpaceFig_path, "COG_enrichmentHeatmap.pdf")
+invisible(dev.copy2pdf(file = outputFileName))
+invisible(dev.off())
 
 
 

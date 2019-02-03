@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Load master variables and HGT position functions
-invisible(sapply(HGTPos.bac, source, .GlobalEnv))
+invisible(sapply(HGTPos.sta, source, .GlobalEnv))
 
 # Any libraries explicitly used in the script
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
@@ -248,19 +248,15 @@ toOriDensity_withZones_plot	<- ggplot(data = normal_df_ext, aes(x = relGeneStart
 		# limits = c(0, 1),
 		breaks = seq(0, 1, by = 0.5),
 		labels = c("Origin", "Terminus", "Origin"),
-		minor_breaks = seq(0, 1, by = ((1 / 360) * 30)),
-		sec.axis = dup_axis(
-			name = NULL,
-			breaks = rowMeans(zoneRangeToOri_df[c("zoneMin", "zoneMax")]),
-			labels = zoneRangeToOri_df$zoneName)
+		minor_breaks = seq(0, 1, by = ((1 / 360) * 30))
 	) +	
 	scale_y_continuous(name = "Gene Enrichment") +
 	# Plot density lines
 	stat_density(geom = "line", position = "identity", n = 2^12, adjust = 1/10, size = 1) +
 	# Boundary lines
-	geom_vline(xintercept = zoneRangeToOri_df$boundary, color = boundCol, linetype = "dashed") +
+	# geom_vline(xintercept = zoneRangeToOri_df$boundary, color = boundCol, linetype = "dashed") +
 	# Zone colouring
-	geom_rect(data = zoneRangeToOri_df, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = zoneRangeToOri_df$zoneCol_alpha, inherit.aes = FALSE) +
+	# geom_rect(data = zoneRangeToOri_df, aes(xmin = zoneMin, xmax = zoneMax, ymin = -Inf, ymax = Inf), fill = zoneRangeToOri_df$zoneCol_alpha, inherit.aes = FALSE) +
 	# Coloring, title, themes etc..
 	scale_color_manual(values = all_HGT_Ver_cols) +
 	ggtitle("Exploratory zone boundary analysis") +

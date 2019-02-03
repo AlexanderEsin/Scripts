@@ -1,0 +1,215 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r read data, warning=FALSE, fig.height=12, fig.width=15}
+# Read in data
+
+require(pacman, warn.conflicts = FALSE, quietly = TRUE)
+p_load("tidyverse", "fs", "magrittr", "circular", "dplyr", "grid", "ggplot2", "ggdendro")
+
+# AG_perTypeData.rds
+
+master_path <- "/Users/aesin/Desktop/"
+Bac_path <- path(master_path, "Bacillus", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+
+# GPA_path <- path(master_path, "Geo_again", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+# Sta_path <- path(master_path, "Staph", "HGT_position", "DataObjects", "AG_perTypeData.rds")
+
+# Per-type COG data
+Bac_perType_data		<- readRDS(Bac_path)
+
+# Output path
+out_path <- "/Users/aesin/Documents/Scripts/HGT_position_reviewer/Figures/removeSporulationGenes"
+dir_create(out_path)
+```
+
+```{r sporulation genes, message = FALSE}
+
+bsub_sigF_regulonGenes_file	<- path(master_path, "Geo_again", "Sporulation", "bsubPY79_sigF_regulonGenes.tsv")
+bsub_allGenesByCat_file	<- path(master_path, "Geo_again", "Sporulation", "All_bsub_genes_by_category.csv")
+bsub_oldGenome_file <- path(master_path, "Geo_again", "Sporulation", "All_genes_of_B._subtilis_subtilis_168_TRIM.txt")
+bsub_regulons_file <- path(master_path, "Geo_again", "Sporulation", "bSub_regulons.csv")
+
+# Read regulons
+bsub_regulons_data <- read_csv(bsub_regulons_file) %>%
+	select(1:5)
+
+# Read sigF genes
+bsub_sigF_regulonGenes_data <- read_tsv(bsub_sigF_regulonGenes_file, col_names = FALSE) %>%
+	rename(bSub_sigF_genes = X1,
+		   bSub_sigF_protIDs = X2)
+
+# Read ALL bSub sporulation genes
+bsub_allGenesByCat_data <- read_csv(bsub_allGenesByCat_file)
+bsub_allSpor_locTags <- bsub_allGenesByCat_data %>%
+	filter(FuncName2 == "sporulation") %>%
+	select(1:2) %>%
+	filter(!is.na(BSU_number))
+
+# Old bSub genome to which all sporulation gene tags refer
+bsub_oldGenome_data <- read_tsv(bsub_oldGenome_file) %>%
+	rename(Gene = 1, Locus = 2, Start = 3, End = 4)
+
+# Bind by locus BSU_.. tag
+bsub_allSpor_locTags_withPos <- bsub_allSpor_locTags %>%
+	left_join(bsub_oldGenome_data, by = c("BSU_number" = "Locus"))
+
+# Some have weird locus columns, associate by name
+bsub_fill_missing_byName <- bsub_allSpor_locTags_withPos %>%
+	filter(is.na(Gene)) %>%
+	select(1:2) %>%
+	left_join(bsub_oldGenome_data, by = c("SubtiWiki" = "Gene")) %>%
+	rename(Gene = Locus)
+
+# Total of 568 genes associated with sporulation
+bsub_sllSpor_combined <- bsub_allSpor_locTags_withPos %>%
+	filter(!is.na(Gene)) %>%
+	bind_rows(bsub_fill_missing_byName) %>%
+	filter(!is.na(Gene) & !str_detect(Gene, "RNA"))
+
+```
+
+```{r DB path, fig.width=10, fig.height=6}
+
+
+require(RSQLite)
+
+prot_db_path <- "/Users/aesin/Desktop/Geo_again/All_prot_db_new"
+dbConn		<- dbConnect(RSQLite::SQLite(), prot_db_path)
+
+# All b subtilis genes
+bSubtilis_db_allGenes_q	<- dbSendQuery(dbConn, 'SELECT * FROM t1 WHERE taxid == "224308"')
+bSubtilis_db_allGenes_tbl		<- dbFetch(bSubtilis_db_allGenes_q) %>% as_tibble
+dbClearResult(bSubtilis_db_allGenes_q)
+
+
+withCloseProtIDs <- bind_rows(lapply(1:nrow(bsub_sllSpor_combined), function(rowIndex) {
+	
+	rowData <- bsub_sllSpor_combined[rowIndex,]
+	
+	closestGene <- bSubtilis_db_allGenes_tbl[which.min(abs(bSubtilis_db_allGenes_tbl$gene_start-rowData$Start)),]
+	
+	outData <- rowData %>%
+		mutate(protID = closestGene$protID,
+			   product = closestGene$product,
+			   newStart = closestGene$gene_start)
+	return(outData)
+	
+}))
+
+
+baclHGT <- Bac_perType_data$lHGT$`4`$allPosData$protID
+bacVer <- Bac_perType_data$Ver$`3`$allPosData$protID
+
+bacAll_labelled <- Bac_perType_data$All$allPosData %>%
+	as_tibble() %>%
+	mutate(Type = case_when(
+		protID %in% baclHGT ~ "HGT",
+		protID %in% bacVer ~ "Ver",
+		TRUE ~  "Other"
+	))
+
+## Just for bacillus subtilis
+bacSub_only <- bacAll_labelled %>% 
+	filter(taxid == 224308)
+
+bacSub_sporProt <- bacSub_only %>%
+	left_join(withCloseProtIDs %>% select(protID, Gene)) %>%
+	filter(!is.na(Gene))
+
+bacSub_only %>%
+	group_by(Type) %>%
+	summarise(n = n())
+
+bacSub_sporProt %>%
+	group_by(Type) %>%
+	summarise(n = n())
+
+
+```
+
+```{r Spor HGT regulators, fig.width=12, fig.height=5}
+
+bacSub_sporProt_regul <- bacSub_sporProt %>%
+	filter(Type == "HGT") %>%
+	select(protID, relGeneStart, Gene) %>%
+	left_join(bsub_regulons_data, by = c("Gene" = "SubtiWiki")) %>%
+	filter(!is.na(Regulator)) 
+
+bacSub_sporProt_regCount <- bacSub_sporProt_regul %>%
+	group_by(Regulator) %>%
+	summarise(count = n()) %>%
+	arrange(desc(count))
+
+bacSub_sporProt_regul %>%
+	mutate(Regulator = factor(Regulator, levels = bacSub_sporProt_regCount$Regulator)) %>%
+	ggplot() +
+	geom_bar(aes(x = Regulator), stat = "count", fill = "darkblue", width = 0.75) +
+	labs(title = "B. subtilis HGT spore gene regulons",
+		 subtitle = "N > 48 as some genes are regulated by multiple regulons") +
+	theme_bw()
+
+bsub_regulons_data %>%
+	filter(Regulator %in% bacSub_sporProt_regCount$Regulator) %>%
+	group_by(Regulator) %>%
+	count() %>%
+	arrange(desc(n)) %>%
+	ungroup() %>%
+	mutate(Regulator = factor(Regulator, levels = Regulator)) %>%
+	# group_by(Regulator) %>%
+	# summarise(RegCount = n()) %>%
+	# filter(RegCount > 25) %>%
+	ggplot() +
+	geom_col(aes(x = Regulator, y = n), fill = "darkred", width = 0.75) +
+	labs(title = "B. subtilis spore regulon gene population") +
+	theme_bw()
+
+
+```
+
+```{r Spor HGT location, fig.width=10, fig.height=6}
+
+bacSub_sporProt %>%
+	filter(Type == "HGT") %>%
+	ggplot() +
+	stat_density(aes(x = relGeneStart), color = "red", geom = "line", size = 1, adjust = 1/5) +
+	labs(title = "B. subtilis sporulation HGT across the genome",
+		 subtitle = "total number of genes = 48") +
+	theme_bw()
+
+
+dbDisconnect(dbConn)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
