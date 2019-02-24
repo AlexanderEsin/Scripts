@@ -26,7 +26,7 @@ out_path <- "/Users/aesin/Documents/Scripts/HGT_position_reviewer/Figures/remove
 dir_create(out_path)
 ```
 
-```{r sporulation genes, message = FALSE}
+```{r sporulation genes, message = FALSE, warning = FALSE}
 
 bsub_sigF_regulonGenes_file	<- path(master_path, "Geo_again", "Sporulation", "bsubPY79_sigF_regulonGenes.tsv")
 bsub_allGenesByCat_file	<- path(master_path, "Geo_again", "Sporulation", "All_bsub_genes_by_category.csv")
@@ -172,16 +172,70 @@ bsub_regulons_data %>%
 
 ```{r Spor HGT location, fig.width=10, fig.height=6}
 
-bacSub_sporProt %>%
+greenScale2	<- viridis(3, begin = 0.4, end = 0.87, direction = -1)
+dataTypeCols		<- list(
+	All = wes_palette("IsleofDogs2")[5],
+	HGT = greenScale2[2],
+	Ver = wes_palette("Darjeeling1")[3],
+	Old = greenScale2[3],
+	Recent = greenScale2[1],
+	Other = wes_palette("IsleofDogs1")[6]
+)
+
+# Just the Bac sub spore HGT distribution
+bSub_spore_HGT <- bacSub_sporProt %>%
 	filter(Type == "HGT") %>%
-	ggplot() +
-	stat_density(aes(x = relGeneStart), color = "red", geom = "line", size = 1, adjust = 1/5) +
-	labs(title = "B. subtilis sporulation HGT across the genome",
-		 subtitle = "total number of genes = 48") +
-	theme_bw()
+	mutate(Spore = "Spore")
 
 
-dbDisconnect(dbConn)
+sporeClass_Bsub_HGT <- bacSub_only %>%
+	filter(Type == "HGT" & !protID %in% bSub_spore_HGT$protID) %>%
+	mutate(Spore = "Non-Spore") %>%
+	bind_rows(bSub_spore_HGT)
+
+
+
+sporeClass_Bsub_HGT_ext	<- sporeClass_Bsub_HGT %>%
+	subset(relGeneStart < 0.2 | relGeneStart > 0.8) %>%
+	mutate(relGeneStart = case_when(
+		relGeneStart < 0.2 ~ relGeneStart + 1,
+		TRUE ~ relGeneStart - 1)
+	) %>%
+	bind_rows(sporeClass_Bsub_HGT)
+
+
+
+sporeVnonSpore_bSub168 <- sporeClass_Bsub_HGT_ext %>%
+	ggplot(aes(x = relGeneStart)) +
+	geom_density(aes(group = Spore, fill = Spore, y = ..scaled..), size = 0.1, adjust = 1/10, alpha = 0.3) +
+	scale_fill_manual(name = "HGT genes", values = c(dataTypeCols$HGT, wes_palette("FantasticFox1")[5])) +
+	scale_y_continuous(name = "Scaled Density") +
+	scale_x_continuous(name = "Relative position along the genome",
+					   breaks = c(0, 0.25, 0.5, 0.75, 1),
+					   labels = c("Origin", 0.25, "Terminus", 0.75, "Origin")) +
+	labs(title = "Distributions of sporulation and all other genes across the genomes",
+		 subtitle = "B. subtilis str. 168",
+		 caption = "Gene number: sporulation = 48, all other = 461") +
+	coord_cartesian(xlim = c(0, 1), expand = FALSE) +
+	theme_bw() +
+	theme(legend.position = "bottom",
+		  plot.subtitle = element_text(face = "italic"),
+		  plot.caption = element_text(color = "red"))
+
+
+quartz(width = 16, height = 10)
+print(sporeVnonSpore_bSub168)
+quartz.save(file = file.path(out_path, "sporeVnonSpore_bSub168.pdf"), type = "pdf", dpi = 300)
+invisible(dev.off())
+
+
+# All other Bac Sub HGT genes (excl the 48 above) HGT distribution
+
+
+
+# 
+# 
+# dbDisconnect(dbConn)
 
 ```
 

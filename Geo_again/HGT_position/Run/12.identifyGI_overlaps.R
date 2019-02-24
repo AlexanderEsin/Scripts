@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Load master variables and HGT position functions
-invisible(sapply(HGTPos.all, source, .GlobalEnv))
+invisible(sapply(HGTPos.geo, source, .GlobalEnv))
 
 require(pacman, warn.conflicts = FALSE, quietly = TRUE)
 p_load("dplyr", "ggplot2", "wesanderson")

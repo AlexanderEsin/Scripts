@@ -1,0 +1,6 @@
+6566 genes predicted to lie within GIs in the 17 GPA species with GI information at the time of calculation (this is 11.5% of all genes).
+
+Of these 6566 genes, 1619 are predicted as HGT in our dataset (25%). This may appear low, but consider:
+	- We only aim to identify the most stringent HGTs
+	- We only consider lHGTs here, GI transfer is likely biased towards transfer between more closely related species
+	- Only 358 (of the 18300) predicted vertical genes in our dataset lie in GIs.
