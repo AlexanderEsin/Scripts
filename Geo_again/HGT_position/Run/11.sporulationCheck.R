@@ -319,6 +319,19 @@ sigF_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_sigF_comb, aes(x = binomial, 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ------------------------------------------------------------------------------------- #
 # There are 1098 vertical genes in Gkau - corresponding to 1094 orthGroups
 gKauOnly_ver_data	<- subset(perTypeData$Ver$'3'$allPosData, binomial == binomial_list[1])
@@ -381,7 +394,7 @@ allVer_bSub_gKau_comparison_plot	<- ggplot(gKau_bSub_final, aes(x = binomial, y 
 	scale_y_continuous(
 		name = "Position Relative to Terminus") +
 	geom_point(shape = 124, size = 8) +
-	geom_point(data = bsub_sigF_relTer, aes(x = 0.5, y = terRelStart, group = orthGroup), shape = 124, size = 8, color = "orange") +
+	geom_point(data = bsub_sigF_relTer, aes(y = terRelStart, group = orthGroup), shape = 124, size = 8, color = "orange") +
 	geom_line(linetype = "solid", color = alpha(wes_palette("IsleofDogs1")[6], 0.9), size = 0.1) +
 	scale_color_manual(values = wes_palette("Darjeeling1")[c(5,1)], guide = FALSE) +
 	coord_flip() +
