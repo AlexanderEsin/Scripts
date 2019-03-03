@@ -1,0 +1,7 @@
+All 23 non-rearranged GPA genones submitted to detection by PHASTER (http://phaster.ca) on 03.03.2019
+
+Results parsed and plots derived for both "intact" only and all phage-associated genes. The latter will include some spurious annotations by name (e.g. "integrase"). The intact-only set is thus conservative.
+
+See PHASTER website or summary.txt output files for details on detection approach and scoring.
+
+Overall, phages do not associate with Vertical regions, as might be expected.
