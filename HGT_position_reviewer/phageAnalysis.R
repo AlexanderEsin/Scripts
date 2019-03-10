@@ -213,7 +213,7 @@ allPhageGeneAggregate_GPA_plot <- withExtend %>%
 # Print outputs
 
 quartz(width = 6, height = 6, canvas = "white", bg = "white")
-print(allPhageGeneCount_plot)
+print(intactPhageGeneCount_plot)
 fileName	<- file.path(out_path, "intactPhageGeneCount")
 invisible(quartz.save(file = paste0(fileName, ".pdf"), type = "pdf", dpi = 100))
 invisible(quartz.save(file = paste0(fileName, ".png"), type = "png", dpi = 100))

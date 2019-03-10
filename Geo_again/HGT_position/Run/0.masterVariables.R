@@ -39,8 +39,8 @@ supergroupData_path	<- file.path(positionData_path, "SuperGroups")
 if (!dir.exists(supergroupData_path)) dir.create(supergroupData_path, recursive = TRUE)
 
 # Outlier genomes (genomic rearrangements)
-outlierTaxid		<- c(294699, 544556)
-# outlierTaxid		<- NULL
+# outlierTaxid		<- c(294699, 544556)
+outlierTaxid		<- NULL
 
 # Location of figure outputs
 numGenomes			<- 25 - length(outlierTaxid)
