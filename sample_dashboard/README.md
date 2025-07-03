@@ -19,26 +19,49 @@ The dashboard processes data in the requested format where each row contains:
 
 ## Installation
 
-1. Install the required dependencies:
+1. Navigate to the project directory:
+```bash
+cd sample_dashboard
+```
+
+2. Create and activate a virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install the required dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Run the dashboard:
+4. Run the dashboard:
 ```bash
 python dashboard.py
 ```
 
-3. Open your web browser and navigate to:
+5. Open your web browser and navigate to:
 ```
 http://localhost:8050
 ```
 
 ## Usage
 
+### Running the Dashboard
+
 1. **Select a Stock**: Use the dropdown menu to choose from any S&P 500 company
 2. **View Chart**: The line chart will automatically update to show the selected stock's price over the last year
 3. **Review Metrics**: Check the summary table below the chart for key performance indicators
+
+### Example Data Script
+
+You can also run the example script to see how the data is structured:
+
+```bash
+python example_usage.py
+```
+
+This script demonstrates how to fetch stock data in the required format (date, stock, price) for multiple S&P 500 companies.
 
 ## Technical Details
 
